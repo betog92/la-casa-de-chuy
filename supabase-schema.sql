@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS availability (
   date DATE UNIQUE NOT NULL,
   is_closed BOOLEAN DEFAULT FALSE,
   is_holiday BOOLEAN DEFAULT FALSE,
-  custom_price_1_block DECIMAL(10, 2),
-  custom_price_2_blocks DECIMAL(10, 2),
+  custom_price_per_block DECIMAL(10, 2),  -- Precio por bloque (se multiplica por cantidad de bloques)
   max_capacity INTEGER DEFAULT 1,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
