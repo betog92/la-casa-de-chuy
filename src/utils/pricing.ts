@@ -7,9 +7,9 @@ import type { Database } from "@/types/database.types";
 // =====================================================
 
 export const PRICES = {
-  normal: 1500, // Precio por bloque en día normal
-  weekend: 1800, // Precio por bloque en viernes/sábado/domingo
-  holiday: 2000, // Precio por bloque en día festivo
+  normal: 1500, // Precio por reserva en día normal
+  weekend: 1800, // Precio por reserva en viernes/sábado/domingo
+  holiday: 2000, // Precio por reserva en día festivo
 } as const;
 
 // =====================================================
@@ -42,7 +42,6 @@ const MEXICAN_HOLIDAYS = [
 // =====================================================
 
 export type DayType = "normal" | "weekend" | "holiday";
-export type Blocks = 1 | 2;
 
 // =====================================================
 // FUNCIONES DE DETECCIÓN DE TIPO DE DÍA
@@ -82,28 +81,26 @@ export function getDayType(date: Date): DayType {
 // =====================================================
 
 /**
- * Calcula el precio base según la fecha y número de bloques
+ * Calcula el precio base según la fecha
  *
  * @param date - Fecha de la reserva
- * @param blocks - Número de bloques (1 o 2)
  * @param customPrice - Precio personalizado desde la BD (opcional)
  * @returns Precio calculado
  */
 export function calculatePrice(
   date: Date,
-  blocks: Blocks,
   customPrice?: number | null
 ): number {
-  // Si hay precio personalizado, multiplicarlo por bloques
+  // Si hay precio personalizado, usarlo directamente
   if (customPrice !== undefined && customPrice !== null) {
-    return customPrice * blocks;
+    return customPrice;
   }
 
   // Determinar tipo de día
   const dayType = getDayType(date);
 
-  // Obtener precio por bloque y multiplicar por cantidad de bloques
-  return PRICES[dayType] * blocks;
+  // Obtener precio según tipo de día
+  return PRICES[dayType];
 }
 
 // =====================================================
@@ -111,11 +108,11 @@ export function calculatePrice(
 // =====================================================
 
 /**
- * Obtiene precio personalizado por bloque desde la base de datos
+ * Obtiene precio personalizado desde la base de datos
  *
  * @param supabase - Cliente de Supabase
  * @param date - Fecha a consultar
- * @returns Precio personalizado por bloque o null si no existe
+ * @returns Precio personalizado o null si no existe
  */
 export async function getCustomPrice(
   supabase: SupabaseClient<Database>,
@@ -125,7 +122,7 @@ export async function getCustomPrice(
 
   const { data, error } = await supabase
     .from("availability")
-    .select("custom_price_per_block")
+    .select("custom_price")
     .eq("date", dateString)
     .single();
 
@@ -133,13 +130,12 @@ export async function getCustomPrice(
     return null;
   }
 
-  const customPrice = (data as { custom_price_per_block: number | null })
-    .custom_price_per_block;
+  const customPrice = (data as { custom_price: number | null }).custom_price;
   if (!customPrice) {
     return null;
   }
 
-  // Retornar precio por bloque (se multiplicará en calculatePrice)
+  // Retornar precio personalizado
   return customPrice;
 }
 
@@ -148,19 +144,17 @@ export async function getCustomPrice(
  *
  * @param supabase - Cliente de Supabase
  * @param date - Fecha de la reserva
- * @param blocks - Número de bloques
  * @returns Precio final (personalizado o calculado)
  */
 export async function calculatePriceWithCustom(
   supabase: SupabaseClient<Database>,
-  date: Date,
-  blocks: Blocks
+  date: Date
 ): Promise<number> {
-  // Intentar obtener precio personalizado por bloque
+  // Intentar obtener precio personalizado
   const customPrice = await getCustomPrice(supabase, date);
 
   // Calcular precio (usa personalizado si existe)
-  return calculatePrice(date, blocks, customPrice);
+  return calculatePrice(date, customPrice);
 }
 
 // =====================================================
@@ -271,7 +265,6 @@ export function applyReferralDiscount(
 
 export interface PriceCalculationOptions {
   date: Date;
-  blocks: Blocks;
   customPrice?: number | null;
   isLastMinute?: boolean;
   reservationCount?: number;
@@ -301,7 +294,6 @@ export async function calculateFinalPrice(
 ): Promise<PriceCalculationResult> {
   const {
     date,
-    blocks,
     customPrice,
     isLastMinute,
     reservationCount,
@@ -314,9 +306,9 @@ export async function calculateFinalPrice(
   // Si es undefined, obtenerlo de la BD
   let basePrice: number;
   if (customPrice !== undefined) {
-    basePrice = calculatePrice(date, blocks, customPrice);
+    basePrice = calculatePrice(date, customPrice);
   } else {
-    basePrice = await calculatePriceWithCustom(supabase, date, blocks);
+    basePrice = await calculatePriceWithCustom(supabase, date);
   }
 
   const originalPrice = basePrice;

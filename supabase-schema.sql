@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS availability (
   date DATE UNIQUE NOT NULL,
   is_closed BOOLEAN DEFAULT FALSE,
   is_holiday BOOLEAN DEFAULT FALSE,
-  custom_price_per_block DECIMAL(10, 2),  -- Precio por bloque (se multiplica por cantidad de bloques)
-  max_capacity INTEGER DEFAULT 1,
+  custom_price DECIMAL(10, 2),  -- Precio personalizado para la fecha
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -58,13 +57,17 @@ CREATE TABLE IF NOT EXISTS reservations (
   date DATE NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
-  blocks INTEGER NOT NULL CHECK (blocks IN (1, 2)),
   price DECIMAL(10, 2) NOT NULL,
   original_price DECIMAL(10, 2) NOT NULL,
   discount_amount DECIMAL(10, 2) DEFAULT 0,
   discount_type TEXT,
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed')),
   payment_id TEXT,
+  refund_amount DECIMAL(10, 2),  -- Monto del reembolso (80% del price)
+  refund_status TEXT CHECK (refund_status IN ('pending', 'processed', 'failed')),  -- Estado del reembolso
+  refund_id TEXT,  -- ID del reembolso en Conekta
+  cancelled_at TIMESTAMP WITH TIME ZONE,  -- Fecha/hora de cancelación
+  cancellation_reason TEXT,  -- Razón de cancelación (opcional)
   reschedule_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
