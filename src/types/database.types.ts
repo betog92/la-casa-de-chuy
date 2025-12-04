@@ -174,5 +174,24 @@ export interface Database {
         };
       };
     };
+    Functions: {
+      get_available_slots: {
+        Args: {
+          p_date: string;
+        };
+        Returns: Array<{
+          id: string;
+          start_time: string;
+          end_time: string;
+        }>;
+      };
+      is_slot_available: {
+        Args: {
+          p_date: string;
+          p_start_time: string;
+        };
+        Returns: boolean;
+      };
+    };
   };
 }
