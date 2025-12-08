@@ -102,9 +102,14 @@ export default function ReservarPage() {
 
   // Verificar si un horario está disponible
   const isTimeAvailable = (time: string): boolean => {
-    return availableSlots.some(
-      (slot) => slot.start_time.substring(0, 5) === time
-    );
+    if (availableSlots.length === 0) {
+      return false;
+    }
+
+    return availableSlots.some((slot) => {
+      const slotTime = slot.start_time.substring(0, 5);
+      return slotTime === time;
+    });
   };
 
   // Manejar selección de fecha
@@ -145,8 +150,12 @@ export default function ReservarPage() {
     }
   };
 
-  // Función para deshabilitar fechas pasadas o cerradas
-  // Solo deshabilitamos fechas pasadas (no el día de hoy) y fechas cerradas
+  // Calcular fecha máxima (6 meses desde hoy)
+  const maxDate = new Date();
+  maxDate.setMonth(maxDate.getMonth() + 6);
+  maxDate.setHours(23, 59, 59, 999);
+
+  // Función para deshabilitar fechas pasadas, cerradas o más de 6 meses
   const tileDisabled = ({ date, view }: { date: Date; view: string }) => {
     if (view !== "month") return false;
 
@@ -156,11 +165,12 @@ export default function ReservarPage() {
     const checkDate = new Date(date);
     checkDate.setHours(0, 0, 0, 0);
 
-    // Deshabilitar solo fechas pasadas (no el día de hoy)
+    // Deshabilitar fechas pasadas, más de 6 meses en el futuro, o cerradas
     const isPastDate = checkDate < today;
+    const isTooFarFuture = checkDate > maxDate;
     const isClosed = closedDates.has(dateString);
 
-    return isPastDate || isClosed;
+    return isPastDate || isTooFarFuture || isClosed;
   };
 
   // Función para personalizar el contenido de cada fecha en el calendario
@@ -255,6 +265,7 @@ export default function ReservarPage() {
                   value={selectedDate}
                   locale="es"
                   minDate={new Date()}
+                  maxDate={maxDate}
                   tileDisabled={tileDisabled}
                   tileContent={tileContent}
                   className="w-full rounded-lg border-0"
