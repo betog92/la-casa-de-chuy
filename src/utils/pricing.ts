@@ -124,7 +124,7 @@ export async function getCustomPrice(
     .from("availability")
     .select("custom_price")
     .eq("date", dateString)
-    .single();
+    .maybeSingle(); // Cambiar de .single() a .maybeSingle()
 
   if (error || !data) {
     return null;

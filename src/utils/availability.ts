@@ -63,7 +63,7 @@ export async function isDateClosed(
     .from("availability")
     .select("is_closed")
     .eq("date", dateString)
-    .single();
+    .maybeSingle(); // Cambiar de .single() a .maybeSingle()
 
   if (error || !data) {
     return false; // Si no existe registro, asumimos que está abierto
