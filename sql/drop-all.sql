@@ -24,6 +24,9 @@ DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 
 DROP FUNCTION IF EXISTS update_time_slot_reservations_count();
 DROP FUNCTION IF EXISTS update_updated_at_column();
+DROP FUNCTION IF EXISTS generate_time_slots(DATE, DATE);
+DROP FUNCTION IF EXISTS ensure_time_slots_for_date(DATE);
+DROP FUNCTION IF EXISTS maintain_time_slots();
 DROP FUNCTION IF EXISTS is_slot_available(DATE, TIME);
 DROP FUNCTION IF EXISTS get_available_slots(DATE);
 DROP FUNCTION IF EXISTS get_daily_occupancy(DATE);

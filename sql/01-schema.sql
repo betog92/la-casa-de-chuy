@@ -1,8 +1,14 @@
 -- =====================================================
--- ESQUEMA DE BASE DE DATOS - LA CASA DE CHUY EL RICO
+-- ESQUEMA COMPLETO - LA CASA DE CHUY EL RICO
 -- =====================================================
 -- Ejecuta este SQL en el SQL Editor de Supabase
 -- Ve a: SQL Editor > New Query > Pega este código > Run
+--
+-- Este archivo contiene:
+-- 1. Todas las tablas del sistema
+-- 2. Índices básicos para performance
+-- 3. Triggers para updated_at automático
+-- =====================================================
 
 -- =====================================================
 -- 1. TABLA DE USUARIOS
@@ -112,7 +118,7 @@ CREATE TABLE IF NOT EXISTS referrals (
 );
 
 -- =====================================================
--- ÍNDICES PARA MEJORAR PERFORMANCE
+-- ÍNDICES BÁSICOS PARA MEJORAR PERFORMANCE
 -- =====================================================
 CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date);
 CREATE INDEX IF NOT EXISTS idx_reservations_user_id ON reservations(user_id);
@@ -126,6 +132,25 @@ CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals(code);
 
 -- =====================================================
+-- ÍNDICES COMPUESTOS PARA CONSULTAS AVANZADAS
+-- =====================================================
+
+-- Índice para consultar reservas por fecha y estado
+CREATE INDEX IF NOT EXISTS idx_reservations_date_status 
+ON reservations(date, status) 
+WHERE status = 'confirmed';
+
+-- Índice para consultar time_slots por fecha y disponibilidad
+CREATE INDEX IF NOT EXISTS idx_time_slots_date_available 
+ON time_slots(date, available) 
+WHERE available = true;
+
+-- Índice compuesto para consultar reservas por fecha, hora y estado
+CREATE INDEX IF NOT EXISTS idx_reservations_date_time_status 
+ON reservations(date, start_time, status) 
+WHERE status = 'confirmed';
+
+-- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR updated_at AUTOMÁTICAMENTE
 -- =====================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -134,7 +159,10 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
+
+-- Configurar search_path para seguridad
+ALTER FUNCTION update_updated_at_column() SET search_path = public;
 
 -- =====================================================
 -- TRIGGERS PARA updated_at
@@ -158,6 +186,117 @@ DROP TRIGGER IF EXISTS update_time_slots_updated_at ON time_slots;
 CREATE TRIGGER update_time_slots_updated_at 
   BEFORE UPDATE ON time_slots
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- FUNCIÓN PARA ACTUALIZAR RESERVATIONS_COUNT AUTOMÁTICAMENTE
+-- =====================================================
+CREATE OR REPLACE FUNCTION update_time_slot_reservations_count()
+RETURNS TRIGGER AS $$
+DECLARE
+  old_date DATE;
+  old_start_time TIME;
+  old_status TEXT;
+  new_date DATE;
+  new_start_time TIME;
+  new_status TEXT;
+BEGIN
+  -- Determinar valores según la operación
+  IF TG_OP = 'INSERT' THEN
+    -- NUEVA RESERVA: Si es confirmada, incrementar contador del slot exacto
+    new_date := NEW.date;
+    new_start_time := NEW.start_time;
+    new_status := NEW.status;
+    
+    IF new_status = 'confirmed' THEN
+      -- Actualizar solo el slot exacto de la reserva
+      UPDATE time_slots
+      SET reservations_count = reservations_count + 1,
+          updated_at = NOW()
+      WHERE date = new_date
+        AND start_time = new_start_time;
+    END IF;
+    
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- ACTUALIZACIÓN: Manejar cambios de fecha, hora o status
+    old_date := OLD.date;
+    old_start_time := OLD.start_time;
+    old_status := OLD.status;
+    
+    new_date := NEW.date;
+    new_start_time := NEW.start_time;
+    new_status := NEW.status;
+    
+    -- Si cambió la fecha o la hora (re-agendamiento)
+    IF old_date != new_date OR old_start_time != new_start_time THEN
+      -- Decrementar en la fecha/hora antigua (si estaba confirmada)
+      IF old_status = 'confirmed' THEN
+        UPDATE time_slots
+        SET reservations_count = GREATEST(0, reservations_count - 1),
+            updated_at = NOW()
+        WHERE date = old_date
+          AND start_time = old_start_time;
+      END IF;
+      
+      -- Incrementar en la fecha/hora nueva (si está confirmada)
+      IF new_status = 'confirmed' THEN
+        UPDATE time_slots
+        SET reservations_count = reservations_count + 1,
+            updated_at = NOW()
+        WHERE date = new_date
+          AND start_time = new_start_time;
+      END IF;
+    END IF;
+    
+    -- Si solo cambió el status (cancelación o reactivación)
+    IF old_date = new_date AND old_start_time = new_start_time THEN
+      -- De 'confirmed' a 'cancelled' o 'completed': decrementar
+      IF old_status = 'confirmed' AND new_status IN ('cancelled', 'completed') THEN
+        UPDATE time_slots
+        SET reservations_count = GREATEST(0, reservations_count - 1),
+            updated_at = NOW()
+        WHERE date = new_date
+          AND start_time = new_start_time;
+      END IF;
+      
+      -- De 'cancelled' o 'completed' a 'confirmed': incrementar
+      IF old_status IN ('cancelled', 'completed') AND new_status = 'confirmed' THEN
+        UPDATE time_slots
+        SET reservations_count = reservations_count + 1,
+            updated_at = NOW()
+        WHERE date = new_date
+          AND start_time = new_start_time;
+      END IF;
+    END IF;
+    
+  ELSIF TG_OP = 'DELETE' THEN
+    -- ELIMINACIÓN: Si se elimina una reserva confirmada, decrementar
+    old_date := OLD.date;
+    old_start_time := OLD.start_time;
+    old_status := OLD.status;
+    
+    IF old_status = 'confirmed' THEN
+      UPDATE time_slots
+      SET reservations_count = GREATEST(0, reservations_count - 1),
+          updated_at = NOW()
+      WHERE date = old_date
+        AND start_time = old_start_time;
+    END IF;
+  END IF;
+  
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Configurar search_path para seguridad
+ALTER FUNCTION update_time_slot_reservations_count() SET search_path = public;
+
+-- =====================================================
+-- TRIGGER PARA ACTUALIZAR RESERVATIONS_COUNT AUTOMÁTICAMENTE
+-- =====================================================
+DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
+CREATE TRIGGER update_time_slot_count_on_reservation
+AFTER INSERT OR UPDATE OR DELETE ON reservations
+FOR EACH ROW EXECUTE FUNCTION update_time_slot_reservations_count();
 
 -- =====================================================
 -- COMENTARIOS EN TABLAS
