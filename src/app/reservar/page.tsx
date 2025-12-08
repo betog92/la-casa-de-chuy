@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Calendar from "react-calendar";
-import { format } from "date-fns";
+import { format, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, isDateClosed } from "@/utils/availability";
@@ -151,8 +151,9 @@ export default function ReservarPage() {
   };
 
   // Calcular fecha máxima (6 meses desde hoy)
-  const maxDate = new Date();
-  maxDate.setMonth(maxDate.getMonth() + 6);
+  // Usar addMonths de date-fns para evitar problemas con límites de meses
+  // (ej: 31 de enero + 6 meses = 31 de julio, no se desborda a agosto)
+  const maxDate = addMonths(new Date(), 6);
   maxDate.setHours(23, 59, 59, 999);
 
   // Función para deshabilitar fechas pasadas, cerradas o más de 6 meses
