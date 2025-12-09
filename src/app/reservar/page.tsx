@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Calendar from "react-calendar";
 import {
@@ -13,11 +13,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
-import {
-  getAvailableSlots,
-  isDateClosed,
-  getMonthAvailability,
-} from "@/utils/availability";
+import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
 import { calculatePriceWithCustom, getDayType } from "@/utils/pricing";
 import type { TimeSlot } from "@/utils/availability";
 import "react-calendar/dist/Calendar.css";
@@ -48,6 +44,19 @@ const SUNDAY_SLOTS = [
   "15:30",
 ];
 
+// Helper functions (fuera del componente para mejor performance)
+const normalizeDate = (date: Date): Date => {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+};
+
+const isFutureDate = (date: Date): boolean => {
+  const today = normalizeDate(new Date());
+  const checkDate = normalizeDate(date);
+  return checkDate >= today;
+};
+
 export default function ReservarPage() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -62,6 +71,9 @@ export default function ReservarPage() {
     Map<string, number>
   >(new Map());
   const [currentMonth, setCurrentMonth] = useState<Date | null>(null);
+  const [loadingMonthAvailability, setLoadingMonthAvailability] =
+    useState(false);
+  const loadingMonthRef = useRef<Date | null>(null);
 
   // Obtener slots disponibles cuando se selecciona una fecha
   useEffect(() => {
@@ -77,16 +89,6 @@ export default function ReservarPage() {
 
       try {
         const supabase = createClient();
-
-        // Verificar si la fecha está cerrada
-        const closed = await isDateClosed(supabase, selectedDate);
-        if (closed) {
-          setError("Esta fecha está cerrada");
-          setAvailableSlots([]);
-          setPrice(null);
-          setLoading(false);
-          return;
-        }
 
         // Obtener slots disponibles
         const slots = await getAvailableSlots(supabase, selectedDate);
@@ -109,17 +111,17 @@ export default function ReservarPage() {
     fetchAvailability();
   }, [selectedDate]);
 
-  // Obtener slots según el día de la semana
-  const getSlotsForDay = (date: Date): string[] => {
-    const dayOfWeek = date.getDay();
-    return dayOfWeek === 0 ? SUNDAY_SLOTS : WEEKDAY_SLOTS; // 0 = Domingo
-  };
+  const getSlotsForDay = useCallback(
+    (date: Date): string[] =>
+      date.getDay() === 0 ? SUNDAY_SLOTS : WEEKDAY_SLOTS,
+    []
+  );
 
-  // Función para formatear el rango de hora en formato 12 horas
+  // Función para formatear el rango de hora en formato 12 horas - MEMOIZADA
   // NOTA: Aunque los slots técnicos en la BD son de 45 minutos, mostramos 1 hora al usuario
   // porque la sesión real de fotografía es de 1 hora completa.
   // Los 45 minutos del slot permiten tiempo de limpieza/preparación entre sesiones.
-  const formatTimeRange = (startTime: string): string => {
+  const formatTimeRange = useCallback((startTime: string): string => {
     // Parsear la hora de inicio (formato "HH:mm")
     const [hours, minutes] = startTime.split(":").map(Number);
 
@@ -136,68 +138,73 @@ export default function ReservarPage() {
     const endFormatted = format(endDate, "h:mm a").toLowerCase();
 
     return `${startFormatted} - ${endFormatted}`;
-  };
+  }, []);
 
   // Memoizar la disponibilidad de todos los horarios para evitar cálculos repetidos
   const timeAvailabilityMap = useMemo(() => {
-    const map = new Map<string, boolean>();
-
-    if (!selectedDate) {
-      return map; // Sin fecha seleccionada, retorna mapa vacío
+    if (!selectedDate || availableSlots.length === 0) {
+      return new Map<string, boolean>();
     }
 
-    if (availableSlots.length === 0) {
-      // Si no hay slots, todos los horarios están no disponibles
-      return map; // Retorna mapa vacío (todos false implícitamente)
-    }
-
-    // Crear un Set de horarios disponibles para búsqueda rápida
     const availableTimes = new Set(
       availableSlots.map((slot) => slot.start_time.substring(0, 5))
     );
 
-    // Obtener todos los horarios posibles para el día seleccionado
-    const allTimes = getSlotsForDay(selectedDate);
+    return new Map(
+      getSlotsForDay(selectedDate).map((time) => [
+        time,
+        availableTimes.has(time),
+      ])
+    );
+  }, [availableSlots, selectedDate, getSlotsForDay]);
 
-    // Calcular disponibilidad para cada horario (solo una vez por render)
-    allTimes.forEach((time) => {
-      const isAvailable = availableTimes.has(time);
-      map.set(time, isAvailable);
-    });
+  const isTimeAvailable = useCallback(
+    (time: string): boolean => timeAvailabilityMap.get(time) ?? false,
+    [timeAvailabilityMap]
+  );
 
-    return map;
-  }, [availableSlots, selectedDate]);
+  // Helper para verificar si el mes de una fecha está cargado
+  const isMonthLoadedForDate = useCallback(
+    (date: Date): boolean => {
+      if (!currentMonth) return false;
+      return isSameMonth(currentMonth, startOfMonth(date));
+    },
+    [currentMonth]
+  );
 
-  // Verificar si un horario está disponible (usa el mapa memoizado)
-  const isTimeAvailable = (time: string): boolean => {
-    return timeAvailabilityMap.get(time) ?? false;
-  };
-
-  // Cargar disponibilidad del mes
   const loadMonthAvailability = useCallback(async (monthDate: Date) => {
+    // Marcar que estamos cargando este mes específico
+    loadingMonthRef.current = monthDate;
+    setLoadingMonthAvailability(true);
     try {
       const supabase = createClient();
-      const startDate = startOfMonth(monthDate);
-      const endDate = endOfMonth(monthDate);
-
       const availability = await getMonthAvailability(
         supabase,
-        startDate,
-        endDate
+        startOfMonth(monthDate),
+        endOfMonth(monthDate)
       );
-
-      setMonthAvailability(availability);
-      setCurrentMonth(monthDate);
+      // Solo actualizar si todavía estamos cargando el mismo mes (evita race conditions)
+      if (loadingMonthRef.current === monthDate) {
+        setMonthAvailability(availability);
+        setCurrentMonth(monthDate);
+      }
     } catch (err) {
       console.error("Error loading month availability:", err);
-      setMonthAvailability(new Map());
+      // Solo actualizar si todavía estamos cargando el mismo mes
+      if (loadingMonthRef.current === monthDate) {
+        setMonthAvailability(new Map());
+      }
+    } finally {
+      // Solo limpiar loading si todavía estamos cargando el mismo mes
+      if (loadingMonthRef.current === monthDate) {
+        setLoadingMonthAvailability(false);
+        loadingMonthRef.current = null;
+      }
     }
   }, []);
 
-  // Manejar cambio de mes en el calendario
   const handleMonthChange = useCallback(
     (activeStartDate: Date) => {
-      // Cache simple: no recargar si el mes ya está cargado
       if (
         currentMonth &&
         isSameMonth(currentMonth, activeStartDate) &&
@@ -210,172 +217,170 @@ export default function ReservarPage() {
     [currentMonth, monthAvailability, loadMonthAvailability]
   );
 
-  // Manejar selección de fecha
-  const handleDateChange = (value: unknown) => {
+  const handleDateChange = useCallback((value: unknown) => {
     if (value instanceof Date) {
-      // Establecer loading y limpiar slots INMEDIATAMENTE para evitar warnings
       setLoading(true);
       setAvailableSlots([]);
       setPrice(null);
       setSelectedTime(null);
       setSelectedDate(value);
     }
-  };
+  }, []);
 
-  // Manejar selección de hora
-  const handleTimeSelect = (time: string) => {
-    if (isTimeAvailable(time)) {
-      setSelectedTime(time);
-    }
-  };
-
-  // Manejar continuar al formulario
-  const handleContinue = () => {
-    if (selectedDate && selectedTime && price) {
-      // Guardar en sessionStorage o pasar como query params
-      const reservationData = {
-        date: format(selectedDate, "yyyy-MM-dd"),
-        time: selectedTime,
-        price: price,
-      };
-
-      sessionStorage.setItem(
-        "reservationData",
-        JSON.stringify(reservationData)
-      );
-      router.push(
-        `/reservar/formulario?date=${format(
-          selectedDate,
-          "yyyy-MM-dd"
-        )}&time=${selectedTime}`
-      );
-    }
-  };
-
-  // Calcular fecha máxima (6 meses desde hoy)
-  // Usar addMonths de date-fns para evitar problemas con límites de meses
-  // (ej: 31 de enero + 6 meses = 31 de julio, no se desborda a agosto)
-  const maxDate = addMonths(new Date(), 6);
-  maxDate.setHours(23, 59, 59, 999);
-
-  // Función para deshabilitar fechas pasadas, cerradas o más de 6 meses
-  const tileDisabled = ({ date, view }: { date: Date; view: string }) => {
-    if (view !== "month") return false;
-
-    const dateString = format(date, "yyyy-MM-dd");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-
-    // Deshabilitar fechas pasadas, más de 6 meses en el futuro, o cerradas
-    const isPastDate = checkDate < today;
-    const isTooFarFuture = checkDate > maxDate;
-    const isClosed = closedDates.has(dateString);
-
-    return isPastDate || isTooFarFuture || isClosed;
-  };
-
-  // Función para personalizar el contenido de cada fecha en el calendario
-  const tileContent = ({ date, view }: { date: Date; view: string }) => {
-    if (view !== "month") return null;
-
-    const dateString = format(date, "yyyy-MM-dd");
-    const isClosed = closedDates.has(dateString);
-
-    if (isClosed) {
-      return <div className="mt-1 text-xs text-red-500">Cerrado</div>;
-    }
-
-    return null;
-  };
-
-  // Función para aplicar clases CSS según disponibilidad (heatmap) - OPTIMIZADA
-  const tileClassName = useCallback(
-    ({ date, view }: { date: Date; view: string }) => {
-      if (view !== "month") return "";
-
-      const dateString = format(date, "yyyy-MM-dd");
-      const isClosed = closedDates.has(dateString);
-
-      // No aplicar heatmap a días cerrados
-      if (isClosed) return "";
-
-      // Obtener disponibilidad directamente del Map
-      const availableSlots = monthAvailability.get(dateString) ?? 0;
-
-      // Calcular clase directamente (evita llamada a función extra)
-      const dayOfWeek = date.getDay(); // 0 = Domingo, 1-6 = Lunes-Sábado
-      const maxSlots = dayOfWeek === 0 ? 7 : 11; // Domingo: 7, otros: 11
-      const percentage = maxSlots > 0 ? (availableSlots / maxSlots) * 100 : 0;
-
-      // Escala basada en porcentaje
-      if (percentage >= 80) return "heatmap-high"; // 80%+ disponible
-      if (percentage >= 50) return "heatmap-medium"; // 50-79% disponible
-      if (percentage >= 20) return "heatmap-low"; // 20-49% disponible
-      if (percentage > 0) return "heatmap-minimal"; // 1-19% disponible
-      return "heatmap-none"; // 0% disponible
+  const handleTimeSelect = useCallback(
+    (time: string) => {
+      if (isTimeAvailable(time)) {
+        setSelectedTime(time);
+      }
     },
-    [closedDates, monthAvailability]
+    [isTimeAvailable]
   );
 
-  // Asegurar que el componente solo se renderice en el cliente
+  // Manejar continuar al formulario
+  const handleContinue = useCallback(() => {
+    if (!selectedDate || !selectedTime || !price) return;
+
+    const dateString = format(selectedDate, "yyyy-MM-dd");
+    sessionStorage.setItem(
+      "reservationData",
+      JSON.stringify({ date: dateString, time: selectedTime, price })
+    );
+    router.push(`/reservar/formulario?date=${dateString}&time=${selectedTime}`);
+  }, [selectedDate, selectedTime, price, router]);
+
+  const minDate = useMemo(() => new Date(), []);
+  const maxDate = useMemo(() => {
+    const date = addMonths(new Date(), 6);
+    date.setHours(23, 59, 59, 999);
+    return date;
+  }, []);
+
+  // Función para deshabilitar fechas pasadas, cerradas, sin disponibilidad o más de 6 meses
+  const tileDisabled = useCallback(
+    ({ date, view }: { date: Date; view: string }) => {
+      if (view !== "month") return false;
+
+      const dateString = format(date, "yyyy-MM-dd");
+      const checkDate = normalizeDate(date);
+      const today = normalizeDate(new Date());
+      const future = isFutureDate(date);
+
+      // Verificar si el mes está cargado antes de deshabilitar por 0 slots
+      const isMonthLoaded = isMonthLoadedForDate(date);
+      const slots = monthAvailability.get(dateString);
+
+      // Si el mes no está cargado y es futuro, no deshabilitar por slots (evita deshabilitar prematuramente)
+      const hasNoSlots = isMonthLoaded && (slots === undefined || slots === 0);
+
+      return (
+        checkDate < today ||
+        checkDate > maxDate ||
+        closedDates.has(dateString) ||
+        (hasNoSlots && future)
+      );
+    },
+    [maxDate, closedDates, monthAvailability, isMonthLoadedForDate]
+  );
+
+  // Función para aplicar clases CSS según disponibilidad (heatmap)
+  const tileClassName = useCallback(
+    ({ date, view }: { date: Date; view: string }) => {
+      if (view !== "month" || loadingMonthAvailability) return "";
+
+      const dateString = format(date, "yyyy-MM-dd");
+      const checkDate = normalizeDate(date);
+      const future = isFutureDate(date);
+      const isClosed = closedDates.has(dateString);
+      const slots = monthAvailability.get(dateString);
+
+      // Verificar si el mes de esta fecha está cargado
+      const isMonthLoaded = isMonthLoadedForDate(date);
+
+      // Si el mes no está cargado, no aplicar estilos (evita flash rojo inicial)
+      if (!isMonthLoaded && future) return "";
+
+      // Si el mes está cargado pero slots es undefined, significa que tiene 0 slots
+      // (la función SQL solo retorna días con slots > 0)
+      const availableSlots = slots ?? 0;
+
+      // Días cerrados o sin disponibilidad futuros → rojo
+      if (
+        (isClosed || availableSlots === 0) &&
+        future &&
+        checkDate <= maxDate
+      ) {
+        return "heatmap-closed-or-unavailable";
+      }
+
+      // Calcular heatmap según porcentaje de disponibilidad
+      if (availableSlots > 0) {
+        const maxSlots = date.getDay() === 0 ? 7 : 11;
+        const percentage = (availableSlots / maxSlots) * 100;
+
+        if (percentage >= 80) return "heatmap-high";
+        if (percentage >= 50) return "heatmap-medium";
+        if (percentage >= 20) return "heatmap-low";
+        if (percentage > 0) return "heatmap-minimal";
+      }
+
+      return "";
+    },
+    [
+      closedDates,
+      monthAvailability,
+      loadingMonthAvailability,
+      maxDate,
+      isMonthLoadedForDate,
+    ]
+  );
+
+  // Inicialización del componente
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Cargar fechas cerradas al montar el componente
+  // Cargar datos iniciales al montar
   useEffect(() => {
     if (!mounted) return;
 
-    const loadClosedDates = async () => {
-      try {
-        const supabase = createClient();
-        const today = new Date();
-        const threeMonthsLater = new Date();
-        threeMonthsLater.setMonth(today.getMonth() + 3);
+    const initialize = async () => {
+      const supabase = createClient();
+      const today = new Date();
+      const threeMonthsLater = new Date();
+      threeMonthsLater.setMonth(today.getMonth() + 3);
 
-        // Obtener fechas cerradas para los próximos 3 meses
-        const { data, error } = await supabase
+      // Cargar fechas cerradas
+      try {
+        const { data } = await supabase
           .from("availability")
           .select("date")
           .eq("is_closed", true)
           .gte("date", format(today, "yyyy-MM-dd"))
           .lte("date", format(threeMonthsLater, "yyyy-MM-dd"));
 
-        if (!error && data) {
-          const closedSet = new Set(
-            data.map((item) => (item as { date: string }).date)
-          );
-          setClosedDates(closedSet);
+        if (data) {
+          setClosedDates(new Set(data.map((item) => item.date)));
         }
       } catch (err) {
         console.error("Error loading closed dates:", err);
       }
+
+      // Cargar disponibilidad del mes actual
+      loadMonthAvailability(new Date());
     };
 
-    loadClosedDates();
-  }, [mounted]);
-
-  // Cargar disponibilidad del mes actual al montar
-  useEffect(() => {
-    if (!mounted) return;
-    loadMonthAvailability(new Date());
+    initialize();
   }, [mounted, loadMonthAvailability]);
 
-  // Obtener tipo de día para mostrar precio
-  const getDayTypeLabel = (date: Date | null): string => {
+  const getDayTypeLabel = useCallback((date: Date | null): string => {
     if (!date) return "";
     const dayType = getDayType(date);
-    switch (dayType) {
-      case "holiday":
-        return "Día Festivo";
-      case "weekend":
-        return "Fin de Semana";
-      default:
-        return "Día Normal";
-    }
-  };
+    const labels: Record<string, string> = {
+      holiday: "Día Festivo",
+      weekend: "Fin de Semana",
+    };
+    return labels[dayType] || "Día Normal";
+  }, []);
 
   return (
     <div className="min-h-screen min-w-[390px] bg-gradient-to-b from-zinc-50 to-white py-6 sm:py-12">
@@ -401,10 +406,9 @@ export default function ReservarPage() {
                   onChange={handleDateChange}
                   value={selectedDate}
                   locale="es"
-                  minDate={new Date()}
+                  minDate={minDate}
                   maxDate={maxDate}
                   tileDisabled={tileDisabled}
-                  tileContent={tileContent}
                   tileClassName={tileClassName}
                   onActiveStartDateChange={({ activeStartDate }) => {
                     if (activeStartDate) {
@@ -476,7 +480,7 @@ export default function ReservarPage() {
                   {/* Precio */}
                   {price && (
                     <div className="mb-4 rounded-lg bg-zinc-50 p-3 sm:mb-6 sm:p-4">
-                      <div className="mb-2 flex flex-col gap-1 lg:flex-row xl:flex-row lg:justify-between xl:justify-between lg:items-center xl:items-center">
+                      <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:justify-between lg:items-center">
                         <span className="text-sm text-zinc-600 sm:text-base">
                           {getDayTypeLabel(selectedDate)}
                         </span>
