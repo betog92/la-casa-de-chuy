@@ -1,12 +1,23 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Calendar from "react-calendar";
-import { format, addMonths, addHours } from "date-fns";
+import {
+  format,
+  addMonths,
+  addHours,
+  startOfMonth,
+  endOfMonth,
+  isSameMonth,
+} from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
-import { getAvailableSlots, isDateClosed } from "@/utils/availability";
+import {
+  getAvailableSlots,
+  isDateClosed,
+  getMonthAvailability,
+} from "@/utils/availability";
 import { calculatePriceWithCustom, getDayType } from "@/utils/pricing";
 import type { TimeSlot } from "@/utils/availability";
 import "react-calendar/dist/Calendar.css";
@@ -47,6 +58,10 @@ export default function ReservarPage() {
   const [error, setError] = useState<string | null>(null);
   const [closedDates, setClosedDates] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
+  const [monthAvailability, setMonthAvailability] = useState<
+    Map<string, number>
+  >(new Map());
+  const [currentMonth, setCurrentMonth] = useState<Date | null>(null);
 
   // Obtener slots disponibles cuando se selecciona una fecha
   useEffect(() => {
@@ -158,6 +173,43 @@ export default function ReservarPage() {
     return timeAvailabilityMap.get(time) ?? false;
   };
 
+  // Cargar disponibilidad del mes
+  const loadMonthAvailability = useCallback(async (monthDate: Date) => {
+    try {
+      const supabase = createClient();
+      const startDate = startOfMonth(monthDate);
+      const endDate = endOfMonth(monthDate);
+
+      const availability = await getMonthAvailability(
+        supabase,
+        startDate,
+        endDate
+      );
+
+      setMonthAvailability(availability);
+      setCurrentMonth(monthDate);
+    } catch (err) {
+      console.error("Error loading month availability:", err);
+      setMonthAvailability(new Map());
+    }
+  }, []);
+
+  // Manejar cambio de mes en el calendario
+  const handleMonthChange = useCallback(
+    (activeStartDate: Date) => {
+      // Cache simple: no recargar si el mes ya está cargado
+      if (
+        currentMonth &&
+        isSameMonth(currentMonth, activeStartDate) &&
+        monthAvailability.size > 0
+      ) {
+        return;
+      }
+      loadMonthAvailability(activeStartDate);
+    },
+    [currentMonth, monthAvailability, loadMonthAvailability]
+  );
+
   // Manejar selección de fecha
   const handleDateChange = (value: unknown) => {
     if (value instanceof Date) {
@@ -238,6 +290,35 @@ export default function ReservarPage() {
     return null;
   };
 
+  // Función para aplicar clases CSS según disponibilidad (heatmap) - OPTIMIZADA
+  const tileClassName = useCallback(
+    ({ date, view }: { date: Date; view: string }) => {
+      if (view !== "month") return "";
+
+      const dateString = format(date, "yyyy-MM-dd");
+      const isClosed = closedDates.has(dateString);
+
+      // No aplicar heatmap a días cerrados
+      if (isClosed) return "";
+
+      // Obtener disponibilidad directamente del Map
+      const availableSlots = monthAvailability.get(dateString) ?? 0;
+
+      // Calcular clase directamente (evita llamada a función extra)
+      const dayOfWeek = date.getDay(); // 0 = Domingo, 1-6 = Lunes-Sábado
+      const maxSlots = dayOfWeek === 0 ? 7 : 11; // Domingo: 7, otros: 11
+      const percentage = maxSlots > 0 ? (availableSlots / maxSlots) * 100 : 0;
+
+      // Escala basada en porcentaje
+      if (percentage >= 80) return "heatmap-high"; // 80%+ disponible
+      if (percentage >= 50) return "heatmap-medium"; // 50-79% disponible
+      if (percentage >= 20) return "heatmap-low"; // 20-49% disponible
+      if (percentage > 0) return "heatmap-minimal"; // 1-19% disponible
+      return "heatmap-none"; // 0% disponible
+    },
+    [closedDates, monthAvailability]
+  );
+
   // Asegurar que el componente solo se renderice en el cliente
   useEffect(() => {
     setMounted(true);
@@ -275,6 +356,12 @@ export default function ReservarPage() {
 
     loadClosedDates();
   }, [mounted]);
+
+  // Cargar disponibilidad del mes actual al montar
+  useEffect(() => {
+    if (!mounted) return;
+    loadMonthAvailability(new Date());
+  }, [mounted, loadMonthAvailability]);
 
   // Obtener tipo de día para mostrar precio
   const getDayTypeLabel = (date: Date | null): string => {
@@ -318,6 +405,12 @@ export default function ReservarPage() {
                   maxDate={maxDate}
                   tileDisabled={tileDisabled}
                   tileContent={tileContent}
+                  tileClassName={tileClassName}
+                  onActiveStartDateChange={({ activeStartDate }) => {
+                    if (activeStartDate) {
+                      handleMonthChange(activeStartDate);
+                    }
+                  }}
                   className="w-full h-full rounded-lg border-0"
                   showNeighboringMonth={false}
                 />

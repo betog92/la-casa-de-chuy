@@ -199,3 +199,53 @@ html {
   pointer-events: none;
   cursor: default;
 }
+
+/* =====================================================
+   ESTILOS PARA HEATMAP DE DISPONIBILIDAD
+   ===================================================== */
+
+/* Heatmap - Alta disponibilidad (80%+ del máximo) */
+.react-calendar__tile.heatmap-high {
+  background-color: rgba(22, 163, 74, 0.15) !important;
+}
+
+/* Heatmap - Disponibilidad moderada (50-79% del máximo) */
+.react-calendar__tile.heatmap-medium {
+  background-color: rgba(74, 222, 128, 0.15) !important;
+}
+
+/* Heatmap - Baja disponibilidad (20-49% del máximo) */
+.react-calendar__tile.heatmap-low {
+  background-color: rgba(187, 247, 208, 0.15) !important;
+}
+
+/* Heatmap - Muy poca disponibilidad (1-19% del máximo) */
+.react-calendar__tile.heatmap-minimal {
+  background-color: rgba(254, 240, 138, 0.2) !important;
+}
+
+/* Heatmap - Sin disponibilidad (0% del máximo) */
+.react-calendar__tile.heatmap-none {
+  background-color: rgba(254, 226, 226, 0.15) !important;
+}
+
+/* Asegurar que el heatmap no interfiera con estados activos/seleccionados */
+.react-calendar__tile--active.heatmap-high,
+.react-calendar__tile--active.heatmap-medium,
+.react-calendar__tile--active.heatmap-low,
+.react-calendar__tile--active.heatmap-minimal,
+.react-calendar__tile--active.heatmap-none {
+  background-color: #18181b !important;
+  color: white !important;
+}
+
+/* Asegurar que el heatmap no interfiera con el día actual */
+.react-calendar__tile--now.heatmap-high,
+.react-calendar__tile--now.heatmap-medium,
+.react-calendar__tile--now.heatmap-low,
+.react-calendar__tile--now.heatmap-minimal,
+.react-calendar__tile--now.heatmap-none {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border: 2px solid #fbbf24;
+}

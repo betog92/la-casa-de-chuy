@@ -311,7 +311,42 @@ $$ LANGUAGE plpgsql;
 ALTER FUNCTION get_daily_occupancy(DATE) SET search_path = public;
 
 -- =====================================================
--- 7. FUNCIÓN PARA OBTENER ESTADÍSTICAS DE RESERVAS
+-- 7. FUNCIÓN PARA OBTENER DISPONIBILIDAD DE UN RANGO DE FECHAS (HEATMAP)
+-- =====================================================
+-- Obtiene la cantidad de slots disponibles para cada fecha en un rango
+-- Útil para visualizar disponibilidad en un calendario (heatmap)
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION get_month_availability(
+  p_start_date DATE,
+  p_end_date DATE
+)
+RETURNS TABLE (
+  date DATE,
+  available_slots INTEGER
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    ts.date,
+    COUNT(*)::INTEGER as available_slots
+  FROM time_slots ts
+  LEFT JOIN availability a ON a.date = ts.date
+  WHERE ts.date >= p_start_date
+    AND ts.date <= p_end_date
+    AND ts.available = TRUE
+    AND ts.reservations_count = 0
+    AND (a.is_closed IS NULL OR a.is_closed = FALSE)
+  GROUP BY ts.date
+  ORDER BY ts.date;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Configurar search_path para seguridad
+ALTER FUNCTION get_month_availability(DATE, DATE) SET search_path = public;
+
+-- =====================================================
+-- 8. FUNCIÓN PARA OBTENER ESTADÍSTICAS DE RESERVAS
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION get_reservations_stats(p_date DATE)
@@ -360,6 +395,7 @@ COMMENT ON FUNCTION maintain_time_slots IS 'Mantiene automáticamente el rango d
 COMMENT ON FUNCTION get_available_slots IS 'Obtiene slots disponibles, creándolos automáticamente si no existen y manteniendo el rango';
 COMMENT ON FUNCTION is_slot_available IS 'Verifica si un slot específico está disponible para reservar';
 COMMENT ON FUNCTION get_daily_occupancy IS 'Calcula la ocupación diaria (total, ocupados, disponibles, porcentaje)';
+COMMENT ON FUNCTION get_month_availability IS 'Obtiene disponibilidad de slots para un rango de fechas (útil para heatmap de calendario)';
 COMMENT ON FUNCTION get_reservations_stats IS 'Obtiene estadísticas de reservas de una fecha (cantidad, ingresos)';
 
 -- =====================================================
@@ -373,5 +409,7 @@ GRANT EXECUTE ON FUNCTION is_slot_available(DATE, TIME) TO anon;
 GRANT EXECUTE ON FUNCTION is_slot_available(DATE, TIME) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_daily_occupancy(DATE) TO anon;
 GRANT EXECUTE ON FUNCTION get_daily_occupancy(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_month_availability(DATE, DATE) TO anon;
+GRANT EXECUTE ON FUNCTION get_month_availability(DATE, DATE) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_reservations_stats(DATE) TO anon;
 GRANT EXECUTE ON FUNCTION get_reservations_stats(DATE) TO authenticated;

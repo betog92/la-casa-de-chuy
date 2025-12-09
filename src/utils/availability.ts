@@ -82,3 +82,35 @@ export async function hasAvailableSlots(
   const slots = await getAvailableSlots(supabase, date);
   return slots.length > 0;
 }
+
+/**
+ * Obtiene la disponibilidad de slots para un rango de fechas
+ * Retorna un Map con fecha (yyyy-MM-dd) -> cantidad de slots disponibles
+ * Útil para visualizar disponibilidad en un calendario (heatmap)
+ */
+export async function getMonthAvailability(
+  supabase: SupabaseClient<Database>,
+  startDate: Date,
+  endDate: Date
+): Promise<Map<string, number>> {
+  const startDateString = format(startDate, "yyyy-MM-dd");
+  const endDateString = format(endDate, "yyyy-MM-dd");
+
+  const { data, error } = await supabase.rpc("get_month_availability", {
+    p_start_date: startDateString,
+    p_end_date: endDateString,
+  } as never);
+
+  if (error || !data) {
+    console.error("Error loading month availability:", error);
+    return new Map();
+  }
+
+  // Convertir array a Map
+  const availabilityMap = new Map<string, number>();
+  (data as Array<{ date: string; available_slots: number }>).forEach((item) => {
+    availabilityMap.set(item.date, item.available_slots);
+  });
+
+  return availabilityMap;
+}
