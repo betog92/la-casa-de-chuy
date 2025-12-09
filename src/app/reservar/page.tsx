@@ -227,14 +227,9 @@ export default function ReservarPage() {
     }
   }, []);
 
-  const handleTimeSelect = useCallback(
-    (time: string) => {
-      if (isTimeAvailable(time)) {
-        setSelectedTime(time);
-      }
-    },
-    [isTimeAvailable]
-  );
+  const handleTimeSelect = useCallback((time: string) => {
+    setSelectedTime(time);
+  }, []);
 
   // Manejar continuar al formulario
   const handleContinue = useCallback(() => {
@@ -454,27 +449,25 @@ export default function ReservarPage() {
 
                   {/* Lista de horarios */}
                   <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 sm:mb-6 sm:gap-3">
-                    {getSlotsForDay(selectedDate).map((time) => {
-                      const available = isTimeAvailable(time);
-                      const isSelected = selectedTime === time;
+                    {getSlotsForDay(selectedDate)
+                      .filter((time) => isTimeAvailable(time))
+                      .map((time) => {
+                        const isSelected = selectedTime === time;
 
-                      return (
-                        <button
-                          key={time}
-                          onClick={() => handleTimeSelect(time)}
-                          disabled={!available}
-                          className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-semibold transition-all whitespace-nowrap sm:px-4 sm:py-3 sm:text-base ${
-                            isSelected
-                              ? "border-zinc-900 bg-zinc-900 text-white"
-                              : available
-                              ? "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-900 hover:bg-zinc-50"
-                              : "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed"
-                          }`}
-                        >
-                          {formatTimeRange(time)}
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            key={time}
+                            onClick={() => handleTimeSelect(time)}
+                            className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-semibold transition-all whitespace-nowrap sm:px-4 sm:py-3 sm:text-base ${
+                              isSelected
+                                ? "border-zinc-900 bg-zinc-900 text-white"
+                                : "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-900 hover:bg-zinc-50"
+                            }`}
+                          >
+                            {formatTimeRange(time)}
+                          </button>
+                        );
+                      })}
                   </div>
 
                   {/* Precio */}
