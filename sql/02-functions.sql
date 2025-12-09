@@ -83,7 +83,7 @@ DECLARE
   max_allowed_date DATE;
 BEGIN
   -- Validar que la fecha esté dentro del rango permitido (6 meses desde hoy)
-  max_allowed_date := CURRENT_DATE + INTERVAL '6 months';
+  max_allowed_date := (CURRENT_DATE + INTERVAL '6 months')::DATE;
   
   IF p_date < CURRENT_DATE THEN
     RAISE EXCEPTION 'No se pueden crear slots para fechas pasadas';
@@ -138,7 +138,7 @@ DECLARE
   target_date DATE;
 BEGIN
   -- La fecha objetivo siempre es máximo 6 meses desde hoy
-  target_date := CURRENT_DATE + INTERVAL '6 months';
+  target_date := (CURRENT_DATE + INTERVAL '6 months')::DATE;
   
   -- Obtener la fecha máxima actual en la base de datos
   SELECT MAX(date) INTO max_date FROM time_slots;
@@ -148,7 +148,7 @@ BEGIN
     PERFORM generate_time_slots(CURRENT_DATE, target_date);
   -- Si la fecha máxima es menor a 6 meses desde hoy, extender
   ELSIF max_date < target_date THEN
-    PERFORM generate_time_slots(max_date + INTERVAL '1 day', target_date);
+    PERFORM generate_time_slots((max_date + INTERVAL '1 day')::DATE, target_date);
   END IF;
   
   -- Eliminar slots de fechas pasadas (limpieza automática)
@@ -184,7 +184,7 @@ BEGIN
   PERFORM maintain_time_slots();
   
   -- Validar rango de 6 meses
-  max_allowed_date := CURRENT_DATE + INTERVAL '6 months';
+  max_allowed_date := (CURRENT_DATE + INTERVAL '6 months')::DATE;
   
   IF p_date < CURRENT_DATE THEN
     RAISE EXCEPTION 'No se pueden consultar slots para fechas pasadas';
@@ -362,3 +362,16 @@ COMMENT ON FUNCTION is_slot_available IS 'Verifica si un slot específico está 
 COMMENT ON FUNCTION get_daily_occupancy IS 'Calcula la ocupación diaria (total, ocupados, disponibles, porcentaje)';
 COMMENT ON FUNCTION get_reservations_stats IS 'Obtiene estadísticas de reservas de una fecha (cantidad, ingresos)';
 
+-- =====================================================
+-- PERMISOS DE EJECUCIÓN PARA FUNCIONES RPC
+-- =====================================================
+-- Permitir que usuarios anónimos y autenticados ejecuten las funciones RPC
+
+GRANT EXECUTE ON FUNCTION get_available_slots(DATE) TO anon;
+GRANT EXECUTE ON FUNCTION get_available_slots(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_slot_available(DATE, TIME) TO anon;
+GRANT EXECUTE ON FUNCTION is_slot_available(DATE, TIME) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_daily_occupancy(DATE) TO anon;
+GRANT EXECUTE ON FUNCTION get_daily_occupancy(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_reservations_stats(DATE) TO anon;
+GRANT EXECUTE ON FUNCTION get_reservations_stats(DATE) TO authenticated;

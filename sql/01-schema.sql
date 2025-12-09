@@ -247,21 +247,23 @@ BEGIN
       END IF;
     END IF;
     
-    -- Si solo cambió el status (cancelación o reactivación)
+    -- Si solo cambió el status (misma fecha y hora)
     IF old_date = new_date AND old_start_time = new_start_time THEN
-      -- De 'confirmed' a 'cancelled' o 'completed': decrementar
-      IF old_status = 'confirmed' AND new_status IN ('cancelled', 'completed') THEN
+      -- Si cambió de NO confirmada a confirmada: incrementar
+      -- Esto cubre: 'pending'→'confirmed', 'cancelled'→'confirmed', 'completed'→'confirmed', etc.
+      IF old_status != 'confirmed' AND new_status = 'confirmed' THEN
         UPDATE time_slots
-        SET reservations_count = GREATEST(0, reservations_count - 1),
+        SET reservations_count = reservations_count + 1,
             updated_at = NOW()
         WHERE date = new_date
           AND start_time = new_start_time;
       END IF;
       
-      -- De 'cancelled' o 'completed' a 'confirmed': incrementar
-      IF old_status IN ('cancelled', 'completed') AND new_status = 'confirmed' THEN
+      -- Si cambió de confirmada a NO confirmada: decrementar
+      -- Esto cubre: 'confirmed'→'cancelled', 'confirmed'→'completed', 'confirmed'→'pending', etc.
+      IF old_status = 'confirmed' AND new_status != 'confirmed' THEN
         UPDATE time_slots
-        SET reservations_count = reservations_count + 1,
+        SET reservations_count = GREATEST(0, reservations_count - 1),
             updated_at = NOW()
         WHERE date = new_date
           AND start_time = new_start_time;

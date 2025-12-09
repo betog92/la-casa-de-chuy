@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Calendar from "react-calendar";
-import { format, addMonths } from "date-fns";
+import { format, addMonths, addHours } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, isDateClosed } from "@/utils/availability";
@@ -100,23 +100,72 @@ export default function ReservarPage() {
     return dayOfWeek === 0 ? SUNDAY_SLOTS : WEEKDAY_SLOTS; // 0 = Domingo
   };
 
-  // Verificar si un horario está disponible
-  const isTimeAvailable = (time: string): boolean => {
-    if (availableSlots.length === 0) {
-      return false;
+  // Función para formatear el rango de hora (inicio + 1 hora) en formato 12 horas
+  const formatTimeRange = (startTime: string): string => {
+    // Parsear la hora de inicio (formato "HH:mm")
+    const [hours, minutes] = startTime.split(":").map(Number);
+
+    // Crear una fecha base para hacer cálculos
+    const baseDate = new Date();
+    baseDate.setHours(hours, minutes, 0, 0);
+
+    // Sumar 1 hora
+    const endDate = addHours(baseDate, 1);
+
+    // Formatear ambas horas en formato 12 horas (h:mm)
+    const startFormatted = format(baseDate, "h:mm");
+    const endFormatted = format(endDate, "h:mm");
+
+    // Obtener AM/PM solo del final (ambas horas están en el mismo período)
+    const period = format(baseDate, "a").toLowerCase();
+
+    return `${startFormatted} - ${endFormatted} ${period}`;
+  };
+
+  // Memoizar la disponibilidad de todos los horarios para evitar cálculos repetidos
+  const timeAvailabilityMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+
+    if (!selectedDate) {
+      return map; // Sin fecha seleccionada, retorna mapa vacío
     }
 
-    return availableSlots.some((slot) => {
-      const slotTime = slot.start_time.substring(0, 5);
-      return slotTime === time;
+    if (availableSlots.length === 0) {
+      // Si no hay slots, todos los horarios están no disponibles
+      return map; // Retorna mapa vacío (todos false implícitamente)
+    }
+
+    // Crear un Set de horarios disponibles para búsqueda rápida
+    const availableTimes = new Set(
+      availableSlots.map((slot) => slot.start_time.substring(0, 5))
+    );
+
+    // Obtener todos los horarios posibles para el día seleccionado
+    const allTimes = getSlotsForDay(selectedDate);
+
+    // Calcular disponibilidad para cada horario (solo una vez por render)
+    allTimes.forEach((time) => {
+      const isAvailable = availableTimes.has(time);
+      map.set(time, isAvailable);
     });
+
+    return map;
+  }, [availableSlots, selectedDate]);
+
+  // Verificar si un horario está disponible (usa el mapa memoizado)
+  const isTimeAvailable = (time: string): boolean => {
+    return timeAvailabilityMap.get(time) ?? false;
   };
 
   // Manejar selección de fecha
   const handleDateChange = (value: unknown) => {
     if (value instanceof Date) {
-      setSelectedDate(value);
+      // Establecer loading y limpiar slots INMEDIATAMENTE para evitar warnings
+      setLoading(true);
+      setAvailableSlots([]);
+      setPrice(null);
       setSelectedTime(null);
+      setSelectedDate(value);
     }
   };
 
@@ -324,7 +373,7 @@ export default function ReservarPage() {
                               : "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed"
                           }`}
                         >
-                          {time}
+                          {formatTimeRange(time)}
                         </button>
                       );
                     })}
