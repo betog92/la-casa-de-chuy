@@ -305,7 +305,7 @@ export default function ReservarPage() {
           </div>
 
           <div className="grid gap-4 sm:gap-8 lg:grid-cols-[1.3fr_1fr] xl:grid-cols-[1.7fr_1fr] 2xl:grid-cols-[2fr_1fr]">
-            <div className="flex flex-col rounded-lg border border-zinc-200 bg-white p-3 shadow-sm sm:p-6 max-h-[686px]">
+            <div className="flex flex-col rounded-lg border border-zinc-200 bg-white p-3 shadow-sm sm:p-6 max-h-[870px]">
               <h2 className="mb-3 text-lg font-semibold text-zinc-900 sm:mb-4 sm:text-2xl">
                 Selecciona una Fecha
               </h2>

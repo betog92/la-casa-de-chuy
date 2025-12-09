@@ -41,7 +41,7 @@ html {
   max-width: 100% !important;
   min-width: 0 !important;
   height: 100% !important;
-  max-height: 686px;
+  max-height: 870px;
   border: none;
   font-family: inherit;
   background: white;
@@ -56,7 +56,7 @@ html {
 }
 
 .react-calendar__tile {
-  aspect-ratio: 1.35;
+  aspect-ratio: 1.39;
   display: flex;
   align-items: center;
   justify-content: center;
