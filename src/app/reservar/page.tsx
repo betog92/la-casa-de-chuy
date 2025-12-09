@@ -115,14 +115,12 @@ export default function ReservarPage() {
     // Sumar 1 hora (sesión real de fotografía)
     const endDate = addHours(baseDate, 1);
 
-    // Formatear ambas horas en formato 12 horas (h:mm)
-    const startFormatted = format(baseDate, "h:mm");
-    const endFormatted = format(endDate, "h:mm");
+    // Formatear ambas horas en formato 12 horas con su período AM/PM respectivo
+    // Esto corrige el caso donde el rango cruza el mediodía (ej: 11:00 AM → 12:00 PM)
+    const startFormatted = format(baseDate, "h:mm a").toLowerCase();
+    const endFormatted = format(endDate, "h:mm a").toLowerCase();
 
-    // Obtener AM/PM solo del final (ambas horas están en el mismo período)
-    const period = format(baseDate, "a").toLowerCase();
-
-    return `${startFormatted} - ${endFormatted} ${period}`;
+    return `${startFormatted} - ${endFormatted}`;
   };
 
   // Memoizar la disponibilidad de todos los horarios para evitar cálculos repetidos
