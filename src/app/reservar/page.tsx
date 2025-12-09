@@ -264,7 +264,12 @@ export default function ReservarPage() {
       const isMonthLoaded = isMonthLoadedForDate(date);
       const slots = monthAvailability.get(dateString);
 
-      // Si el mes no está cargado y es futuro, no deshabilitar por slots (evita deshabilitar prematuramente)
+      // Si el mes no está cargado y es futuro, deshabilitar (mientras carga)
+      if (!isMonthLoaded && future && checkDate <= maxDate) {
+        return true;
+      }
+
+      // Si el mes está cargado pero slots es undefined o 0, deshabilitar
       const hasNoSlots = isMonthLoaded && (slots === undefined || slots === 0);
 
       return (
