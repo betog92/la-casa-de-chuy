@@ -100,7 +100,10 @@ export default function ReservarPage() {
     return dayOfWeek === 0 ? SUNDAY_SLOTS : WEEKDAY_SLOTS; // 0 = Domingo
   };
 
-  // Función para formatear el rango de hora (inicio + 1 hora) en formato 12 horas
+  // Función para formatear el rango de hora en formato 12 horas
+  // NOTA: Aunque los slots técnicos en la BD son de 45 minutos, mostramos 1 hora al usuario
+  // porque la sesión real de fotografía es de 1 hora completa.
+  // Los 45 minutos del slot permiten tiempo de limpieza/preparación entre sesiones.
   const formatTimeRange = (startTime: string): string => {
     // Parsear la hora de inicio (formato "HH:mm")
     const [hours, minutes] = startTime.split(":").map(Number);
@@ -109,7 +112,7 @@ export default function ReservarPage() {
     const baseDate = new Date();
     baseDate.setHours(hours, minutes, 0, 0);
 
-    // Sumar 1 hora
+    // Sumar 1 hora (sesión real de fotografía)
     const endDate = addHours(baseDate, 1);
 
     // Formatear ambas horas en formato 12 horas (h:mm)
