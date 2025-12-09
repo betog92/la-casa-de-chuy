@@ -356,7 +356,7 @@ export default function ReservarPage() {
                   </p>
 
                   {/* Lista de horarios */}
-                  <div className="mb-3 grid grid-cols-2 gap-2 sm:mb-6 sm:grid-cols-3 sm:gap-3">
+                  <div className="mb-3 grid grid-cols-2 gap-2 sm:mb-6 sm:gap-3">
                     {getSlotsForDay(selectedDate).map((time) => {
                       const available = isTimeAvailable(time);
                       const isSelected = selectedTime === time;
@@ -366,7 +366,7 @@ export default function ReservarPage() {
                           key={time}
                           onClick={() => handleTimeSelect(time)}
                           disabled={!available}
-                          className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-semibold transition-all sm:px-4 sm:py-3 sm:text-base ${
+                          className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-semibold transition-all whitespace-nowrap sm:px-4 sm:py-3 sm:text-base ${
                             isSelected
                               ? "border-zinc-900 bg-zinc-900 text-white"
                               : available
