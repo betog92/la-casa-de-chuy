@@ -156,8 +156,33 @@ html {
   }
 }
 
+.react-calendar__navigation button:enabled {
+  color: #18181b;
+  cursor: pointer;
+  opacity: 1;
+}
+
 .react-calendar__navigation button:enabled:hover,
 .react-calendar__navigation button:enabled:focus {
   background-color: #f4f4f5;
   border-radius: 0.5rem;
+  color: #09090b;
+}
+
+.react-calendar__navigation button:disabled {
+  color: #d4d4d8;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Ocultar botones de navegación de año (flechas extremas) */
+.react-calendar__navigation__prev2-button,
+.react-calendar__navigation__next2-button {
+  display: none;
+}
+
+/* Deshabilitar click en el título del mes/año */
+.react-calendar__navigation__label {
+  pointer-events: none;
+  cursor: default;
 }
