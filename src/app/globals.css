@@ -37,11 +37,14 @@ html {
 
 /* Estilos para react-calendar */
 .react-calendar {
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
   border: none;
   font-family: inherit;
   background: white;
   font-size: 0.875rem;
+  box-sizing: border-box;
 }
 
 @media (min-width: 640px) {
@@ -49,6 +52,7 @@ html {
     font-size: 1rem;
   }
 }
+
 
 .react-calendar__tile {
   padding: 0.375rem;

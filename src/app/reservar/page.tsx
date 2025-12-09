@@ -291,9 +291,9 @@ export default function ReservarPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white py-6 sm:py-12">
+    <div className="min-h-screen min-w-[390px] bg-gradient-to-b from-zinc-50 to-white py-6 sm:py-12">
       <div className="container mx-auto px-3 sm:px-4">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto">
           {/* Header */}
           <div className="mb-6 text-center sm:mb-8">
             <h1 className="mb-2 text-3xl font-bold text-zinc-900 sm:mb-4 sm:text-4xl">
@@ -304,8 +304,7 @@ export default function ReservarPage() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:gap-8 lg:grid-cols-2">
-            {/* Calendario */}
+          <div className="grid gap-4 sm:gap-8 lg:grid-cols-[1.3fr_1fr] xl:grid-cols-[1.7fr_1fr] 2xl:grid-cols-[2fr_1fr]">
             <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm sm:p-6">
               <h2 className="mb-3 text-lg font-semibold text-zinc-900 sm:mb-4 sm:text-2xl">
                 Selecciona una Fecha
@@ -320,6 +319,7 @@ export default function ReservarPage() {
                   tileDisabled={tileDisabled}
                   tileContent={tileContent}
                   className="w-full rounded-lg border-0"
+                  showNeighboringMonth={false}
                 />
               ) : (
                 <div className="flex h-[250px] items-center justify-center sm:h-[300px]">
@@ -356,7 +356,7 @@ export default function ReservarPage() {
                   </p>
 
                   {/* Lista de horarios */}
-                  <div className="mb-3 grid grid-cols-2 gap-2 sm:mb-6 sm:gap-3">
+                  <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 sm:mb-6 sm:gap-3">
                     {getSlotsForDay(selectedDate).map((time) => {
                       const available = isTimeAvailable(time);
                       const isSelected = selectedTime === time;
@@ -383,7 +383,7 @@ export default function ReservarPage() {
                   {/* Precio */}
                   {price && (
                     <div className="mb-4 rounded-lg bg-zinc-50 p-3 sm:mb-6 sm:p-4">
-                      <div className="mb-2 flex justify-between items-center">
+                      <div className="mb-2 flex flex-col gap-1 lg:flex-row xl:flex-row lg:justify-between xl:justify-between lg:items-center xl:items-center">
                         <span className="text-sm text-zinc-600 sm:text-base">
                           {getDayTypeLabel(selectedDate)}
                         </span>
