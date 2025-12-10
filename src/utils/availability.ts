@@ -56,28 +56,6 @@ export async function checkSlotAvailability(
 }
 
 /**
- * Verifica si una fecha está cerrada
- */
-export async function isDateClosed(
-  supabase: SupabaseClient<Database>,
-  date: Date
-): Promise<boolean> {
-  const dateString = format(date, "yyyy-MM-dd");
-
-  const { data, error } = await supabase
-    .from("availability")
-    .select("is_closed")
-    .eq("date", dateString)
-    .maybeSingle(); // Cambiar de .single() a .maybeSingle()
-
-  if (error || !data) {
-    return false; // Si no existe registro, asumimos que está abierto
-  }
-
-  return (data as { is_closed: boolean }).is_closed;
-}
-
-/**
  * Verifica si una fecha tiene slots disponibles
  */
 export async function hasAvailableSlots(

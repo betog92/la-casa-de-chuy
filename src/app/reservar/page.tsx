@@ -171,30 +171,43 @@ export default function ReservarPage() {
   );
 
   const loadMonthAvailability = useCallback(async (monthDate: Date) => {
+    // Normalizar a inicio de mes para comparación
+    const normalizedMonthDate = startOfMonth(monthDate);
+
     // Marcar que estamos cargando este mes específico
-    loadingMonthRef.current = monthDate;
+    loadingMonthRef.current = normalizedMonthDate;
     try {
       const supabase = createClient();
       const availability = await getMonthAvailability(
         supabase,
-        startOfMonth(monthDate),
+        normalizedMonthDate,
         endOfMonth(monthDate)
       );
       // Solo actualizar si todavía estamos cargando el mismo mes (evita race conditions)
-      if (loadingMonthRef.current === monthDate) {
+      // Comparar meses normalizados en lugar de referencias de objetos
+      if (
+        loadingMonthRef.current &&
+        isSameMonth(loadingMonthRef.current, normalizedMonthDate)
+      ) {
         setMonthAvailability(availability);
-        setCurrentMonth(monthDate);
+        setCurrentMonth(normalizedMonthDate);
       }
     } catch (err) {
       console.error("Error loading month availability:", err);
       // Solo actualizar si todavía estamos cargando el mismo mes
-      if (loadingMonthRef.current === monthDate) {
+      if (
+        loadingMonthRef.current &&
+        isSameMonth(loadingMonthRef.current, normalizedMonthDate)
+      ) {
         setMonthAvailability(new Map());
-        setCurrentMonth(monthDate);
+        setCurrentMonth(normalizedMonthDate);
       }
     } finally {
       // Solo limpiar loading si todavía estamos cargando el mismo mes
-      if (loadingMonthRef.current === monthDate) {
+      if (
+        loadingMonthRef.current &&
+        isSameMonth(loadingMonthRef.current, normalizedMonthDate)
+      ) {
         loadingMonthRef.current = null;
       }
     }
