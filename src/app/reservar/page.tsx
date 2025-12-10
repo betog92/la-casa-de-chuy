@@ -190,6 +190,7 @@ export default function ReservarPage() {
       // Solo actualizar si todavía estamos cargando el mismo mes
       if (loadingMonthRef.current === monthDate) {
         setMonthAvailability(new Map());
+        setCurrentMonth(monthDate);
       }
     } finally {
       // Solo limpiar loading si todavía estamos cargando el mismo mes
@@ -392,22 +393,83 @@ export default function ReservarPage() {
                 Selecciona una Fecha
               </h2>
               {mounted ? (
-                <Calendar
-                  onChange={handleDateChange}
-                  value={selectedDate}
-                  locale="es"
-                  minDate={minDate}
-                  maxDate={maxDate}
-                  tileDisabled={tileDisabled}
-                  tileClassName={tileClassName}
-                  onActiveStartDateChange={({ activeStartDate }) => {
-                    if (activeStartDate) {
-                      handleMonthChange(activeStartDate);
-                    }
-                  }}
-                  className="w-full rounded-lg border-0"
-                  showNeighboringMonth={false}
-                />
+                <>
+                  <Calendar
+                    onChange={handleDateChange}
+                    value={selectedDate}
+                    locale="es"
+                    minDate={minDate}
+                    maxDate={maxDate}
+                    tileDisabled={tileDisabled}
+                    tileClassName={tileClassName}
+                    onActiveStartDateChange={({ activeStartDate }) => {
+                      if (activeStartDate) {
+                        handleMonthChange(activeStartDate);
+                      }
+                    }}
+                    className="w-full rounded-lg border-0"
+                    showNeighboringMonth={false}
+                  />
+                  {/* Leyenda del heatmap - Solo visible en pantallas grandes */}
+                  <div className="mt-4 hidden grid-cols-5 gap-2 border-t border-zinc-200 pt-4 lg:grid">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-4 w-4 rounded border border-zinc-300"
+                        style={{
+                          backgroundColor: "rgba(34, 197, 94, 0.25)",
+                        }}
+                      />
+                      <span className="text-xs text-zinc-600 sm:text-sm">
+                        Alta
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-4 w-4 rounded border border-zinc-300"
+                        style={{
+                          backgroundColor: "rgba(74, 222, 128, 0.22)",
+                        }}
+                      />
+                      <span className="text-xs text-zinc-600 sm:text-sm">
+                        Moderada
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-4 w-4 rounded border border-zinc-300"
+                        style={{
+                          backgroundColor: "rgba(187, 247, 208, 0.2)",
+                        }}
+                      />
+                      <span className="text-xs text-zinc-600 sm:text-sm">
+                        Baja
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-4 w-4 rounded border border-zinc-300"
+                        style={{
+                          backgroundColor: "rgba(253, 224, 71, 0.3)",
+                        }}
+                      />
+                      <span className="text-xs text-zinc-600 sm:text-sm">
+                        Muy poca
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-4 w-4 rounded border"
+                        style={{
+                          backgroundColor: "#fef2f2",
+                          borderColor: "#ef4444",
+                        }}
+                      />
+                      <span className="text-xs text-zinc-600 sm:text-sm">
+                        Sin disponibilidad
+                      </span>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <div className="flex h-[250px] items-center justify-center sm:h-[300px]">
                   <p className="text-sm text-zinc-500 sm:text-base">
