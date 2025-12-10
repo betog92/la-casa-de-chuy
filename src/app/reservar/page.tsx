@@ -71,8 +71,6 @@ export default function ReservarPage() {
     Map<string, number>
   >(new Map());
   const [currentMonth, setCurrentMonth] = useState<Date | null>(null);
-  const [loadingMonthAvailability, setLoadingMonthAvailability] =
-    useState(false);
   const loadingMonthRef = useRef<Date | null>(null);
 
   // Obtener slots disponibles cuando se selecciona una fecha
@@ -175,7 +173,6 @@ export default function ReservarPage() {
   const loadMonthAvailability = useCallback(async (monthDate: Date) => {
     // Marcar que estamos cargando este mes específico
     loadingMonthRef.current = monthDate;
-    setLoadingMonthAvailability(true);
     try {
       const supabase = createClient();
       const availability = await getMonthAvailability(
@@ -197,7 +194,6 @@ export default function ReservarPage() {
     } finally {
       // Solo limpiar loading si todavía estamos cargando el mismo mes
       if (loadingMonthRef.current === monthDate) {
-        setLoadingMonthAvailability(false);
         loadingMonthRef.current = null;
       }
     }
@@ -285,7 +281,7 @@ export default function ReservarPage() {
   // Función para aplicar clases CSS según disponibilidad (heatmap)
   const tileClassName = useCallback(
     ({ date, view }: { date: Date; view: string }) => {
-      if (view !== "month" || loadingMonthAvailability) return "";
+      if (view !== "month") return "";
 
       const dateString = format(date, "yyyy-MM-dd");
       const checkDate = normalizeDate(date);
@@ -325,13 +321,7 @@ export default function ReservarPage() {
 
       return "";
     },
-    [
-      closedDates,
-      monthAvailability,
-      loadingMonthAvailability,
-      maxDate,
-      isMonthLoadedForDate,
-    ]
+    [closedDates, monthAvailability, maxDate, isMonthLoadedForDate]
   );
 
   // Inicialización del componente
@@ -397,7 +387,7 @@ export default function ReservarPage() {
           </div>
 
           <div className="grid gap-4 sm:gap-8 lg:grid-cols-[1.3fr_1fr] xl:grid-cols-[1.7fr_1fr] 2xl:grid-cols-[2fr_1fr]">
-            <div className="flex flex-col rounded-lg border border-zinc-200 bg-white p-3 shadow-sm sm:p-6 max-h-[870px]">
+            <div className="flex flex-col rounded-lg border border-zinc-200 bg-white p-3 shadow-sm sm:p-6 h-fit">
               <h2 className="mb-3 text-lg font-semibold text-zinc-900 sm:mb-4 sm:text-2xl">
                 Selecciona una Fecha
               </h2>
@@ -415,7 +405,7 @@ export default function ReservarPage() {
                       handleMonthChange(activeStartDate);
                     }
                   }}
-                  className="w-full h-full rounded-lg border-0"
+                  className="w-full rounded-lg border-0"
                   showNeighboringMonth={false}
                 />
               ) : (

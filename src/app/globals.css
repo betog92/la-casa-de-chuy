@@ -40,7 +40,7 @@ html {
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
-  height: 100% !important;
+  height: auto !important;
   max-height: 870px;
   border: none;
   font-family: inherit;
