@@ -1,4 +1,4 @@
-import { format, isToday } from "date-fns";
+import { format } from "date-fns";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -9,36 +9,9 @@ export interface TimeSlot {
 }
 
 /**
- * Convierte una hora en formato "HH:mm:ss" o "HH:mm" a minutos desde medianoche
- */
-function timeToMinutes(timeString: string): number {
-  const timeParts = timeString.substring(0, 5).split(":"); // "HH:mm"
-  const hours = parseInt(timeParts[0], 10);
-  const minutes = parseInt(timeParts[1], 10);
-  return hours * 60 + minutes;
-}
-
-/**
- * Filtra slots pasados para el día actual
- * Si la fecha es hoy, solo retorna slots cuya hora de inicio sea mayor a la hora actual
- */
-function filterPastSlotsForToday(slots: TimeSlot[], date: Date): TimeSlot[] {
-  if (!isToday(date)) {
-    return slots;
-  }
-
-  const now = new Date();
-  const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
-
-  return slots.filter((slot) => {
-    const slotTimeInMinutes = timeToMinutes(slot.start_time);
-    return slotTimeInMinutes > currentTimeInMinutes;
-  });
-}
-
-/**
  * Obtiene los slots disponibles para una fecha usando la función SQL
- * Filtra automáticamente horarios pasados si la fecha es hoy
+ * El backend ya filtra horarios pasados usando la zona horaria de Monterrey,
+ * por lo que no es necesario filtrar nuevamente en el frontend
  */
 export async function getAvailableSlots(
   supabase: SupabaseClient<Database>,
@@ -54,10 +27,10 @@ export async function getAvailableSlots(
     return [];
   }
 
-  const slots = data as TimeSlot[];
-
-  // Filtro adicional en frontend como medida de seguridad
-  return filterPastSlotsForToday(slots, date);
+  // El backend ya filtra slots pasados usando zona horaria de Monterrey
+  // No necesitamos filtrar nuevamente en el frontend para evitar conflictos
+  // de zona horaria entre cliente y servidor
+  return data as TimeSlot[];
 }
 
 /**
