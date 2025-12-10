@@ -150,6 +150,12 @@ CREATE INDEX IF NOT EXISTS idx_reservations_date_time_status
 ON reservations(date, start_time, status) 
 WHERE status = 'confirmed';
 
+-- Índice compuesto para optimizar consultas de slots disponibles por fecha y hora
+-- Útil especialmente cuando se consulta la fecha actual y se filtra por hora
+CREATE INDEX IF NOT EXISTS idx_time_slots_date_start_time 
+ON time_slots(date, start_time) 
+WHERE available = TRUE AND reservations_count = 0;
+
 -- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR updated_at AUTOMÁTICAMENTE
 -- =====================================================

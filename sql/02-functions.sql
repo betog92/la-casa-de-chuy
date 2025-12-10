@@ -215,10 +215,8 @@ DECLARE
   max_allowed_date DATE;
   current_date_monterrey DATE;
   current_time_monterrey TIME;
+  max_date_in_db DATE;
 BEGIN
-  -- Mantener el rango automáticamente (extender si es necesario)
-  PERFORM maintain_time_slots();
-  
   -- Obtener fecha y hora actual en zona horaria de Monterrey
   current_date_monterrey := get_current_date_monterrey();
   current_time_monterrey := get_current_time_monterrey();
@@ -232,6 +230,19 @@ BEGIN
   
   IF p_date > max_allowed_date THEN
     RAISE EXCEPTION 'No se pueden consultar slots más de 6 meses en el futuro';
+  END IF;
+  
+  -- Solo ejecutar maintain_time_slots() si es necesario:
+  -- - Si no hay slots en la BD
+  -- - Si la fecha solicitada está más allá de los slots existentes
+  -- - Si la fecha máxima está a menos de 1 mes del límite
+  SELECT MAX(date) INTO max_date_in_db FROM time_slots;
+  
+  IF max_date_in_db IS NULL OR 
+     max_date_in_db < p_date OR
+     max_date_in_db < (current_date_monterrey + INTERVAL '1 month')::DATE THEN
+    -- Solo entonces ejecutar mantenimiento (puede ser lento)
+    PERFORM maintain_time_slots();
   END IF;
   
   -- Asegurar que los slots existan para esta fecha
