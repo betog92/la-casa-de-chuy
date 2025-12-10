@@ -214,15 +214,32 @@ export default function ReservarPage() {
     [currentMonth, monthAvailability, loadMonthAvailability]
   );
 
-  const handleDateChange = useCallback((value: unknown) => {
-    if (value instanceof Date) {
-      setLoading(true);
-      setAvailableSlots([]);
-      setPrice(null);
-      setSelectedTime(null);
-      setSelectedDate(value);
-    }
-  }, []);
+  const handleDateChange = useCallback(
+    (value: unknown) => {
+      if (value instanceof Date) {
+        // Normalizar ambas fechas para comparar solo año, mes y día
+        const normalizedNewDate = normalizeDate(value);
+        const normalizedCurrentDate = selectedDate
+          ? normalizeDate(selectedDate)
+          : null;
+
+        // Si es la misma fecha, no hacer nada (evitar recarga innecesaria)
+        if (
+          normalizedCurrentDate &&
+          normalizedCurrentDate.getTime() === normalizedNewDate.getTime()
+        ) {
+          return;
+        }
+
+        setLoading(true);
+        setAvailableSlots([]);
+        setPrice(null);
+        setSelectedTime(null);
+        setSelectedDate(value);
+      }
+    },
+    [selectedDate]
+  );
 
   const handleTimeSelect = useCallback((time: string) => {
     setSelectedTime(time);
