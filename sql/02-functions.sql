@@ -5,10 +5,36 @@
 -- Ve a: SQL Editor > New Query > Pega este código > Run
 --
 -- Este archivo contiene:
--- 1. Funciones para generar time slots
--- 2. Funciones RPC para consultas de disponibilidad
--- 3. Funciones de mantenimiento automático
+-- 1. Funciones helper para zona horaria
+-- 2. Funciones para generar time slots
+-- 3. Funciones RPC para consultas de disponibilidad
+-- 4. Funciones de mantenimiento automático
 -- =====================================================
+
+-- =====================================================
+-- 0. FUNCIONES HELPER PARA ZONA HORARIA DE MONTERREY
+-- =====================================================
+-- Funciones auxiliares para obtener fecha y hora actual
+-- en zona horaria de Monterrey (UTC-6)
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION get_current_date_monterrey()
+RETURNS DATE AS $$
+BEGIN
+  RETURN (CURRENT_TIMESTAMP AT TIME ZONE 'America/Monterrey')::DATE;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION get_current_time_monterrey()
+RETURNS TIME AS $$
+BEGIN
+  RETURN (CURRENT_TIMESTAMP AT TIME ZONE 'America/Monterrey')::TIME;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Configurar search_path para seguridad
+ALTER FUNCTION get_current_date_monterrey() SET search_path = public;
+ALTER FUNCTION get_current_time_monterrey() SET search_path = public;
 
 -- =====================================================
 -- 1. FUNCIÓN PARA GENERAR TIME SLOTS EN UN RANGO
@@ -81,11 +107,15 @@ DECLARE
   day_of_week INTEGER;
   i INTEGER;
   max_allowed_date DATE;
+  current_date_monterrey DATE;
 BEGIN
-  -- Validar que la fecha esté dentro del rango permitido (6 meses desde hoy)
-  max_allowed_date := (CURRENT_DATE + INTERVAL '6 months')::DATE;
+  -- Obtener fecha actual en zona horaria de Monterrey
+  current_date_monterrey := get_current_date_monterrey();
   
-  IF p_date < CURRENT_DATE THEN
+  -- Validar que la fecha esté dentro del rango permitido (6 meses desde hoy, usando zona horaria de Monterrey)
+  max_allowed_date := (current_date_monterrey + INTERVAL '6 months')::DATE;
+  
+  IF p_date < current_date_monterrey THEN
     RAISE EXCEPTION 'No se pueden crear slots para fechas pasadas';
   END IF;
   
@@ -136,23 +166,27 @@ RETURNS VOID AS $$
 DECLARE
   max_date DATE;
   target_date DATE;
+  current_date_monterrey DATE;
 BEGIN
-  -- La fecha objetivo siempre es máximo 6 meses desde hoy
-  target_date := (CURRENT_DATE + INTERVAL '6 months')::DATE;
+  -- Obtener fecha actual en zona horaria de Monterrey
+  current_date_monterrey := get_current_date_monterrey();
+  
+  -- La fecha objetivo siempre es máximo 6 meses desde hoy (usando zona horaria de Monterrey)
+  target_date := (current_date_monterrey + INTERVAL '6 months')::DATE;
   
   -- Obtener la fecha máxima actual en la base de datos
   SELECT MAX(date) INTO max_date FROM time_slots;
   
   -- Si no hay slots, generar desde hoy hasta 6 meses
   IF max_date IS NULL THEN
-    PERFORM generate_time_slots(CURRENT_DATE, target_date);
+    PERFORM generate_time_slots(current_date_monterrey, target_date);
   -- Si la fecha máxima es menor a 6 meses desde hoy, extender
   ELSIF max_date < target_date THEN
     PERFORM generate_time_slots((max_date + INTERVAL '1 day')::DATE, target_date);
   END IF;
   
-  -- Eliminar slots de fechas pasadas (limpieza automática)
-  DELETE FROM time_slots WHERE date < CURRENT_DATE;
+  -- Eliminar slots de fechas pasadas (limpieza automática, usando zona horaria de Monterrey)
+  DELETE FROM time_slots WHERE date < current_date_monterrey;
   
   -- Eliminar slots más allá de 6 meses (por si acaso)
   DELETE FROM time_slots WHERE date > target_date;
@@ -179,14 +213,20 @@ RETURNS TABLE (
 ) AS $$
 DECLARE
   max_allowed_date DATE;
+  current_date_monterrey DATE;
+  current_time_monterrey TIME;
 BEGIN
   -- Mantener el rango automáticamente (extender si es necesario)
   PERFORM maintain_time_slots();
   
-  -- Validar rango de 6 meses
-  max_allowed_date := (CURRENT_DATE + INTERVAL '6 months')::DATE;
+  -- Obtener fecha y hora actual en zona horaria de Monterrey
+  current_date_monterrey := get_current_date_monterrey();
+  current_time_monterrey := get_current_time_monterrey();
   
-  IF p_date < CURRENT_DATE THEN
+  -- Validar rango de 6 meses (usando zona horaria de Monterrey)
+  max_allowed_date := (current_date_monterrey + INTERVAL '6 months')::DATE;
+  
+  IF p_date < current_date_monterrey THEN
     RAISE EXCEPTION 'No se pueden consultar slots para fechas pasadas';
   END IF;
   
@@ -208,6 +248,11 @@ BEGIN
     AND ts.available = TRUE
     AND ts.reservations_count = 0
     AND (a.is_closed IS NULL OR a.is_closed = FALSE)
+    -- Si es el día actual, filtrar horarios que ya pasaron (usando zona horaria de Monterrey)
+    AND (
+      p_date > current_date_monterrey 
+      OR (p_date = current_date_monterrey AND ts.start_time > current_time_monterrey)
+    )
   ORDER BY ts.start_time;
 END;
 $$ LANGUAGE plpgsql;
@@ -228,7 +273,18 @@ DECLARE
   v_available BOOLEAN;
   v_reservations_count INTEGER;
   v_is_closed BOOLEAN;
+  current_date_monterrey DATE;
+  current_time_monterrey TIME;
 BEGIN
+  -- Obtener fecha y hora actual en zona horaria de Monterrey
+  current_date_monterrey := get_current_date_monterrey();
+  current_time_monterrey := get_current_time_monterrey();
+  
+  -- Si es el día actual, verificar que el slot no haya pasado
+  IF p_date = current_date_monterrey AND p_start_time <= current_time_monterrey THEN
+    RETURN FALSE; -- El slot ya pasó
+  END IF;
+  
   -- Verificar si el día está cerrado
   SELECT is_closed INTO v_is_closed
   FROM availability
@@ -325,7 +381,14 @@ RETURNS TABLE (
   date DATE,
   available_slots INTEGER
 ) AS $$
+DECLARE
+  current_date_monterrey DATE;
+  current_time_monterrey TIME;
 BEGIN
+  -- Obtener fecha y hora actual en zona horaria de Monterrey
+  current_date_monterrey := get_current_date_monterrey();
+  current_time_monterrey := get_current_time_monterrey();
+  
   RETURN QUERY
   SELECT 
     ts.date,
@@ -337,6 +400,11 @@ BEGIN
     AND ts.available = TRUE
     AND ts.reservations_count = 0
     AND (a.is_closed IS NULL OR a.is_closed = FALSE)
+    -- Si es el día actual, filtrar horarios que ya pasaron para el conteo del heatmap (usando zona horaria de Monterrey)
+    AND (
+      ts.date > current_date_monterrey 
+      OR (ts.date = current_date_monterrey AND ts.start_time > current_time_monterrey)
+    )
   GROUP BY ts.date
   ORDER BY ts.date;
 END;
