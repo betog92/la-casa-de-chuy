@@ -120,15 +120,13 @@ button.react-calendar__tile.heatmap-closed-or-unavailable.react-calendar__tile--
   font-weight: 500 !important;
 }
 
+/* El día actual hereda los estilos del heatmap - sin estilos especiales */
 .react-calendar__tile--now {
-  background: #dbeafe !important; /* bg-blue-100 - azul claro para diferenciarlo del amarillo */
-  color: #1e40af !important; /* text-blue-800 - azul oscuro */
-  font-weight: 600;
-  border: 2px solid #3b82f6; /* border-blue-500 */
+  /* Sin estilos especiales - hereda del heatmap */
 }
 
 .react-calendar__tile--now:enabled:hover {
-  background: #bfdbfe !important; /* bg-blue-200 - azul un poco más oscuro al hover */
+  /* Hereda hover del heatmap */
 }
 
 .react-calendar__month-view__weekdays {
@@ -238,29 +236,29 @@ button.react-calendar__tile.heatmap-closed-or-unavailable.react-calendar__tile--
   background-color: rgba(253, 224, 71, 0.3) !important; /* yellow-300 más intenso */
 }
 
-/* Bordes sutiles para heatmap - Aplicados en todas las pantallas */
+/* Bordes sutiles para heatmap - Aplicados en todas las pantallas (incluyendo día actual) */
 /* Alta disponibilidad - borde verde oscuro sutil */
-.react-calendar__tile.heatmap-high:not(.react-calendar__tile--active):not(.react-calendar__tile--now) {
+.react-calendar__tile.heatmap-high:not(.react-calendar__tile--active) {
   border: 1px solid rgba(34, 197, 94, 0.4) !important;
 }
 
 /* Disponibilidad moderada - borde verde medio sutil */
-.react-calendar__tile.heatmap-medium:not(.react-calendar__tile--active):not(.react-calendar__tile--now) {
+.react-calendar__tile.heatmap-medium:not(.react-calendar__tile--active) {
   border: 1px solid rgba(74, 222, 128, 0.35) !important;
 }
 
 /* Baja disponibilidad - borde verde claro sutil */
-.react-calendar__tile.heatmap-low:not(.react-calendar__tile--active):not(.react-calendar__tile--now) {
+.react-calendar__tile.heatmap-low:not(.react-calendar__tile--active) {
   border: 1px solid rgba(187, 247, 208, 0.3) !important;
 }
 
 /* Muy poca disponibilidad - borde amarillo sutil */
-.react-calendar__tile.heatmap-minimal:not(.react-calendar__tile--active):not(.react-calendar__tile--now) {
+.react-calendar__tile.heatmap-minimal:not(.react-calendar__tile--active) {
   border: 1px solid rgba(253, 224, 71, 0.4) !important;
 }
 
 /* Días cerrados o sin disponibilidad - borde rojo sutil */
-.react-calendar__tile.heatmap-closed-or-unavailable:not(.react-calendar__tile--active):not(.react-calendar__tile--now) {
+.react-calendar__tile.heatmap-closed-or-unavailable:not(.react-calendar__tile--active) {
   border: 1px solid rgba(239, 68, 68, 0.4) !important; /* red-500 con opacidad */
 }
 
@@ -273,12 +271,4 @@ button.react-calendar__tile.heatmap-closed-or-unavailable.react-calendar__tile--
   color: white !important;
 }
 
-/* Asegurar que el heatmap no interfiera con el día actual */
-.react-calendar__tile--now.heatmap-high,
-.react-calendar__tile--now.heatmap-medium,
-.react-calendar__tile--now.heatmap-low,
-.react-calendar__tile--now.heatmap-minimal {
-  background-color: #dbeafe !important; /* bg-blue-100 - azul claro para diferenciarlo del amarillo */
-  color: #1e40af !important; /* text-blue-800 - azul oscuro */
-  border: 2px solid #3b82f6 !important; /* border-blue-500 */
-}
+/* El día actual hereda los estilos del heatmap - sin estilos especiales */

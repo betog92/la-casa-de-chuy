@@ -215,16 +215,14 @@ export default function ReservarPage() {
 
   const handleMonthChange = useCallback(
     (activeStartDate: Date) => {
-      if (
-        currentMonth &&
-        isSameMonth(currentMonth, activeStartDate) &&
-        monthAvailability.size > 0
-      ) {
+      // Verificar si el mes ya está cargado usando currentMonth
+      // No usar monthAvailability.size porque meses sin disponibilidad retornan Map vacío
+      if (currentMonth && isSameMonth(currentMonth, activeStartDate)) {
         return;
       }
       loadMonthAvailability(activeStartDate);
     },
-    [currentMonth, monthAvailability, loadMonthAvailability]
+    [currentMonth, loadMonthAvailability]
   );
 
   const handleDateChange = useCallback(
