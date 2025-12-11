@@ -425,7 +425,7 @@ $$ LANGUAGE plpgsql;
 ALTER FUNCTION get_month_availability(DATE, DATE) SET search_path = public;
 
 -- =====================================================
--- 8. FUNCIÓN PARA OBTENER ESTADÍSTICAS DE RESERVAS
+-- 7. FUNCIÓN PARA OBTENER ESTADÍSTICAS DE RESERVAS
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION get_reservations_stats(p_date DATE)
