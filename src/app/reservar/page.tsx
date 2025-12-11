@@ -268,12 +268,14 @@ export default function ReservarPage() {
     router.push(`/reservar/formulario?date=${dateString}&time=${selectedTime}`);
   }, [selectedDate, selectedTime, price, router]);
 
-  const minDate = useMemo(() => new Date(), []);
-  const maxDate = useMemo(() => {
-    const date = addMonths(new Date(), 6);
-    date.setHours(23, 59, 59, 999);
-    return date;
-  }, []);
+  // No memoizar - se recalculan en cada render para asegurar fecha actual
+  // new Date() es muy rápido, no justifica la complejidad de memoización
+  // Esto previene que minDate quede desactualizado si el componente permanece montado pasada la medianoche
+  const minDate = new Date();
+  minDate.setHours(0, 0, 0, 0);
+
+  const maxDate = addMonths(new Date(), 6);
+  maxDate.setHours(23, 59, 59, 999);
 
   // Función para deshabilitar fechas pasadas, cerradas, sin disponibilidad o más de 6 meses
   const tileDisabled = useCallback(
