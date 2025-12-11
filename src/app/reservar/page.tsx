@@ -11,6 +11,7 @@ import {
   endOfMonth,
   isSameMonth,
 } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
@@ -51,8 +52,15 @@ const normalizeDate = (date: Date): Date => {
   return normalized;
 };
 
+// Helper para obtener la fecha actual en zona horaria de Monterrey
+const getMonterreyDate = (): Date => {
+  const now = new Date();
+  const monterreyTime = toZonedTime(now, "America/Monterrey");
+  return normalizeDate(monterreyTime);
+};
+
 const isFutureDate = (date: Date): boolean => {
-  const today = normalizeDate(new Date());
+  const today = getMonterreyDate();
   const checkDate = normalizeDate(date);
   return checkDate >= today;
 };
@@ -268,13 +276,12 @@ export default function ReservarPage() {
     router.push(`/reservar/formulario?date=${dateString}&time=${selectedTime}`);
   }, [selectedDate, selectedTime, price, router]);
 
-  // No memoizar - se recalculan en cada render para asegurar fecha actual
-  // new Date() es muy rápido, no justifica la complejidad de memoización
+  // Usar fecha de Monterrey para minDate y maxDate
+  // Se recalculan en cada render para asegurar fecha actual
   // Esto previene que minDate quede desactualizado si el componente permanece montado pasada la medianoche
-  const minDate = new Date();
-  minDate.setHours(0, 0, 0, 0);
+  const minDate = getMonterreyDate();
 
-  const maxDate = addMonths(new Date(), 6);
+  const maxDate = addMonths(getMonterreyDate(), 6);
   maxDate.setHours(23, 59, 59, 999);
 
   // Función para deshabilitar fechas pasadas, cerradas, sin disponibilidad o más de 6 meses
@@ -284,7 +291,7 @@ export default function ReservarPage() {
 
       const dateString = format(date, "yyyy-MM-dd");
       const checkDate = normalizeDate(date);
-      const today = normalizeDate(new Date());
+      const today = getMonterreyDate();
       const future = isFutureDate(date);
 
       // Verificar si el mes está cargado antes de deshabilitar por 0 slots
@@ -316,7 +323,7 @@ export default function ReservarPage() {
 
       const dateString = format(date, "yyyy-MM-dd");
       const checkDate = normalizeDate(date);
-      const today = normalizeDate(new Date());
+      const today = getMonterreyDate();
       const future = isFutureDate(date);
       const isToday = checkDate.getTime() === today.getTime();
       const isClosed = closedDates.has(dateString);
@@ -375,9 +382,8 @@ export default function ReservarPage() {
 
     const initialize = async () => {
       const supabase = createClient();
-      const today = new Date();
-      const threeMonthsLater = new Date();
-      threeMonthsLater.setMonth(today.getMonth() + 3);
+      const today = getMonterreyDate();
+      const threeMonthsLater = addMonths(today, 3);
 
       // Cargar fechas cerradas
       try {
@@ -396,7 +402,7 @@ export default function ReservarPage() {
       }
 
       // Cargar disponibilidad del mes actual
-      loadMonthAvailability(new Date());
+      loadMonthAvailability(today);
     };
 
     initialize();
