@@ -314,7 +314,9 @@ export default function ReservarPage() {
 
       const dateString = format(date, "yyyy-MM-dd");
       const checkDate = normalizeDate(date);
+      const today = normalizeDate(new Date());
       const future = isFutureDate(date);
+      const isToday = checkDate.getTime() === today.getTime();
       const isClosed = closedDates.has(dateString);
       const slots = monthAvailability.get(dateString);
 
@@ -328,11 +330,18 @@ export default function ReservarPage() {
       // (la función SQL solo retorna días con slots > 0)
       const availableSlots = slots ?? 0;
 
+      // Si es el día actual y no tiene slots, no aplicar estilo rojo (ya está deshabilitado)
+      // Debe verse como los días pasados, sin estilo especial
+      if (isToday && availableSlots === 0) {
+        return ""; // No aplicar estilo, solo deshabilitado
+      }
+
       // Días cerrados o sin disponibilidad futuros → rojo
       if (
         (isClosed || availableSlots === 0) &&
         future &&
-        checkDate <= maxDate
+        checkDate <= maxDate &&
+        !isToday // Excluir el día actual (ya se maneja arriba)
       ) {
         return "heatmap-closed-or-unavailable";
       }
