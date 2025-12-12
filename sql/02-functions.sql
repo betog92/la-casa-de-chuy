@@ -212,41 +212,19 @@ RETURNS TABLE (
   end_time TIME
 ) AS $$
 DECLARE
-  max_allowed_date DATE;
   current_date_monterrey DATE;
   current_time_monterrey TIME;
-  max_date_in_db DATE;
 BEGIN
   -- Obtener fecha y hora actual en zona horaria de Monterrey
+  -- Solo necesario para filtrar horarios pasados del día actual
   current_date_monterrey := get_current_date_monterrey();
   current_time_monterrey := get_current_time_monterrey();
   
-  -- Validar rango de 6 meses (usando zona horaria de Monterrey)
-  max_allowed_date := (current_date_monterrey + INTERVAL '6 months')::DATE;
-  
-  IF p_date < current_date_monterrey THEN
-    RAISE EXCEPTION 'No se pueden consultar slots para fechas pasadas';
-  END IF;
-  
-  IF p_date > max_allowed_date THEN
-    RAISE EXCEPTION 'No se pueden consultar slots más de 6 meses en el futuro';
-  END IF;
-  
-  -- Solo ejecutar maintain_time_slots() si es necesario:
-  -- - Si no hay slots en la BD
-  -- - Si la fecha solicitada está más allá de los slots existentes
-  -- - Si la fecha máxima está a menos de 1 mes del límite
-  SELECT MAX(date) INTO max_date_in_db FROM time_slots;
-  
-  IF max_date_in_db IS NULL OR 
-     max_date_in_db < p_date OR
-     max_date_in_db < (current_date_monterrey + INTERVAL '1 month')::DATE THEN
-    -- Solo entonces ejecutar mantenimiento (puede ser lento)
-    PERFORM maintain_time_slots();
-  END IF;
-  
-  -- Asegurar que los slots existan para esta fecha
-  PERFORM ensure_time_slots_for_date(p_date);
+  -- Nota: No se realizan validaciones de rango porque:
+  -- 1. El frontend ya valida las fechas permitidas (minDate/maxDate)
+  -- 2. get_month_availability() se encarga de deshabilitar días pasados y futuros en el calendario
+  -- 3. El cron job diario (maintain_time_slots) mantiene siempre 6 meses de slots disponibles
+  -- 4. Esta función es puramente consultiva - solo retorna lo que existe en la BD
   
   RETURN QUERY
   SELECT 

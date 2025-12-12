@@ -23,17 +23,24 @@ Este documento explica cómo ejecutar los scripts SQL en el orden correcto para 
    - Configuración de `search_path` para seguridad
 
 3. **`03-security.sql`** - Seguridad y permisos
+
    - Habilita Row Level Security (RLS)
    - Crea políticas de acceso para cada tabla
 
+4. **`04-cron-jobs.sql`** - Cron jobs para mantenimiento automático
+   - Configura cron job diario para ejecutar `maintain_time_slots()`
+   - Se ejecuta a medianoche en zona horaria de Monterrey
+   - Requiere habilitar extensión `pg_cron` en Supabase
+
 ### Archivos Auxiliares:
 
-4. **`populate-initial-data.sql`** - Datos iniciales
+5. **`populate-initial-data.sql`** - Datos iniciales
 
    - Genera slots para los próximos 6 meses
    - Ejecutar DESPUÉS de los archivos principales
+   - **Nota**: Si usas el cron job (`04-cron-jobs.sql`), este archivo es opcional
 
-5. **`drop-all.sql`** - Limpieza completa
+6. **`drop-all.sql`** - Limpieza completa
    - ⚠️ **ADVERTENCIA**: Elimina TODAS las tablas y funciones
    - Solo usar en desarrollo o cuando quieras empezar desde cero
 
@@ -63,9 +70,16 @@ Este documento explica cómo ejecutar los scripts SQL en el orden correcto para 
 -- Copia y pega el contenido de sql/03-security.sql
 -- Ejecuta
 
--- Paso 4: Datos iniciales (opcional pero recomendado)
+-- Paso 4: Cron Jobs (recomendado para producción)
+-- Copia y pega el contenido de sql/04-cron-jobs.sql
+-- Ejecuta
+-- IMPORTANTE: Primero debes habilitar la extensión pg_cron en Supabase:
+-- Ve a: Database > Extensions > Busca "pg_cron" > Enable
+
+-- Paso 5: Datos iniciales (opcional - solo si NO usas cron job)
 -- Copia y pega el contenido de sql/populate-initial-data.sql
 -- Ejecuta
+-- Nota: Si configuraste el cron job, los slots se generarán automáticamente
 ```
 
 ### Actualización de funciones:
@@ -90,18 +104,25 @@ Si solo necesitas actualizar las políticas RLS:
 
 ### Sobre el mantenimiento automático:
 
-- La función `get_available_slots()` ahora incluye mantenimiento automático
-- Cada vez que alguien consulta una fecha, el sistema:
-  - Verifica que haya slots hasta 6 meses en el futuro
-  - Crea slots automáticamente si faltan
-  - Limpia slots de fechas pasadas
-- **No necesitas ejecutar scripts periódicamente** - el sistema se mantiene solo
+- **Sistema con Cron Job (recomendado para producción):**
+
+  - El cron job (`04-cron-jobs.sql`) ejecuta `maintain_time_slots()` diariamente a medianoche (Monterrey)
+  - Mantiene automáticamente 6 meses de slots disponibles
+  - Limpia slots de fechas pasadas automáticamente
+  - Extiende el rango de slots cada día
+  - **No necesitas ejecutar scripts periódicamente** - el sistema se mantiene solo
+
+- **Sin Cron Job:**
+  - Si no configuras el cron job, puedes ejecutar `populate-initial-data.sql` para generar slots iniciales
+  - O ejecutar manualmente `SELECT maintain_time_slots();` cuando sea necesario
 
 ### Sobre los slots:
 
-- Los slots se crean automáticamente cuando se consultan
+- **Con cron job:** Los slots se generan automáticamente cada día a medianoche
+- **Sin cron job:** Puedes ejecutar `populate-initial-data.sql` o `maintain_time_slots()` manualmente
 - El sistema mantiene siempre 6 meses de slots disponibles
 - Los slots de fechas pasadas se eliminan automáticamente
+- Todas las funciones usan zona horaria de Monterrey (`America/Monterrey`)
 
 ### Sobre la seguridad:
 
@@ -123,12 +144,18 @@ WHERE proname IN (
   'generate_time_slots',
   'ensure_time_slots_for_date',
   'maintain_time_slots',
+  'maintain_time_slots_at_midnight_monterrey',
   'get_available_slots',
+  'get_current_date_monterrey',
+  'get_current_time_monterrey',
   'is_slot_available',
   'get_daily_occupancy',
   'get_reservations_stats'
 )
 ORDER BY proname;
+
+-- Verificar que el cron job esté configurado (si usas 04-cron-jobs.sql)
+SELECT * FROM cron.job WHERE jobname = 'maintain-time-slots-daily';
 
 -- Verificar que las tablas existan
 SELECT table_name
@@ -160,9 +187,16 @@ ORDER BY tablename;
 
 ### Los slots no aparecen disponibles
 
-- Verifica que hayas ejecutado `populate-initial-data.sql` o que la función `get_available_slots` esté funcionando
+- **Si usas cron job:** Verifica que esté configurado correctamente con `SELECT * FROM cron.job WHERE jobname = 'maintain-time-slots-daily';`
+- **Sin cron job:** Verifica que hayas ejecutado `populate-initial-data.sql` o ejecuta manualmente `SELECT maintain_time_slots();`
 - Verifica que los slots no tengan `reservations_count > 0` o `available = FALSE`
 - Verifica que la fecha no esté marcada como cerrada en la tabla `availability`
+
+### El cron job no se ejecuta
+
+- Verifica que la extensión `pg_cron` esté habilitada en Supabase (Database > Extensions)
+- Verifica que el cron job esté programado: `SELECT * FROM cron.job WHERE jobname = 'maintain-time-slots-daily';`
+- Verifica el historial de ejecuciones: `SELECT * FROM cron.job_run_details WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'maintain-time-slots-daily') ORDER BY start_time DESC LIMIT 10;`
 
 ## 📝 Cambios desde la versión anterior
 
@@ -174,7 +208,9 @@ ORDER BY tablename;
 
 ### Mejoras:
 
-- `get_available_slots()` ahora incluye mantenimiento automático
-- Validación de rango de 6 meses en todas las funciones
+- **Cron job diario:** Sistema de mantenimiento automático mediante cron job (ejecuta a medianoche Monterrey)
+- **Funciones simplificadas:** `get_available_slots()` es ahora puramente consultiva (sin validaciones ni mantenimiento)
+- **Zona horaria:** Todas las funciones usan zona horaria de Monterrey (`America/Monterrey`)
+- Validación de rango de 6 meses mantenida en funciones de escritura
 - Limpieza automática de slots pasados
 - Mejor documentación y comentarios
