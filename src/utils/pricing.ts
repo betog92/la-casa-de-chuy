@@ -8,40 +8,38 @@ import type { Database } from "@/types/database.types";
 
 export const PRICES = {
   normal: 1500, // Precio por reserva en día normal
-  weekend: 1800, // Precio por reserva en viernes/sábado/domingo
+  weekend: 1800, // Precio por reserva en viernes/sábado
+  sunday: 2000, // Precio por reserva en domingo
   holiday: 2000, // Precio por reserva en día festivo
 } as const;
 
 // =====================================================
-// DÍAS FESTIVOS EN MÉXICO (2024-2025)
+// DÍAS FESTIVOS EN MÉXICO (2026)
 // =====================================================
 
 const MEXICAN_HOLIDAYS = [
-  // 2024
-  new Date(2024, 0, 1), // Año Nuevo
-  new Date(2024, 1, 5), // Día de la Constitución
-  new Date(2024, 2, 18), // Natalicio de Benito Juárez
-  new Date(2024, 4, 1), // Día del Trabajo
-  new Date(2024, 8, 16), // Día de la Independencia
-  new Date(2024, 10, 1), // Día de Muertos
-  new Date(2024, 10, 18), // Día de la Revolución
-  new Date(2024, 11, 25), // Navidad
-  // 2025
-  new Date(2025, 0, 1), // Año Nuevo
-  new Date(2025, 1, 3), // Día de la Constitución
-  new Date(2025, 2, 17), // Natalicio de Benito Juárez
-  new Date(2025, 4, 1), // Día del Trabajo
-  new Date(2025, 8, 16), // Día de la Independencia
-  new Date(2025, 10, 1), // Día de Muertos
-  new Date(2025, 10, 17), // Día de la Revolución
-  new Date(2025, 11, 25), // Navidad
+  // 2026 - Días Festivos Oficiales
+  new Date(2026, 0, 1), // Año Nuevo
+  new Date(2026, 1, 2), // Día de la Constitución (Lunes 2 de febrero)
+  new Date(2026, 2, 16), // Natalicio de Benito Juárez (Lunes 16 de marzo)
+  new Date(2026, 4, 1), // Día del Trabajo
+  new Date(2026, 8, 16), // Día de la Independencia
+  new Date(2026, 10, 16), // Día de la Revolución (Lunes 16 de noviembre)
+  new Date(2026, 11, 25), // Navidad
+  // 2026 - Días Especiales de Alta Demanda
+  new Date(2026, 3, 2), // Jueves Santo
+  new Date(2026, 3, 3), // Viernes Santo
+  new Date(2026, 4, 10), // Día de las Madres
+  new Date(2026, 11, 12), // Día de la Virgen de Guadalupe
+  new Date(2026, 11, 24), // Nochebuena
+  new Date(2026, 11, 31), // Fin de Año
 ] as const;
 
 // =====================================================
 // TIPOS
 // =====================================================
 
-export type DayType = "normal" | "weekend" | "holiday";
+export type DayType = "normal" | "weekend" | "sunday" | "holiday";
 
 // =====================================================
 // FUNCIONES DE DETECCIÓN DE TIPO DE DÍA
@@ -55,20 +53,30 @@ export function isHoliday(date: Date): boolean {
 }
 
 /**
- * Determina si un día es viernes, sábado o domingo
+ * Determina si un día es viernes o sábado (no incluye domingo)
  */
 export function isWeekend(date: Date): boolean {
   const dayOfWeek = getDay(date);
-  // 0 = Domingo, 5 = Viernes, 6 = Sábado
-  return dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
+  // 5 = Viernes, 6 = Sábado (0 = Domingo se maneja por separado)
+  return dayOfWeek === 5 || dayOfWeek === 6;
 }
 
 /**
- * Determina el tipo de día (normal, weekend, holiday)
+ * Determina si un día es domingo
+ */
+export function isSunday(date: Date): boolean {
+  return getDay(date) === 0;
+}
+
+/**
+ * Determina el tipo de día (normal, weekend, sunday, holiday)
  */
 export function getDayType(date: Date): DayType {
   if (isHoliday(date)) {
     return "holiday";
+  }
+  if (isSunday(date)) {
+    return "sunday";
   }
   if (isWeekend(date)) {
     return "weekend";

@@ -413,6 +413,7 @@ export default function ReservarPage() {
     const dayType = getDayType(date);
     const labels: Record<string, string> = {
       holiday: "Día Festivo",
+      sunday: "Domingo",
       weekend: "Fin de Semana",
     };
     return labels[dayType] || "Día Normal";
