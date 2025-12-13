@@ -196,7 +196,9 @@ CREATE TRIGGER update_time_slots_updated_at
 -- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR IS_OCCUPIED AUTOMÁTICAMENTE
 -- =====================================================
--- Eliminar función antigua si existe (para migraciones desde versiones anteriores)
+-- Eliminar trigger y función antiguos si existen (para migraciones desde versiones anteriores)
+-- IMPORTANTE: Eliminar primero el trigger que depende de la función
+DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
 DROP FUNCTION IF EXISTS update_time_slot_reservations_count();
 
 CREATE OR REPLACE FUNCTION update_time_slot_occupied()
@@ -304,8 +306,8 @@ ALTER FUNCTION update_time_slot_occupied() SET search_path = public;
 -- =====================================================
 -- TRIGGER PARA ACTUALIZAR IS_OCCUPIED AUTOMÁTICAMENTE
 -- =====================================================
--- Eliminar triggers antiguos si existen (para migraciones desde versiones anteriores)
-DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
+-- Eliminar trigger nuevo si existe (para migraciones desde versiones anteriores)
+-- Nota: El trigger antiguo ya fue eliminado en la sección de funciones arriba
 DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
 
 CREATE TRIGGER update_time_slot_occupied_on_reservation
