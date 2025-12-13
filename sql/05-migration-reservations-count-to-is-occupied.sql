@@ -31,7 +31,11 @@ BEGIN
     (SELECT COUNT(*) FROM time_slots);
 END $$;
 
--- Paso 4: Crear nueva función del trigger (CON EL NUEVO CAMPO)
+-- Paso 4: Eliminar función y trigger antiguos ANTES de crear los nuevos
+DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
+DROP FUNCTION IF EXISTS update_time_slot_reservations_count();
+
+-- Paso 5: Crear nueva función del trigger (CON EL NUEVO CAMPO)
 CREATE OR REPLACE FUNCTION update_time_slot_occupied()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -122,7 +126,8 @@ $$ LANGUAGE plpgsql;
 
 ALTER FUNCTION update_time_slot_occupied() SET search_path = public;
 
--- Paso 5: Crear nuevo trigger (PARALELO al antiguo por ahora)
+-- Paso 6: Crear nuevo trigger (el antiguo ya fue eliminado en el Paso 4)
+DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
 CREATE TRIGGER update_time_slot_occupied_on_reservation
 AFTER INSERT OR UPDATE OR DELETE ON reservations
 FOR EACH ROW EXECUTE FUNCTION update_time_slot_occupied();
