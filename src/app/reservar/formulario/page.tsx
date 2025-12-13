@@ -47,6 +47,10 @@ export default function FormularioReservaPage() {
     resolver: zodResolver(reservationFormSchema),
   });
 
+  // Extraer valores de searchParams de forma estable para evitar re-renders innecesarios
+  const dateParam = searchParams.get("date");
+  const timeParam = searchParams.get("time");
+
   // Cargar datos de la reserva desde sessionStorage o query params
   useEffect(() => {
     const loadReservationData = async () => {
@@ -68,9 +72,6 @@ export default function FormularioReservaPage() {
 
         // Si no hay en sessionStorage o falta el precio, obtener de query params
         if (!data || !data.price) {
-          const dateParam = searchParams.get("date");
-          const timeParam = searchParams.get("time");
-
           if (dateParam && timeParam) {
             // Calcular el precio si no está disponible
             const date = parse(dateParam, "yyyy-MM-dd", new Date());
@@ -103,7 +104,7 @@ export default function FormularioReservaPage() {
     };
 
     loadReservationData();
-  }, [searchParams, router]);
+  }, [dateParam, timeParam, router]);
 
   // Formatear fecha para mostrar
   const formatDisplayDate = (dateString: string): string => {
