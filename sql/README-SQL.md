@@ -13,7 +13,7 @@ Este documento explica cómo ejecutar los scripts SQL en el orden correcto para 
    - Crea todas las tablas
    - Crea índices básicos y compuestos
    - Crea triggers para `updated_at` automático
-   - Crea trigger para actualizar `reservations_count`
+   - Crea trigger para actualizar `is_occupied`
 
 2. **`02-functions.sql`** - Todas las funciones del sistema
 
@@ -189,7 +189,7 @@ ORDER BY tablename;
 
 - **Si usas cron job:** Verifica que esté configurado correctamente con `SELECT * FROM cron.job WHERE jobname = 'maintain-time-slots-daily';`
 - **Sin cron job:** Verifica que hayas ejecutado `populate-initial-data.sql` o ejecuta manualmente `SELECT maintain_time_slots();`
-- Verifica que los slots no tengan `reservations_count > 0` o `available = FALSE`
+- Verifica que los slots no tengan `is_occupied = TRUE` o `available = FALSE`
 - Verifica que la fecha no esté marcada como cerrada en la tabla `availability`
 
 ### El cron job no se ejecuta

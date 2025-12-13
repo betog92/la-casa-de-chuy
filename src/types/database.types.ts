@@ -148,7 +148,7 @@ export interface Database {
           start_time: string;
           end_time: string;
           available: boolean;
-          reservations_count: number;
+          is_occupied: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -158,7 +158,7 @@ export interface Database {
           start_time: string;
           end_time: string;
           available?: boolean;
-          reservations_count?: number;
+          is_occupied?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -168,7 +168,7 @@ export interface Database {
           start_time?: string;
           end_time?: string;
           available?: boolean;
-          reservations_count?: number;
+          is_occupied?: boolean;
           created_at?: string;
           updated_at?: string;
         };

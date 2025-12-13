@@ -13,6 +13,7 @@
 -- =====================================================
 
 DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
+DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
 DROP TRIGGER IF EXISTS update_reservations_updated_at ON reservations;
 DROP TRIGGER IF EXISTS update_availability_updated_at ON availability;
 DROP TRIGGER IF EXISTS update_time_slots_updated_at ON time_slots;
@@ -23,6 +24,7 @@ DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 -- =====================================================
 
 DROP FUNCTION IF EXISTS update_time_slot_reservations_count();
+DROP FUNCTION IF EXISTS update_time_slot_occupied();
 DROP FUNCTION IF EXISTS update_updated_at_column();
 DROP FUNCTION IF EXISTS generate_time_slots(DATE, DATE);
 DROP FUNCTION IF EXISTS ensure_time_slots_for_date(DATE);
@@ -31,6 +33,7 @@ DROP FUNCTION IF EXISTS is_slot_available(DATE, TIME);
 DROP FUNCTION IF EXISTS get_available_slots(DATE);
 DROP FUNCTION IF EXISTS get_daily_occupancy(DATE);
 DROP FUNCTION IF EXISTS get_reservations_stats(DATE);
+DROP FUNCTION IF EXISTS get_month_availability(DATE, DATE);
 
 -- =====================================================
 -- 3. ELIMINAR TABLAS (en orden correcto por dependencias)

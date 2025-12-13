@@ -65,8 +65,8 @@ BEGIN
         slot_time := (TIME '11:00:00' + (i * 45 || ' minutes')::INTERVAL);
         end_time := slot_time + INTERVAL '45 minutes';
         
-        INSERT INTO time_slots (date, start_time, end_time, available, reservations_count)
-        VALUES (v_current_date, slot_time, end_time, TRUE, 0)
+        INSERT INTO time_slots (date, start_time, end_time, available, is_occupied)
+        VALUES (v_current_date, slot_time, end_time, TRUE, FALSE)
         ON CONFLICT (date, start_time) DO NOTHING;
         
         slots_created := slots_created + 1;
@@ -77,8 +77,8 @@ BEGIN
         slot_time := (TIME '11:00:00' + (i * 45 || ' minutes')::INTERVAL);
         end_time := slot_time + INTERVAL '45 minutes';
         
-        INSERT INTO time_slots (date, start_time, end_time, available, reservations_count)
-        VALUES (v_current_date, slot_time, end_time, TRUE, 0)
+        INSERT INTO time_slots (date, start_time, end_time, available, is_occupied)
+        VALUES (v_current_date, slot_time, end_time, TRUE, FALSE)
         ON CONFLICT (date, start_time) DO NOTHING;
         
         slots_created := slots_created + 1;
@@ -133,8 +133,8 @@ BEGIN
       slot_time := (TIME '11:00:00' + (i * 45 || ' minutes')::INTERVAL);
       end_time := slot_time + INTERVAL '45 minutes';
       
-      INSERT INTO time_slots (date, start_time, end_time, available, reservations_count)
-      VALUES (p_date, slot_time, end_time, TRUE, 0)
+      INSERT INTO time_slots (date, start_time, end_time, available, is_occupied)
+      VALUES (p_date, slot_time, end_time, TRUE, FALSE)
       ON CONFLICT (date, start_time) DO NOTHING;
     END LOOP;
   ELSE
@@ -143,8 +143,8 @@ BEGIN
       slot_time := (TIME '11:00:00' + (i * 45 || ' minutes')::INTERVAL);
       end_time := slot_time + INTERVAL '45 minutes';
       
-      INSERT INTO time_slots (date, start_time, end_time, available, reservations_count)
-      VALUES (p_date, slot_time, end_time, TRUE, 0)
+      INSERT INTO time_slots (date, start_time, end_time, available, is_occupied)
+      VALUES (p_date, slot_time, end_time, TRUE, FALSE)
       ON CONFLICT (date, start_time) DO NOTHING;
     END LOOP;
   END IF;
@@ -235,7 +235,7 @@ BEGIN
   LEFT JOIN availability a ON a.date = ts.date
   WHERE ts.date = p_date
     AND ts.available = TRUE
-    AND ts.reservations_count = 0
+    AND ts.is_occupied = FALSE
     AND (a.is_closed IS NULL OR a.is_closed = FALSE)
     -- Si es el día actual, filtrar horarios que ya pasaron (usando zona horaria de Monterrey)
     AND (
@@ -260,7 +260,7 @@ CREATE OR REPLACE FUNCTION is_slot_available(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_available BOOLEAN;
-  v_reservations_count INTEGER;
+  v_is_occupied BOOLEAN;
   v_is_closed BOOLEAN;
   current_date_monterrey DATE;
   current_time_monterrey TIME;
@@ -285,8 +285,8 @@ BEGIN
   END IF;
   
   -- Verificar el slot específico
-  SELECT available, reservations_count
-  INTO v_available, v_reservations_count
+  SELECT available, is_occupied
+  INTO v_available, v_is_occupied
   FROM time_slots
   WHERE date = p_date
     AND start_time = p_start_time;
@@ -298,8 +298,8 @@ BEGIN
   
   -- El slot está disponible si:
   -- 1. available = TRUE
-  -- 2. reservations_count = 0
-  RETURN v_available = TRUE AND v_reservations_count = 0;
+  -- 2. is_occupied = FALSE
+  RETURN v_available = TRUE AND v_is_occupied = FALSE;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -328,11 +328,11 @@ BEGIN
   FROM time_slots
   WHERE date = p_date;
   
-  -- Contar slots ocupados (reservations_count > 0)
+  -- Contar slots ocupados (is_occupied = TRUE)
   SELECT COUNT(*) INTO v_occupied_slots
   FROM time_slots
   WHERE date = p_date
-    AND reservations_count > 0;
+    AND is_occupied = TRUE;
   
   -- Calcular disponibles
   v_available_slots := v_total_slots - v_occupied_slots;
@@ -387,7 +387,7 @@ BEGIN
   WHERE ts.date >= p_start_date
     AND ts.date <= p_end_date
     AND ts.available = TRUE
-    AND ts.reservations_count = 0
+    AND ts.is_occupied = FALSE
     AND (a.is_closed IS NULL OR a.is_closed = FALSE)
     -- Si es el día actual, filtrar horarios que ya pasaron para el conteo del heatmap (usando zona horaria de Monterrey)
     AND (
@@ -440,7 +440,7 @@ ALTER FUNCTION get_reservations_stats(DATE) SET search_path = public;
 -- =====================================================
 
 ALTER FUNCTION update_updated_at_column() SET search_path = public;
-ALTER FUNCTION update_time_slot_reservations_count() SET search_path = public;
+ALTER FUNCTION update_time_slot_occupied() SET search_path = public;
 
 -- =====================================================
 -- COMENTARIOS EN FUNCIONES

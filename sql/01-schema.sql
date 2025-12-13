@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS time_slots (
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
   available BOOLEAN DEFAULT TRUE,
-  reservations_count INTEGER DEFAULT 0,
+  is_occupied BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(date, start_time)
@@ -154,7 +154,7 @@ WHERE status = 'confirmed';
 -- Útil especialmente cuando se consulta la fecha actual y se filtra por hora
 CREATE INDEX IF NOT EXISTS idx_time_slots_date_start_time 
 ON time_slots(date, start_time) 
-WHERE available = TRUE AND reservations_count = 0;
+WHERE available = TRUE AND is_occupied = FALSE;
 
 -- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR updated_at AUTOMÁTICAMENTE
@@ -194,9 +194,9 @@ CREATE TRIGGER update_time_slots_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
--- FUNCIÓN PARA ACTUALIZAR RESERVATIONS_COUNT AUTOMÁTICAMENTE
+-- FUNCIÓN PARA ACTUALIZAR IS_OCCUPIED AUTOMÁTICAMENTE
 -- =====================================================
-CREATE OR REPLACE FUNCTION update_time_slot_reservations_count()
+CREATE OR REPLACE FUNCTION update_time_slot_occupied()
 RETURNS TRIGGER AS $$
 DECLARE
   old_date DATE;
@@ -208,7 +208,7 @@ DECLARE
 BEGIN
   -- Determinar valores según la operación
   IF TG_OP = 'INSERT' THEN
-    -- NUEVA RESERVA: Si es confirmada, incrementar contador del slot exacto
+    -- NUEVA RESERVA: Si es confirmada, marcar el slot como ocupado
     new_date := NEW.date;
     new_start_time := NEW.start_time;
     new_status := NEW.status;
@@ -216,7 +216,7 @@ BEGIN
     IF new_status = 'confirmed' THEN
       -- Actualizar solo el slot exacto de la reserva
       UPDATE time_slots
-      SET reservations_count = reservations_count + 1,
+      SET is_occupied = TRUE,
           updated_at = NOW()
       WHERE date = new_date
         AND start_time = new_start_time;
@@ -234,19 +234,19 @@ BEGIN
     
     -- Si cambió la fecha o la hora (re-agendamiento)
     IF old_date != new_date OR old_start_time != new_start_time THEN
-      -- Decrementar en la fecha/hora antigua (si estaba confirmada)
+      -- Desocupar el slot en la fecha/hora antigua (si estaba confirmada)
       IF old_status = 'confirmed' THEN
         UPDATE time_slots
-        SET reservations_count = GREATEST(0, reservations_count - 1),
+        SET is_occupied = FALSE,
             updated_at = NOW()
         WHERE date = old_date
           AND start_time = old_start_time;
       END IF;
       
-      -- Incrementar en la fecha/hora nueva (si está confirmada)
+      -- Ocupar el slot en la fecha/hora nueva (si está confirmada)
       IF new_status = 'confirmed' THEN
         UPDATE time_slots
-        SET reservations_count = reservations_count + 1,
+        SET is_occupied = TRUE,
             updated_at = NOW()
         WHERE date = new_date
           AND start_time = new_start_time;
@@ -255,21 +255,21 @@ BEGIN
     
     -- Si solo cambió el status (misma fecha y hora)
     IF old_date = new_date AND old_start_time = new_start_time THEN
-      -- Si cambió de NO confirmada a confirmada: incrementar
+      -- Si cambió de NO confirmada a confirmada: ocupar
       -- Esto cubre: 'pending'→'confirmed', 'cancelled'→'confirmed', 'completed'→'confirmed', etc.
       IF old_status != 'confirmed' AND new_status = 'confirmed' THEN
         UPDATE time_slots
-        SET reservations_count = reservations_count + 1,
+        SET is_occupied = TRUE,
             updated_at = NOW()
         WHERE date = new_date
           AND start_time = new_start_time;
       END IF;
       
-      -- Si cambió de confirmada a NO confirmada: decrementar
+      -- Si cambió de confirmada a NO confirmada: desocupar
       -- Esto cubre: 'confirmed'→'cancelled', 'confirmed'→'completed', 'confirmed'→'pending', etc.
       IF old_status = 'confirmed' AND new_status != 'confirmed' THEN
         UPDATE time_slots
-        SET reservations_count = GREATEST(0, reservations_count - 1),
+        SET is_occupied = FALSE,
             updated_at = NOW()
         WHERE date = new_date
           AND start_time = new_start_time;
@@ -277,14 +277,14 @@ BEGIN
     END IF;
     
   ELSIF TG_OP = 'DELETE' THEN
-    -- ELIMINACIÓN: Si se elimina una reserva confirmada, decrementar
+    -- ELIMINACIÓN: Si se elimina una reserva confirmada, desocupar el slot
     old_date := OLD.date;
     old_start_time := OLD.start_time;
     old_status := OLD.status;
     
     IF old_status = 'confirmed' THEN
       UPDATE time_slots
-      SET reservations_count = GREATEST(0, reservations_count - 1),
+      SET is_occupied = FALSE,
           updated_at = NOW()
       WHERE date = old_date
         AND start_time = old_start_time;
@@ -296,15 +296,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Configurar search_path para seguridad
-ALTER FUNCTION update_time_slot_reservations_count() SET search_path = public;
+ALTER FUNCTION update_time_slot_occupied() SET search_path = public;
 
 -- =====================================================
--- TRIGGER PARA ACTUALIZAR RESERVATIONS_COUNT AUTOMÁTICAMENTE
+-- TRIGGER PARA ACTUALIZAR IS_OCCUPIED AUTOMÁTICAMENTE
 -- =====================================================
-DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
-CREATE TRIGGER update_time_slot_count_on_reservation
+DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
+CREATE TRIGGER update_time_slot_occupied_on_reservation
 AFTER INSERT OR UPDATE OR DELETE ON reservations
-FOR EACH ROW EXECUTE FUNCTION update_time_slot_reservations_count();
+FOR EACH ROW EXECUTE FUNCTION update_time_slot_occupied();
 
 -- =====================================================
 -- COMENTARIOS EN TABLAS
