@@ -28,6 +28,28 @@ const reservationFormSchema = z.object({
 
 type ReservationFormData = z.infer<typeof reservationFormSchema>;
 
+// Helper para extraer mensaje de error de axios
+function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    // Si hay una respuesta del servidor con un mensaje de error
+    if (error.response?.data?.error) {
+      return error.response.data.error;
+    }
+    // Si hay un mensaje en response.data pero sin campo 'error'
+    if (error.response?.data?.message) {
+      return error.response.data.message;
+    }
+    // Fallback al mensaje del error de axios
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Ocurrió un error al procesar la reserva. Por favor intenta nuevamente.";
+}
+
 export default function FormularioReservaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -146,59 +168,78 @@ export default function FormularioReservaPage() {
       }
 
       // Paso 2: Crear orden en Conekta (usando API route)
-      const orderResponse = await axios.post("/api/conekta/create-order", {
-        token,
-        amount: reservationData.price,
-        currency: "MXN",
-        customerInfo: {
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-        },
-        description: `Reserva - ${formatDisplayDate(
-          reservationData.date
-        )} ${formatDisplayTime(reservationData.time)}`,
-      });
+      let orderId: string;
+      try {
+        const orderResponse = await axios.post("/api/conekta/create-order", {
+          token,
+          amount: reservationData.price,
+          currency: "MXN",
+          customerInfo: {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+          },
+          description: `Reserva - ${formatDisplayDate(
+            reservationData.date
+          )} ${formatDisplayTime(reservationData.time)}`,
+        });
 
-      if (!orderResponse.data.success) {
-        setError(orderResponse.data.error || "Error al procesar el pago");
+        if (!orderResponse.data.success) {
+          setError(orderResponse.data.error || "Error al procesar el pago");
+          setLoading(false);
+          return;
+        }
+
+        orderId = orderResponse.data.orderId;
+      } catch (error: unknown) {
+        // Manejar errores específicos de la API de Conekta
+        const errorMessage = getErrorMessage(error);
+        setError(errorMessage);
         setLoading(false);
         return;
       }
-
-      const orderId = orderResponse.data.orderId;
 
       // Paso 3: Crear reserva en Supabase (usando API route)
-      const reservationResponse = await axios.post("/api/reservations/create", {
-        email: data.email,
-        name: data.name,
-        phone: data.phone,
-        date: reservationData.date,
-        startTime: reservationData.time,
-        price: reservationData.price,
-        originalPrice: reservationData.price,
-        paymentId: orderId,
-      });
-
-      if (!reservationResponse.data.success) {
-        setError(
-          reservationResponse.data.error ||
-            "Error al crear la reserva. Por favor contacta soporte."
+      let reservationId: string;
+      try {
+        const reservationResponse = await axios.post(
+          "/api/reservations/create",
+          {
+            email: data.email,
+            name: data.name,
+            phone: data.phone,
+            date: reservationData.date,
+            startTime: reservationData.time,
+            price: reservationData.price,
+            originalPrice: reservationData.price,
+            paymentId: orderId,
+          }
         );
+
+        if (!reservationResponse.data.success) {
+          setError(
+            reservationResponse.data.error ||
+              "Error al crear la reserva. Por favor contacta soporte."
+          );
+          setLoading(false);
+          return;
+        }
+
+        reservationId = reservationResponse.data.reservationId;
+      } catch (error: unknown) {
+        // Manejar errores específicos de la API de reservaciones
+        const errorMessage = getErrorMessage(error);
+        setError(errorMessage);
         setLoading(false);
         return;
       }
-
-      const reservationId = reservationResponse.data.reservationId;
 
       // Paso 4: Limpiar sessionStorage y redirigir a confirmación
       sessionStorage.removeItem("reservationData");
       router.push(`/reservar/confirmacion?id=${reservationId}`);
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "Ocurrió un error al procesar la reserva. Por favor intenta nuevamente.";
+      // Catch genérico para errores inesperados
+      const errorMessage = getErrorMessage(err);
       console.error("Error en proceso de reserva:", err);
       setError(errorMessage);
     } finally {
