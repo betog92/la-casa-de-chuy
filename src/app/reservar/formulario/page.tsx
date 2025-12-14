@@ -76,6 +76,9 @@ export default function FormularioReservaPage() {
   // Cargar datos de la reserva desde sessionStorage o query params
   useEffect(() => {
     const loadReservationData = async () => {
+      // Verificación defensiva para SSR (aunque este componente es "use client")
+      if (typeof window === "undefined") return;
+
       try {
         // Intentar obtener de sessionStorage primero
         const stored = sessionStorage.getItem("reservationData");
