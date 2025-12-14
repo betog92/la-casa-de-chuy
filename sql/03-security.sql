@@ -62,10 +62,13 @@ CREATE POLICY "Users can update own profile"
 -- 4. POLÍTICAS RLS PARA RESERVATIONS
 -- =====================================================
 
--- Cualquiera puede crear reservas (reservas como invitado)
-CREATE POLICY "Anyone can create reservations"
-  ON reservations FOR INSERT
-  WITH CHECK (true);
+-- IMPORTANTE: Las reservas SOLO se crean a través de API routes del servidor
+-- (que usan Service Role Key y bypassan RLS completamente)
+-- Por seguridad, NO permitimos INSERT directo desde el cliente
+-- Para crear reservas, usa: POST /api/reservations/create
+--
+-- NOTA: No hay política de INSERT porque queremos forzar que todas las reservas
+-- pasen por nuestras API routes donde se validan datos, disponibilidad, y pago.
 
 -- Los usuarios pueden ver sus propias reservas (por email o user_id)
 -- Nota: Para acceso anónimo, se debe verificar por email en el código de la aplicación
@@ -77,6 +80,7 @@ CREATE POLICY "Users can view own reservations"
   );
 
 -- Los usuarios pueden actualizar sus propias reservas
+-- (Útil para futuras funcionalidades como cancelar/reagendar desde el cliente)
 CREATE POLICY "Users can update own reservations"
   ON reservations FOR UPDATE
   USING (
@@ -164,7 +168,7 @@ CREATE POLICY "Users can view own referrals"
 -- =====================================================
 -- 
 -- Las políticas RLS actuales son básicas y permiten:
--- - Cualquiera puede crear reservas (reservas como invitado)
+-- - Las reservas SOLO se crean a través de API routes del servidor (que usan Service Role Key)
 -- - Cualquiera puede ver disponibilidad y slots (necesario para calendario)
 -- - Los usuarios autenticados pueden ver/editar sus propias reservas
 --
