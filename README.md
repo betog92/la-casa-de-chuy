@@ -1,5 +1,26 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Configuración de Variables de Entorno
+
+Crea un archivo `.env.local` en la raíz del proyecto con las siguientes variables:
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=tu_url_supabase_aqui
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_anon_key_supabase_aqui
+# Service Role Key - Solo para uso en API routes del servidor (NUNCA exponer en frontend)
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_supabase_aqui
+
+# Conekta - Public Key (MODO PRUEBA - para frontend)
+# Obtén tu Public Key desde el dashboard de Conekta: https://admin.conekta.com
+# Asegúrate de estar en modo Test/Sandbox para obtener las keys de prueba
+NEXT_PUBLIC_CONEKTA_PUBLIC_KEY=key_EiMQXg4KfzTTz1eyHZjYgPQ
+
+# Conekta - Private Key (MODO PRUEBA - SOLO para backend, NUNCA exponer en frontend)
+# Esta key se usa únicamente en las API routes del servidor
+CONEKTA_PRIVATE_KEY=key_g74Q3GKo4PhIjnnXJpFcrnP
+```
+
 ## Getting Started
 
 First, run the development server:
