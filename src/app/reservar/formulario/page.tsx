@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,11 @@ import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { calculatePriceWithCustom } from "@/utils/pricing";
 import TermsModal from "@/components/TermsModal";
+import ConektaPaymentForm, {
+  type ConektaPaymentFormRef,
+} from "@/components/ConektaPaymentForm";
+import type { ReservationData } from "@/types/reservation";
+import axios from "axios";
 
 // Schema de validación
 const reservationFormSchema = z.object({
@@ -23,12 +28,6 @@ const reservationFormSchema = z.object({
 
 type ReservationFormData = z.infer<typeof reservationFormSchema>;
 
-interface ReservationData {
-  date: string;
-  time: string;
-  price: number;
-}
-
 export default function FormularioReservaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -38,6 +37,7 @@ export default function FormularioReservaPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
 
   const {
     register,
@@ -130,18 +130,77 @@ export default function FormularioReservaPage() {
     setError(null);
 
     try {
-      // Por ahora solo mostramos los datos
-      // En el siguiente paso integraremos Conekta aquí
-      console.log("Form data:", data);
-      console.log("Reservation data:", reservationData);
+      // Paso 1: Crear token de tarjeta con Conekta
+      if (!paymentFormRef.current) {
+        setError("Error: formulario de pago no disponible");
+        setLoading(false);
+        return;
+      }
 
-      // TODO: Integrar Conekta aquí
-      alert(
-        "Formulario enviado correctamente. En el siguiente paso integraremos Conekta."
-      );
-    } catch (err) {
-      console.error("Error:", err);
-      setError("Ocurrió un error al procesar la reserva");
+      const token = await paymentFormRef.current.createToken();
+      if (!token) {
+        // El error ya fue manejado por el componente de pago (se muestra en errors.general del componente)
+        // No necesitamos mostrar otro error aquí para evitar duplicación
+        setLoading(false);
+        return;
+      }
+
+      // Paso 2: Crear orden en Conekta (usando API route)
+      const orderResponse = await axios.post("/api/conekta/create-order", {
+        token,
+        amount: reservationData.price,
+        currency: "MXN",
+        customerInfo: {
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+        },
+        description: `Reserva - ${formatDisplayDate(
+          reservationData.date
+        )} ${formatDisplayTime(reservationData.time)}`,
+      });
+
+      if (!orderResponse.data.success) {
+        setError(orderResponse.data.error || "Error al procesar el pago");
+        setLoading(false);
+        return;
+      }
+
+      const orderId = orderResponse.data.orderId;
+
+      // Paso 3: Crear reserva en Supabase (usando API route)
+      const reservationResponse = await axios.post("/api/reservations/create", {
+        email: data.email,
+        name: data.name,
+        phone: data.phone,
+        date: reservationData.date,
+        startTime: reservationData.time,
+        price: reservationData.price,
+        originalPrice: reservationData.price,
+        paymentId: orderId,
+      });
+
+      if (!reservationResponse.data.success) {
+        setError(
+          reservationResponse.data.error ||
+            "Error al crear la reserva. Por favor contacta soporte."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const reservationId = reservationResponse.data.reservationId;
+
+      // Paso 4: Limpiar sessionStorage y redirigir a confirmación
+      sessionStorage.removeItem("reservationData");
+      router.push(`/reservar/confirmacion?id=${reservationId}`);
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "Ocurrió un error al procesar la reserva. Por favor intenta nuevamente.";
+      console.error("Error en proceso de reserva:", err);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -349,15 +408,16 @@ export default function FormularioReservaPage() {
             )}
           </div>
 
-          {/* Sección de Pago - Preparada para Conekta */}
+          {/* Sección de Pago - Conekta */}
           <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-semibold text-zinc-900">
               Método de Pago
             </h2>
-            <div className="py-8 text-center text-zinc-500">
-              {/* Aquí irá el checkout de Conekta */}
-              <p>Checkout de Conekta se integrará aquí</p>
-            </div>
+            <ConektaPaymentForm
+              ref={paymentFormRef}
+              onError={(error) => setError(error)}
+              disabled={loading}
+            />
           </div>
 
           {/* Error general */}
