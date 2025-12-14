@@ -99,11 +99,13 @@ const ConektaPaymentForm = forwardRef<
   const validateExpiry = (value: string): boolean => {
     const match = value.match(/^(\d{2})\/(\d{2})$/);
     if (!match) return false;
-    const month = parseInt(match[1], 10);
+    const month = parseInt(match[1], 10); // 1-12 (formato humano)
     const year = parseInt("20" + match[2], 10);
     const now = new Date();
-    // Usar el último día del mes de expiración para la comparación
-    const expiryDate = new Date(year, month, 0); // El día 0 del mes siguiente = último día del mes actual
+    // Usar month + 1 para obtener el último día del mes ingresado
+    // Si month = 12 (diciembre), month + 1 = 13, new Date(year, 13, 0) = último día de diciembre ✓
+    // Si month = 1 (enero), month + 1 = 2, new Date(year, 2, 0) = último día de enero ✓
+    const expiryDate = new Date(year, month + 1, 0);
     return month >= 1 && month <= 12 && expiryDate >= now;
   };
 
