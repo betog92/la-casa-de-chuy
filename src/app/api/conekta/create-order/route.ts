@@ -76,18 +76,21 @@ export async function POST(request: NextRequest) {
         ],
       };
 
-      console.log("Creando orden en Conekta con:", {
-        amount: Math.round(amount * 100),
-        currency,
-        customerInfo: {
-          name: customerInfo.name,
-          email: customerInfo.email,
-          phone: cleanPhone,
-        },
-        token: token.substring(0, 20) + "...",
-        description,
-        orderData: JSON.stringify(orderData, null, 2),
-      });
+      // Log solo en desarrollo (no en producción)
+      if (process.env.NODE_ENV === "development") {
+        console.log("Creando orden en Conekta con:", {
+          amount: Math.round(amount * 100),
+          currency,
+          customerInfo: {
+            name: customerInfo.name,
+            email: customerInfo.email,
+            phone: cleanPhone,
+          },
+          token: token.substring(0, 20) + "...",
+          description,
+          orderData: JSON.stringify(orderData, null, 2),
+        });
+      }
 
       const orderResponse = await axios.post(
         "https://api.conekta.io/orders",

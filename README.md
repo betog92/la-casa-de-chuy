@@ -14,11 +14,11 @@ SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_supabase_aqui
 # Conekta - Public Key (MODO PRUEBA - para frontend)
 # Obtén tu Public Key desde el dashboard de Conekta: https://admin.conekta.com
 # Asegúrate de estar en modo Test/Sandbox para obtener las keys de prueba
-NEXT_PUBLIC_CONEKTA_PUBLIC_KEY=key_EiMQXg4KfzTTz1eyHZjYgPQ
+NEXT_PUBLIC_CONEKTA_PUBLIC_KEY=tu_public_key_conekta_aqui
 
 # Conekta - Private Key (MODO PRUEBA - SOLO para backend, NUNCA exponer en frontend)
 # Esta key se usa únicamente en las API routes del servidor
-CONEKTA_PRIVATE_KEY=key_g74Q3GKo4PhIjnnXJpFcrnP
+CONEKTA_PRIVATE_KEY=tu_private_key_conekta_aqui
 ```
 
 ## Getting Started

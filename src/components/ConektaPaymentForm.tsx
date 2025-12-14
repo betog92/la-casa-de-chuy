@@ -102,11 +102,8 @@ const ConektaPaymentForm = forwardRef<
     const month = parseInt(match[1], 10); // 1-12 (formato humano)
     const year = parseInt("20" + match[2], 10);
     const now = new Date();
-    // Obtener el último día del mes ingresado
-    // month está en formato 1-12 (humano), JavaScript ajusta automáticamente
-    // new Date(year, month, 0) donde month > 11 se interpreta como el mes del año siguiente,
-    // entonces el día 0 de ese mes es el último día del mes anterior (el mes ingresado)
-    // Ejemplo: month = 12 → new Date(2025, 12, 0) = último día de diciembre 2025 ✓
+    // new Date(year, month, 0) obtiene el último día del mes anterior al mes especificado
+    // Si month = 12 (diciembre), new Date(2025, 12, 0) = último día de diciembre 2025
     const expiryDate = new Date(year, month, 0);
     return month >= 1 && month <= 12 && expiryDate >= now;
   };
