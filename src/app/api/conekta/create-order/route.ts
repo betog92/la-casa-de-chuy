@@ -30,6 +30,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validar propiedades de customerInfo
+    if (
+      !customerInfo.name ||
+      typeof customerInfo.name !== "string" ||
+      customerInfo.name.trim() === "" ||
+      !customerInfo.email ||
+      typeof customerInfo.email !== "string" ||
+      customerInfo.email.trim() === "" ||
+      !customerInfo.phone ||
+      typeof customerInfo.phone !== "string" ||
+      customerInfo.phone.trim() === ""
+    ) {
+      return validationErrorResponse(
+        "Faltan campos requeridos en customerInfo: name, email, phone"
+      );
+    }
+
     // Crear orden en Conekta
     try {
       // Limpiar formato del teléfono (quitar espacios, guiones, etc.)

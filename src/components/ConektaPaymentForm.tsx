@@ -72,7 +72,7 @@ const ConektaPaymentForm = forwardRef<
     }, 50);
 
     // Timeout después de 5 segundos si no se carga
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       clearInterval(checkConektaLoaded);
       if (!window.Conekta) {
         if (onError) {
@@ -85,6 +85,7 @@ const ConektaPaymentForm = forwardRef<
 
     return () => {
       clearInterval(checkConektaLoaded);
+      clearTimeout(timeoutId);
     };
   }, [onError]);
 
@@ -101,8 +102,9 @@ const ConektaPaymentForm = forwardRef<
     const month = parseInt(match[1], 10);
     const year = parseInt("20" + match[2], 10);
     const now = new Date();
-    const expiryDate = new Date(year, month - 1);
-    return month >= 1 && month <= 12 && expiryDate > now;
+    // Usar el último día del mes de expiración para la comparación
+    const expiryDate = new Date(year, month, 0); // El día 0 del mes siguiente = último día del mes actual
+    return month >= 1 && month <= 12 && expiryDate >= now;
   };
 
   // Validar CVV
