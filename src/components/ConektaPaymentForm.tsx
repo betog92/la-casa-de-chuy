@@ -297,14 +297,14 @@ const ConektaPaymentForm = forwardRef<
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       {/* Nombre en la tarjeta */}
-      <div>
+      <div className="space-y-1.5">
         <label
           htmlFor="cardName"
-          className="mb-2 block text-sm font-medium text-zinc-700"
+          className="block text-sm font-medium text-zinc-700"
         >
-          Nombre en la tarjeta *
+          Nombre en la tarjeta <span className="text-red-600">*</span>
         </label>
         <input
           id="cardName"
@@ -318,20 +318,22 @@ const ConektaPaymentForm = forwardRef<
           }}
           disabled={disabled || isLoading}
           placeholder="Juan Pérez"
-          className="w-full rounded-lg border border-zinc-300 px-4 py-2 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:bg-zinc-100 disabled:cursor-not-allowed"
+          className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
         />
         {errors.cardName && (
-          <p className="mt-1 text-sm text-red-600">{errors.cardName}</p>
+          <p className="mt-1.5 text-sm text-red-600 leading-tight">
+            {errors.cardName}
+          </p>
         )}
       </div>
 
       {/* Número de tarjeta */}
-      <div>
+      <div className="space-y-1.5">
         <label
           htmlFor="cardNumber"
-          className="mb-2 block text-sm font-medium text-zinc-700"
+          className="block text-sm font-medium text-zinc-700"
         >
-          Número de tarjeta *
+          Número de tarjeta <span className="text-red-600">*</span>
         </label>
         <input
           id="cardNumber"
@@ -341,21 +343,27 @@ const ConektaPaymentForm = forwardRef<
           disabled={disabled || isLoading}
           placeholder="4242 4242 4242 4242"
           maxLength={19}
-          className="w-full rounded-lg border border-zinc-300 px-4 py-2 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:bg-zinc-100 disabled:cursor-not-allowed"
+          className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
         />
         {errors.cardNumber && (
-          <p className="mt-1 text-sm text-red-600">{errors.cardNumber}</p>
+          <p className="mt-1.5 text-sm text-red-600 leading-tight">
+            {errors.cardNumber}
+          </p>
         )}
       </div>
 
       {/* Fecha de expiración y CVV */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="space-y-1.5 min-w-0">
           <label
             htmlFor="cardExpiry"
-            className="mb-2 block text-sm font-medium text-zinc-700"
+            className="block text-sm font-medium text-zinc-700"
           >
-            Fecha de expiración (MM/YY) *
+            <span className="hidden sm:inline">
+              Fecha de expiración (MM/YY)
+            </span>
+            <span className="sm:hidden">Expiración (MM/YY)</span>
+            <span className="text-red-600">*</span>
           </label>
           <input
             id="cardExpiry"
@@ -365,19 +373,21 @@ const ConektaPaymentForm = forwardRef<
             disabled={disabled || isLoading}
             placeholder="12/25"
             maxLength={5}
-            className="w-full rounded-lg border border-zinc-300 px-4 py-2 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:bg-zinc-100 disabled:cursor-not-allowed"
+            className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
           />
           {errors.cardExpiry && (
-            <p className="mt-1 text-sm text-red-600">{errors.cardExpiry}</p>
+            <p className="mt-1.5 text-xs sm:text-sm text-red-600 leading-tight">
+              {errors.cardExpiry}
+            </p>
           )}
         </div>
 
-        <div>
+        <div className="space-y-1.5 min-w-0">
           <label
             htmlFor="cardCvc"
-            className="mb-2 block text-sm font-medium text-zinc-700"
+            className="block text-sm font-medium text-zinc-700"
           >
-            CVV *
+            CVV <span className="text-red-600">*</span>
           </label>
           <input
             id="cardCvc"
@@ -387,10 +397,12 @@ const ConektaPaymentForm = forwardRef<
             disabled={disabled || isLoading}
             placeholder="123"
             maxLength={4}
-            className="w-full rounded-lg border border-zinc-300 px-4 py-2 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:bg-zinc-100 disabled:cursor-not-allowed"
+            className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
           />
           {errors.cardCvc && (
-            <p className="mt-1 text-sm text-red-600">{errors.cardCvc}</p>
+            <p className="mt-1.5 text-xs sm:text-sm text-red-600 leading-tight">
+              {errors.cardCvc}
+            </p>
           )}
         </div>
       </div>

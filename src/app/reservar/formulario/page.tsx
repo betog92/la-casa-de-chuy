@@ -9,6 +9,8 @@ import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { calculatePriceWithCustom } from "@/utils/pricing";
+import Link from "next/link";
+import Image from "next/image";
 import TermsModal from "@/components/TermsModal";
 import ConektaPaymentForm, {
   type ConektaPaymentFormRef,
@@ -59,6 +61,7 @@ export default function FormularioReservaPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
 
   const {
@@ -279,216 +282,398 @@ export default function FormularioReservaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white py-6 sm:py-12">
-      <div className="container mx-auto px-4 max-w-2xl">
-        {/* Header */}
-        <div className="mb-6 text-center">
-          <h1 className="mb-2 text-3xl font-bold text-zinc-900 sm:text-4xl">
-            Completa tu Reserva
-          </h1>
-          <p className="text-zinc-600">
-            Confirma tus datos para continuar con el pago
-          </p>
+    <div className="min-h-screen bg-[#F6F6F7] py-6 sm:py-8">
+      <div className="container mx-auto px-4 max-w-7xl">
+        {/* Layout de dos columnas */}
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+          {/* Columna izquierda: Formulario (60-65%) */}
+          <div className="flex-1 lg:max-w-[65%]">
+            {/* Resumen móvil (drawer colapsable) - Solo visible en mobile */}
+            <div className="lg:hidden mb-6">
+              <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                {/* Header del drawer */}
+                <button
+                  type="button"
+                  onClick={() => setIsSummaryOpen(!isSummaryOpen)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-zinc-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold text-[#103948]">
+                      Resumen del pedido
+                    </h2>
+                    <svg
+                      className={`w-4 h-4 text-[#103948] transition-transform ${
+                        isSummaryOpen ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="2"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                  <span className="text-base font-semibold text-zinc-900">
+                    ${reservationData.price.toLocaleString("es-MX")}
+                  </span>
+                </button>
+
+                {/* Contenido del drawer (colapsable) */}
+                {isSummaryOpen && (
+                  <div className="border-t border-zinc-200 p-4 space-y-4">
+                    {/* Thumbnail/Imagen */}
+                    <div className="rounded-lg overflow-hidden aspect-video relative bg-zinc-100">
+                      <Image
+                        src="/reservation-thumbnail.png"
+                        alt="Estudio de Locación Fotográfica - La Casa de Chuy el Rico"
+                        fill
+                        className="object-cover"
+                        sizes="100vw"
+                        priority
+                      />
+                    </div>
+
+                    {/* Detalles */}
+                    <div className="space-y-3 text-sm text-zinc-700">
+                      <div>
+                        <p className="font-medium text-zinc-900">Fecha:</p>
+                        <p className="capitalize">
+                          Día: {formatDisplayDate(reservationData.date)}
+                        </p>
+                        <p>
+                          Hora: {formatDisplayTime(reservationData.time)} -{" "}
+                          {(() => {
+                            const [hours, minutes] = reservationData.time
+                              .split(":")
+                              .map(Number);
+                            const endTime = new Date();
+                            endTime.setHours(hours + 1, minutes, 0, 0);
+                            return format(endTime, "h:mm a", { locale: es });
+                          })()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-zinc-900">Dirección:</p>
+                        <p className="text-zinc-600">
+                          Jose Maria Arteaga 1111, Centro, 64000 Monterrey, N.L,
+                          MX.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Total */}
+                    <div className="flex items-center justify-between border-t border-zinc-200 pt-4">
+                      <span className="text-base font-semibold text-zinc-900">
+                        Total
+                      </span>
+                      <span className="text-base font-semibold text-zinc-900">
+                        MXN ${reservationData.price.toLocaleString("es-MX")}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              {/* Sección: Contacto */}
+              <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-zinc-900">
+                    Contacto
+                  </h2>
+                  <button
+                    type="button"
+                    className="text-sm text-[#103948] hover:underline"
+                    onClick={() => {
+                      // Placeholder - implementar login después
+                    }}
+                  >
+                    Iniciar sesión
+                  </button>
+                </div>
+                <div className="mb-4">
+                  <label
+                    htmlFor="email"
+                    className="mb-2 block text-sm font-medium text-zinc-700"
+                  >
+                    Correo electrónico <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    {...register("email")}
+                    autoComplete="email"
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    placeholder="correo@ejemplo.com"
+                  />
+                  {errors.email && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.email.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección: Pago */}
+              <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                <h2 className="text-lg font-semibold text-zinc-900 mb-2">
+                  Pago
+                </h2>
+                <div className="flex items-center gap-2 text-sm text-zinc-600 mb-4">
+                  <svg
+                    className="w-4 h-4 text-zinc-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
+                  </svg>
+                  <span>
+                    Todas las transacciones son seguras y están encriptadas.
+                  </span>
+                </div>
+
+                {/* Método de pago: Tarjeta de crédito */}
+                <div className="mb-4 rounded border border-zinc-200 overflow-hidden bg-white">
+                  <div className="flex items-center justify-between px-4 sm:px-5 py-4 bg-green-50 border-2 border-green-200 -mx-[1px] -mt-[1px]">
+                    <span className="text-sm font-semibold text-zinc-900">
+                      Tarjeta de crédito o débito
+                    </span>
+                    <div className="flex items-center gap-2.5">
+                      {/* Visa */}
+                      <div className="flex items-center justify-center w-10 h-6 bg-[#1A1F71] rounded text-white text-xs font-bold">
+                        VISA
+                      </div>
+                      {/* Mastercard */}
+                      <div className="relative w-10 h-6">
+                        <svg
+                          viewBox="0 0 24 16"
+                          className="w-full h-full"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <rect width="24" height="16" rx="2" fill="#EB001B" />
+                          <circle cx="9" cy="8" r="5" fill="#F79E1B" />
+                          <circle cx="15" cy="8" r="5" fill="#FF5F00" />
+                        </svg>
+                      </div>
+                      {/* American Express */}
+                      <div className="flex items-center justify-center w-10 h-6 bg-[#006FCF] rounded text-white text-[10px] font-bold">
+                        AMEX
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 sm:p-5 bg-gray-50">
+                    <ConektaPaymentForm
+                      ref={paymentFormRef}
+                      onError={(error) => setError(error)}
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección: Información de facturación */}
+              <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                <h2 className="text-lg font-semibold text-zinc-900 mb-4">
+                  Información de facturación
+                </h2>
+
+                {/* Nombre */}
+                <div className="mb-4">
+                  <label
+                    htmlFor="name"
+                    className="mb-2 block text-sm font-medium text-zinc-700"
+                  >
+                    Nombre completo <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    {...register("name")}
+                    autoComplete="name"
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    placeholder="Juan Pérez"
+                  />
+                  {errors.name && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.name.message}
+                    </p>
+                  )}
+                </div>
+
+                {/* Teléfono */}
+                <div className="mb-4">
+                  <label
+                    htmlFor="phone"
+                    className="mb-2 block text-sm font-medium text-zinc-700"
+                  >
+                    Teléfono <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="phone"
+                    type="tel"
+                    {...register("phone")}
+                    autoComplete="tel"
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    placeholder="81 1234 5678"
+                  />
+                  {errors.phone && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.phone.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Términos y Condiciones */}
+              <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                <div className="flex items-start">
+                  <input
+                    id="acceptTerms"
+                    type="checkbox"
+                    {...register("acceptTerms")}
+                    className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948]"
+                  />
+                  <label
+                    htmlFor="acceptTerms"
+                    className="ml-3 text-sm text-zinc-700"
+                  >
+                    Acepto los{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowTermsModal(true)}
+                      className="text-[#103948] hover:underline"
+                    >
+                      términos y condiciones
+                    </button>{" "}
+                    y la{" "}
+                    <Link
+                      href="/privacidad"
+                      className="text-[#103948] hover:underline"
+                    >
+                      política de privacidad
+                    </Link>
+                  </label>
+                </div>
+                {errors.acceptTerms && (
+                  <p className="mt-2 text-sm text-red-600">
+                    {errors.acceptTerms.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Error general */}
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Botón de pago */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-[#103948] px-6 py-3 font-semibold text-white transition-colors hover:bg-[#0d2d3a] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? "Procesando..." : "Pagar ahora"}
+              </button>
+
+              {/* Links de política y términos */}
+              <div className="flex items-center justify-center gap-4 text-sm">
+                <Link
+                  href="/privacidad"
+                  className="text-[#103948] hover:underline"
+                >
+                  Política de privacidad
+                </Link>
+                <span className="text-zinc-400">•</span>
+                <Link
+                  href="/terminos"
+                  className="text-[#103948] hover:underline"
+                >
+                  Términos del servicio
+                </Link>
+              </div>
+            </form>
+          </div>
+
+          {/* Columna derecha: Resumen (35-40%) - Solo visible en desktop */}
+          <div className="hidden lg:block lg:w-[35%] lg:max-w-md">
+            <div className="bg-white rounded-lg border border-zinc-200 p-6 sticky top-6">
+              <h2 className="text-lg font-semibold text-zinc-900 mb-4">
+                Reservación
+              </h2>
+
+              {/* Thumbnail/Imagen */}
+              <div className="mb-4 rounded-lg overflow-hidden aspect-video relative bg-zinc-100">
+                <Image
+                  src="/reservation-thumbnail.png"
+                  alt="Estudio de Locación Fotográfica - La Casa de Chuy el Rico"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 35vw"
+                  priority
+                />
+              </div>
+
+              {/* Detalles */}
+              <div className="space-y-3 text-sm text-zinc-700 mb-4">
+                <div>
+                  <p className="font-medium text-zinc-900">Fecha:</p>
+                  <p className="capitalize">
+                    Día: {formatDisplayDate(reservationData.date)}
+                  </p>
+                  <p>
+                    Hora: {formatDisplayTime(reservationData.time)} -{" "}
+                    {(() => {
+                      const [hours, minutes] = reservationData.time
+                        .split(":")
+                        .map(Number);
+                      const endTime = new Date();
+                      endTime.setHours(hours + 1, minutes, 0, 0);
+                      return format(endTime, "h:mm a", { locale: es });
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-zinc-900">Dirección:</p>
+                  <p className="text-zinc-600">
+                    Jose Maria Arteaga 1111, Centro, 64000 Monterrey, N.L, MX.
+                  </p>
+                </div>
+              </div>
+
+              {/* Precio */}
+              <div className="mb-4">
+                <p className="text-sm font-medium text-zinc-900 mb-1">
+                  ${reservationData.price.toLocaleString("es-MX")}
+                </p>
+              </div>
+
+              {/* Total */}
+              <div className="flex items-center justify-between border-t border-zinc-200 pt-4">
+                <span className="text-base font-semibold text-zinc-900">
+                  Total
+                </span>
+                <span className="text-base font-semibold text-zinc-900">
+                  MXN ${reservationData.price.toLocaleString("es-MX")}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-
-        {/* Resumen de Reserva */}
-        <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-zinc-900">
-            Resumen de tu Reserva
-          </h2>
-          <div className="space-y-3 text-zinc-700">
-            <div className="flex justify-between">
-              <span className="font-medium">Fecha:</span>
-              <span className="capitalize">
-                {formatDisplayDate(reservationData.date)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Hora:</span>
-              <span>{formatDisplayTime(reservationData.time)}</span>
-            </div>
-            <div className="flex justify-between border-t border-zinc-200 pt-3">
-              <span className="font-semibold text-lg">Total:</span>
-              <span className="font-semibold text-lg">
-                ${reservationData.price.toLocaleString("es-MX")} MXN
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Formulario */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-zinc-900">
-              Tus Datos
-            </h2>
-
-            {/* Nombre */}
-            <div className="mb-4">
-              <label
-                htmlFor="name"
-                className="mb-2 block text-sm font-medium text-zinc-700"
-              >
-                Nombre completo *
-              </label>
-              <input
-                id="name"
-                type="text"
-                {...register("name")}
-                className="w-full rounded-lg border border-zinc-300 px-4 py-2 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
-                placeholder="Juan Pérez"
-              />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.name.message}
-                </p>
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="mb-4">
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-medium text-zinc-700"
-              >
-                Email *
-              </label>
-              <input
-                id="email"
-                type="email"
-                {...register("email")}
-                className="w-full rounded-lg border border-zinc-300 px-4 py-2 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
-                placeholder="juan@ejemplo.com"
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.email.message}
-                </p>
-              )}
-            </div>
-
-            {/* Teléfono */}
-            <div className="mb-4">
-              <label
-                htmlFor="phone"
-                className="mb-2 block text-sm font-medium text-zinc-700"
-              >
-                Teléfono *
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                {...register("phone")}
-                className="w-full rounded-lg border border-zinc-300 px-4 py-2 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
-                placeholder="81 1234 5678"
-              />
-              {errors.phone && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.phone.message}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Términos y Condiciones */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-zinc-900">
-              Términos y Condiciones
-            </h2>
-
-            <div className="mb-4 space-y-2 text-sm text-zinc-600">
-              <p>
-                Al confirmar tu reserva, aceptas las siguientes condiciones:
-              </p>
-              <ul className="ml-4 list-disc space-y-1">
-                <li>
-                  <strong>Re-agendamiento:</strong> Mínimo 5 días hábiles de
-                  anticipación
-                </li>
-                <li>
-                  <strong>Cancelación:</strong> Mínimo 5 días hábiles para
-                  reembolso del 80%
-                </li>
-                <li>
-                  <strong>No-show:</strong> Sin reembolso
-                </li>
-                <li>
-                  <strong>Sesión:</strong> 1 hora (si usas vestidor, llega 25
-                  min antes)
-                </li>
-                <li>
-                  <strong>Días festivos:</strong> Cargo adicional de $500 MXN en
-                  efectivo
-                </li>
-              </ul>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowTermsModal(true)}
-              className="mb-4 text-sm font-medium text-zinc-900 underline hover:text-zinc-700"
-            >
-              Ver términos y condiciones completos
-            </button>
-
-            <div className="flex items-start">
-              <input
-                id="acceptTerms"
-                type="checkbox"
-                {...register("acceptTerms")}
-                className="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-2 focus:ring-zinc-500"
-              />
-              <label
-                htmlFor="acceptTerms"
-                className="ml-3 text-sm text-zinc-700"
-              >
-                Acepto los términos y condiciones *
-              </label>
-            </div>
-            {errors.acceptTerms && (
-              <p className="mt-2 text-sm text-red-600">
-                {errors.acceptTerms.message}
-              </p>
-            )}
-          </div>
-
-          {/* Sección de Pago - Conekta */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-zinc-900">
-              Método de Pago
-            </h2>
-            <ConektaPaymentForm
-              ref={paymentFormRef}
-              onError={(error) => setError(error)}
-              disabled={loading}
-            />
-          </div>
-
-          {/* Error general */}
-          {error && (
-            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800">
-              {error}
-            </div>
-          )}
-
-          {/* Botones */}
-          <div className="flex gap-4">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
-            >
-              Volver
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 rounded-lg bg-zinc-900 px-6 py-3 font-semibold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Procesando..." : "Confirmar y Pagar"}
-            </button>
-          </div>
-        </form>
       </div>
 
       {/* Modal de Términos y Condiciones Completos */}
