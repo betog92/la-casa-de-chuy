@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Cormorant } from "next/font/google";
 import Script from "next/script";
+import Header from "@/components/Header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -11,6 +12,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const cormorant = Cormorant({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -26,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} antialiased`}
       >
         {/* Inicialización de Conekta */}
         {/* Define la función callback ANTES de cargar el script de Conekta */}
@@ -50,6 +58,7 @@ export default function RootLayout({
           src="https://cdn.conekta.io/js/latest/conekta.js"
           strategy="beforeInteractive"
         />
+        <Header />
         {children}
       </body>
     </html>
