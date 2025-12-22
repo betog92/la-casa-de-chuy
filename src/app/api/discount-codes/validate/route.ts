@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar que el usuario/email no haya usado este código antes
-    if (email) {
+    if (email && email.trim()) {
       const { data: existingUse, error: useError } = await supabase
         .from("discount_code_uses")
         .select("id")

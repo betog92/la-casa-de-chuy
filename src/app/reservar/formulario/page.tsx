@@ -109,9 +109,13 @@ export default function FormularioReservaPage() {
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm<ReservationFormData>({
     resolver: zodResolver(reservationFormSchema),
   });
+
+  // Obtener el email actual del formulario
+  const currentEmail = watch("email");
 
   // Extraer valores de searchParams de forma estable para evitar re-renders innecesarios
   const dateParam = searchParams.get("date");
@@ -312,7 +316,8 @@ export default function FormularioReservaPage() {
     try {
       const response = await axios.post("/api/discount-codes/validate", {
         code: code.trim(),
-        email: "", // TODO: Obtener email del usuario logueado
+        email:
+          currentEmail && currentEmail.trim() ? currentEmail.trim() : undefined,
       });
 
       // La respuesta es { success: true, valid: true, code: "...", ... }
@@ -1579,7 +1584,7 @@ export default function FormularioReservaPage() {
                     <input
                       type="checkbox"
                       checked={useLoyaltyDiscount}
-                      disabled={reservationCount < 2}
+                      disabled={reservationCount < 1}
                       onChange={(e) => setUseLoyaltyDiscount(e.target.checked)}
                       className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                     />
