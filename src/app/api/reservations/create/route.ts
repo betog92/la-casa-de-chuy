@@ -127,22 +127,11 @@ export async function POST(request: NextRequest) {
             reservation_id: reservationId,
           });
 
-          // Incrementar contador de usos
-          const { data: currentCode } = await supabase
-            .from("discount_codes")
-            .select("current_uses")
-            .eq("id", codeData.id)
-            .single();
-
-          if (currentCode) {
-            await supabase
-              .from("discount_codes")
-              .update({
-                current_uses: (currentCode.current_uses || 0) + 1,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", codeData.id);
-          }
+          // Incrementar contador de usos de forma atómica usando función SQL
+          // Esto evita condiciones de carrera en actualizaciones concurrentes
+          await supabase.rpc("increment_discount_code_uses", {
+            code_id: codeData.id,
+          });
         }
       } catch (codeErr) {
         // No fallar la reserva si hay error al registrar el código

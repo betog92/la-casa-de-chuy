@@ -43,6 +43,22 @@ CREATE INDEX IF NOT EXISTS idx_discount_codes_active ON discount_codes(active);
 CREATE INDEX IF NOT EXISTS idx_discount_code_uses_email ON discount_code_uses(email);
 CREATE INDEX IF NOT EXISTS idx_discount_code_uses_code_id ON discount_code_uses(discount_code_id);
 
+-- Función para incrementar el contador de usos de forma atómica
+-- Evita condiciones de carrera al usar UPDATE directo en lugar de read-modify-write
+CREATE OR REPLACE FUNCTION increment_discount_code_uses(code_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE discount_codes
+  SET 
+    current_uses = current_uses + 1,
+    updated_at = NOW()
+  WHERE id = code_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Configurar search_path para seguridad
+ALTER FUNCTION increment_discount_code_uses(UUID) SET search_path = public;
+
 -- Comentarios para documentación
 COMMENT ON TABLE discount_codes IS 'Códigos de descuento promocionales (Buen Fin, Navidad, etc.)';
 COMMENT ON TABLE discount_code_uses IS 'Rastrea qué usuarios han usado qué códigos de descuento';
@@ -52,6 +68,7 @@ COMMENT ON COLUMN discount_codes.max_uses IS 'Límite total de usos del código'
 COMMENT ON COLUMN discount_codes.current_uses IS 'Cantidad de veces que se ha usado el código';
 COMMENT ON COLUMN reservations.discount_code IS 'Código de descuento aplicado en esta reserva';
 COMMENT ON COLUMN reservations.discount_code_discount IS 'Monto del descuento aplicado por el código';
+COMMENT ON FUNCTION increment_discount_code_uses IS 'Incrementa el contador de usos de un código de descuento de forma atómica';
 
 
 

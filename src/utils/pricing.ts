@@ -341,7 +341,10 @@ export async function calculateFinalPrice(
   }
 
   // 3. Aplicar descuento por fidelización (si aplica)
-  if (reservationCount !== undefined && reservationCount >= 2) {
+  // reservationCount = 1 → esta es la 2da reserva → aplicar 3%
+  // reservationCount = 4 → esta es la 5ta reserva → aplicar 4%
+  // reservationCount = 9 → esta es la 10ma reserva → aplicar 5%
+  if (reservationCount !== undefined && reservationCount >= 1) {
     const loyalty = applyLoyaltyDiscount(reservationCount, finalPrice);
     discounts.loyalty = {
       amount: loyalty.discount,
