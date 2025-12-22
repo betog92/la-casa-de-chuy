@@ -29,7 +29,15 @@ export interface ReservationRequestBody {
   paymentId?: string;
   userId?: string | null;
   discountAmount?: number;
-  discountType?: string | null;
+  // Campos específicos de descuentos
+  lastMinuteDiscount?: number;
+  loyaltyDiscount?: number;
+  loyaltyPointsUsed?: number;
+  creditsUsed?: number;
+  referralDiscount?: number;
+  // Código de descuento
+  discountCode?: string | null;
+  discountCodeDiscount?: number;
 }
 
 /**

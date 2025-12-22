@@ -66,7 +66,12 @@ CREATE TABLE IF NOT EXISTS reservations (
   price DECIMAL(10, 2) NOT NULL,
   original_price DECIMAL(10, 2) NOT NULL,
   discount_amount DECIMAL(10, 2) DEFAULT 0,
-  discount_type TEXT,
+  -- Campos específicos de descuentos (agregados en migration 06)
+  last_minute_discount DECIMAL(10, 2) DEFAULT 0,
+  loyalty_discount DECIMAL(10, 2) DEFAULT 0,
+  loyalty_points_used INTEGER DEFAULT 0,
+  credits_used DECIMAL(10, 2) DEFAULT 0,
+  referral_discount DECIMAL(10, 2) DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed')),
   payment_id TEXT,
   refund_amount DECIMAL(10, 2),  -- Monto del reembolso (80% del price)

@@ -210,7 +210,7 @@ export function applyLastMinuteDiscount(
 
 /**
  * Calcula descuento por repetición
- * 2da reserva: 5%, 3ra: 10%, 4ta+: 15%
+ * 2da reserva: 3%, 5ta reserva: 4%, 10ma reserva: 5%
  *
  * @param reservationCount - Número de reservas previas
  * @param basePrice - Precio base
@@ -222,12 +222,16 @@ export function applyLoyaltyDiscount(
 ): { price: number; discount: number; percentage: number } {
   let percentage = 0;
 
-  if (reservationCount >= 4) {
-    percentage = 15;
-  } else if (reservationCount === 3) {
-    percentage = 10;
-  } else if (reservationCount === 2) {
+  // reservationCount = número de reservas previas completadas
+  // reservationCount = 1 → esta es la 2da reserva → 3%
+  // reservationCount = 4 → esta es la 5ta reserva → 4%
+  // reservationCount = 9 → esta es la 10ma reserva → 5%
+  if (reservationCount >= 9) {
     percentage = 5;
+  } else if (reservationCount >= 4) {
+    percentage = 4;
+  } else if (reservationCount >= 1) {
+    percentage = 3;
   }
 
   const discount = basePrice * (percentage / 100);
@@ -288,6 +292,7 @@ export interface PriceCalculationResult {
     loyalty?: { amount: number; percentage: number };
     referral?: { amount: number; applied: boolean };
     loyaltyPoints?: { amount: number; points: number };
+    discountCode?: { amount: number; percentage: number; code: string };
   };
   finalPrice: number;
   totalDiscount: number;

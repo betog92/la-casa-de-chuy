@@ -35,7 +35,13 @@ export async function POST(request: NextRequest) {
       paymentId,
       userId,
       discountAmount,
-      discountType,
+      lastMinuteDiscount,
+      loyaltyDiscount,
+      loyaltyPointsUsed,
+      creditsUsed,
+      referralDiscount,
+      discountCode,
+      discountCodeDiscount,
     } = body;
 
     // Validar disponibilidad
@@ -65,7 +71,15 @@ export async function POST(request: NextRequest) {
       status: "confirmed" as const,
       user_id: userId || null,
       discount_amount: discountAmount || 0,
-      discount_type: discountType || null,
+      // Campos específicos de descuentos
+      last_minute_discount: lastMinuteDiscount || 0,
+      loyalty_discount: loyaltyDiscount || 0,
+      loyalty_points_used: loyaltyPointsUsed || 0,
+      credits_used: creditsUsed || 0,
+      referral_discount: referralDiscount || 0,
+      // Código de descuento
+      discount_code: discountCode || null,
+      discount_code_discount: discountCodeDiscount || 0,
     };
 
     const { data, error } = await supabase
@@ -92,6 +106,48 @@ export async function POST(request: NextRequest) {
         "No se pudo obtener el ID de la reserva creada",
         500
       );
+    }
+
+    // Si se usó un código de descuento, registrar el uso y actualizar contadores
+    if (discountCode) {
+      try {
+        // Buscar el código de descuento
+        const { data: codeData, error: codeError } = await supabase
+          .from("discount_codes")
+          .select("id")
+          .eq("code", discountCode.toUpperCase())
+          .single();
+
+        if (!codeError && codeData) {
+          // Crear registro de uso
+          await supabase.from("discount_code_uses").insert({
+            discount_code_id: codeData.id,
+            user_id: userId || null,
+            email: email.toLowerCase(),
+            reservation_id: reservationId,
+          });
+
+          // Incrementar contador de usos
+          const { data: currentCode } = await supabase
+            .from("discount_codes")
+            .select("current_uses")
+            .eq("id", codeData.id)
+            .single();
+
+          if (currentCode) {
+            await supabase
+              .from("discount_codes")
+              .update({
+                current_uses: (currentCode.current_uses || 0) + 1,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", codeData.id);
+          }
+        }
+      } catch (codeErr) {
+        // No fallar la reserva si hay error al registrar el código
+        console.error("Error al registrar uso de código:", codeErr);
+      }
     }
 
     return successResponse({ reservationId });

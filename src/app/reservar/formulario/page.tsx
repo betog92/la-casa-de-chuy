@@ -8,9 +8,13 @@ import { z } from "zod";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
-import { calculatePriceWithCustom } from "@/utils/pricing";
+import {
+  calculatePriceWithCustom,
+  calculateFinalPrice,
+  applyLastMinuteDiscount,
+  applyLoyaltyDiscount,
+} from "@/utils/pricing";
 import Link from "next/link";
-import Image from "next/image";
 import TermsModal from "@/components/TermsModal";
 import ConektaPaymentForm, {
   type ConektaPaymentFormRef,
@@ -63,6 +67,43 @@ export default function FormularioReservaPage() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
+
+  // Estados para descuentos y beneficios
+  const [discountCode, setDiscountCode] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [appliedDiscountCode, setAppliedDiscountCode] = useState<{
+    code: string;
+    percentage: number;
+  } | null>(null);
+  const [appliedReferralCode, setAppliedReferralCode] = useState<{
+    code: string;
+    percentage: number;
+  } | null>(null);
+  const [showCodeChoice, setShowCodeChoice] = useState(false);
+  const [selectedCodeType, setSelectedCodeType] = useState<
+    "discount" | "referral" | null
+  >(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [validatingCode, setValidatingCode] = useState(false);
+  const [priceCalculation, setPriceCalculation] = useState<{
+    basePrice: number;
+    originalPrice: number;
+    finalPrice: number;
+    discounts: {
+      lastMinute?: { amount: number; applied: boolean };
+      loyalty?: { amount: number; percentage: number };
+      referral?: { amount: number; applied: boolean };
+      loyaltyPoints?: { amount: number; points: number };
+      discountCode?: { amount: number; percentage: number; code: string };
+    };
+    totalDiscount: number;
+  } | null>(null);
+  const [availablePoints, setAvailablePoints] = useState(0);
+  const [availableCredits, setAvailableCredits] = useState(0);
+  const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(0);
+  const [useCredits, setUseCredits] = useState(0);
+  const [useLoyaltyDiscount, setUseLoyaltyDiscount] = useState(false);
+  const [reservationCount, setReservationCount] = useState(0); // TODO: Obtener del usuario si está logueado (temporalmente 0 para visualización)
 
   const {
     register,
@@ -134,10 +175,231 @@ export default function FormularioReservaPage() {
     loadReservationData();
   }, [dateParam, timeParam, router]);
 
+  // Recalcular precio cuando cambien puntos o créditos
+  useEffect(() => {
+    const recalculatePrice = async () => {
+      if (!reservationData) return;
+
+      try {
+        const date = parse(reservationData.date, "yyyy-MM-dd", new Date());
+        const supabase = createClient();
+        const calculation = await calculateFinalPrice(supabase, {
+          date,
+          customPrice: reservationData.price,
+          isLastMinute: true,
+          reservationCount: useLoyaltyDiscount ? reservationCount : undefined,
+          isFirstReservation: undefined, // TODO: Verificar si es primera reserva
+          useLoyaltyPoints: useLoyaltyPoints,
+        });
+
+        // Aplicar código de descuento o referido (solo uno)
+        let priceAfterCode = calculation.finalPrice;
+        const discountsWithCode = { ...calculation.discounts };
+
+        if (appliedDiscountCode) {
+          // Aplicar código de descuento al precio base
+          const codeDiscount =
+            calculation.basePrice * (appliedDiscountCode.percentage / 100);
+          let newBasePrice = calculation.basePrice - codeDiscount;
+
+          // Recalcular otros descuentos sobre el nuevo precio base
+          // Descuento último minuto
+          if (calculation.discounts.lastMinute?.applied) {
+            const lastMinute = applyLastMinuteDiscount(date, newBasePrice);
+            if (lastMinute.applied) {
+              newBasePrice = lastMinute.price;
+              // Actualizar el monto en discountsWithCode
+              discountsWithCode.lastMinute = {
+                amount: lastMinute.discount,
+                applied: true,
+              };
+            }
+          }
+
+          // Descuento fidelización
+          if (useLoyaltyDiscount && reservationCount >= 1) {
+            const loyalty = applyLoyaltyDiscount(
+              reservationCount,
+              newBasePrice
+            );
+            if (loyalty.percentage > 0) {
+              newBasePrice = loyalty.price;
+              // Actualizar el monto en discountsWithCode
+              discountsWithCode.loyalty = {
+                amount: loyalty.discount,
+                percentage: loyalty.percentage,
+              };
+            }
+          }
+          // Preservar loyalty discount del cálculo original si no se está aplicando
+          else if (calculation.discounts.loyalty) {
+            discountsWithCode.loyalty = calculation.discounts.loyalty;
+          }
+
+          // Puntos de lealtad
+          if (useLoyaltyPoints > 0) {
+            const pointsDiscount = Math.floor(useLoyaltyPoints / 100) * 100;
+            newBasePrice = Math.max(0, newBasePrice - pointsDiscount);
+            // Agregar a discountsWithCode para que se muestre en la UI
+            discountsWithCode.loyaltyPoints = {
+              amount: pointsDiscount,
+              points: useLoyaltyPoints,
+            };
+          }
+          // Preservar loyaltyPoints del cálculo original si no se están usando nuevos
+          else if (calculation.discounts.loyaltyPoints) {
+            discountsWithCode.loyaltyPoints =
+              calculation.discounts.loyaltyPoints;
+          }
+
+          priceAfterCode = newBasePrice;
+
+          discountsWithCode.discountCode = {
+            amount: codeDiscount,
+            percentage: appliedDiscountCode.percentage,
+            code: appliedDiscountCode.code,
+          };
+          // Remover referral si estaba aplicado (no se pueden combinar)
+          delete discountsWithCode.referral;
+        } else if (appliedReferralCode) {
+          // Aplicar código de referido al precio final calculado
+          const referralDiscount =
+            calculation.finalPrice * (appliedReferralCode.percentage / 100);
+          priceAfterCode = calculation.finalPrice - referralDiscount;
+
+          discountsWithCode.referral = {
+            amount: referralDiscount,
+            applied: true,
+          };
+        }
+
+        // Aplicar créditos al precio final
+        const finalPriceWithCredits = Math.max(0, priceAfterCode - useCredits);
+
+        setPriceCalculation({
+          basePrice: calculation.basePrice,
+          originalPrice: calculation.originalPrice,
+          discounts: discountsWithCode,
+          finalPrice: finalPriceWithCredits,
+          totalDiscount: calculation.originalPrice - finalPriceWithCredits,
+        });
+      } catch (err) {
+        console.error("Error recalculating price:", err);
+      }
+    };
+
+    recalculatePrice();
+  }, [
+    reservationData,
+    useLoyaltyPoints,
+    useCredits,
+    useLoyaltyDiscount,
+    reservationCount,
+    appliedDiscountCode,
+    appliedReferralCode,
+  ]);
+
+  // Función para validar código de descuento
+  const validateDiscountCode = async (code: string) => {
+    if (!code.trim()) {
+      setCodeError("Ingresa un código");
+      return;
+    }
+
+    setValidatingCode(true);
+    setCodeError(null);
+
+    try {
+      const response = await axios.post("/api/discount-codes/validate", {
+        code: code.trim(),
+        email: "", // TODO: Obtener email del usuario logueado
+      });
+
+      // La respuesta es { success: true, valid: true, code: "...", ... }
+      if (response.data.success && response.data.valid) {
+        const codeData = response.data;
+
+        // Si ya hay un código de referido válido, mostrar selección
+        if (appliedReferralCode) {
+          setAppliedDiscountCode({
+            code: codeData.code,
+            percentage: codeData.discountPercentage,
+          });
+          setShowCodeChoice(true);
+          setSelectedCodeType("discount");
+        } else {
+          // Aplicar directamente
+          setAppliedDiscountCode({
+            code: codeData.code,
+            percentage: codeData.discountPercentage,
+          });
+          setAppliedReferralCode(null);
+          setShowCodeChoice(false);
+        }
+      } else {
+        setCodeError(response.data.error || "Código no válido");
+      }
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      setCodeError(errorMessage);
+    } finally {
+      setValidatingCode(false);
+    }
+  };
+
+  // Función para validar código de referido (placeholder - implementar después)
+  const validateReferralCode = async (code: string) => {
+    // TODO: Implementar validación de código de referido
+    // Por ahora, simular validación
+    if (!code.trim()) {
+      setCodeError("Ingresa un código");
+      return;
+    }
+
+    setValidatingCode(true);
+    setCodeError(null);
+
+    // Simulación temporal - reemplazar con API real
+    setTimeout(() => {
+      const referralData = {
+        code: code.trim().toUpperCase(),
+        percentage: 10,
+      };
+
+      // Si ya hay un código de descuento válido, mostrar selección
+      if (appliedDiscountCode) {
+        setAppliedReferralCode(referralData);
+        setShowCodeChoice(true);
+        setSelectedCodeType("referral");
+      } else {
+        // Aplicar directamente
+        setAppliedReferralCode(referralData);
+        setAppliedDiscountCode(null);
+        setShowCodeChoice(false);
+      }
+      setValidatingCode(false);
+    }, 500);
+  };
+
+  // Función para aplicar el código seleccionado
+  const handleApplySelectedCode = () => {
+    if (selectedCodeType === "discount") {
+      setAppliedReferralCode(null);
+      setShowCodeChoice(false);
+    } else if (selectedCodeType === "referral") {
+      setAppliedDiscountCode(null);
+      setShowCodeChoice(false);
+    }
+  };
+
   // Formatear fecha para mostrar
   const formatDisplayDate = (dateString: string): string => {
     const date = parse(dateString, "yyyy-MM-dd", new Date());
-    return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+    const formatted = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
+      locale: es,
+    });
+    // Capitalizar solo la primera letra
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   };
 
   // Formatear hora para mostrar
@@ -178,7 +440,7 @@ export default function FormularioReservaPage() {
       try {
         const orderResponse = await axios.post("/api/conekta/create-order", {
           token,
-          amount: reservationData.price,
+          amount: priceCalculation?.finalPrice || reservationData.price,
           currency: "MXN",
           customerInfo: {
             name: data.name,
@@ -216,9 +478,23 @@ export default function FormularioReservaPage() {
             phone: data.phone,
             date: reservationData.date,
             startTime: reservationData.time,
-            price: reservationData.price,
-            originalPrice: reservationData.price,
+            price: priceCalculation?.finalPrice || reservationData.price,
+            originalPrice:
+              priceCalculation?.originalPrice || reservationData.price,
             paymentId: orderId,
+            discountAmount: priceCalculation?.totalDiscount || 0,
+            // Campos específicos de descuentos
+            lastMinuteDiscount:
+              priceCalculation?.discounts.lastMinute?.amount || 0,
+            loyaltyDiscount: priceCalculation?.discounts.loyalty?.amount || 0,
+            loyaltyPointsUsed:
+              priceCalculation?.discounts.loyaltyPoints?.points || 0,
+            creditsUsed: useCredits || 0,
+            referralDiscount: priceCalculation?.discounts.referral?.amount || 0,
+            // Código de descuento aplicado
+            discountCode: appliedDiscountCode?.code || null,
+            discountCodeDiscount:
+              priceCalculation?.discounts.discountCode?.amount || 0,
           }
         );
 
@@ -318,34 +594,25 @@ export default function FormularioReservaPage() {
                     </svg>
                   </div>
                   <span className="text-base font-semibold text-zinc-900">
-                    ${reservationData.price.toLocaleString("es-MX")}
+                    $
+                    {(
+                      priceCalculation?.finalPrice || reservationData.price
+                    ).toLocaleString("es-MX")}
                   </span>
                 </button>
 
                 {/* Contenido del drawer (colapsable) */}
                 {isSummaryOpen && (
                   <div className="border-t border-zinc-200 p-4 space-y-4">
-                    {/* Thumbnail/Imagen */}
-                    <div className="rounded-lg overflow-hidden aspect-video relative bg-zinc-100">
-                      <Image
-                        src="/reservation-thumbnail.png"
-                        alt="Estudio de Locación Fotográfica - La Casa de Chuy el Rico"
-                        fill
-                        className="object-cover"
-                        sizes="100vw"
-                        priority
-                      />
-                    </div>
-
                     {/* Detalles */}
                     <div className="space-y-3 text-sm text-zinc-700">
                       <div>
-                        <p className="font-medium text-zinc-900">Fecha:</p>
-                        <p className="capitalize">
-                          Día: {formatDisplayDate(reservationData.date)}
+                        <p className="font-medium text-zinc-900 mb-1">Fecha:</p>
+                        <p className="text-zinc-600">
+                          {formatDisplayDate(reservationData.date)}
                         </p>
-                        <p>
-                          Hora: {formatDisplayTime(reservationData.time)} -{" "}
+                        <p className="text-zinc-600">
+                          {formatDisplayTime(reservationData.time)} -{" "}
                           {(() => {
                             const [hours, minutes] = reservationData.time
                               .split(":")
@@ -356,12 +623,460 @@ export default function FormularioReservaPage() {
                           })()}
                         </p>
                       </div>
-                      <div>
-                        <p className="font-medium text-zinc-900">Dirección:</p>
-                        <p className="text-zinc-600">
-                          Jose Maria Arteaga 1111, Centro, 64000 Monterrey, N.L,
-                          MX.
+                    </div>
+
+                    {/* Código de Descuento/Referido */}
+                    <div className="mb-4 pb-4 border-b border-zinc-200">
+                      <label className="block text-sm font-medium text-zinc-700 mb-2">
+                        ¿Tienes un código de descuento?
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={discountCode}
+                          onChange={(e) => setDiscountCode(e.target.value)}
+                          placeholder="Ingresa código"
+                          disabled={validatingCode || !!appliedDiscountCode}
+                          className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => validateDiscountCode(discountCode)}
+                          disabled={
+                            validatingCode ||
+                            !discountCode.trim() ||
+                            !!appliedDiscountCode
+                          }
+                          className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {validatingCode
+                            ? "Validando..."
+                            : appliedDiscountCode
+                            ? "Aplicado"
+                            : "Aplicar"}
+                        </button>
+                      </div>
+                      {codeError && (
+                        <p className="mt-2 text-sm text-red-600">{codeError}</p>
+                      )}
+                      {appliedDiscountCode && (
+                        <div className="mt-2 py-1 flex items-center justify-between gap-2 text-sm text-green-600">
+                          <div className="flex items-center gap-2">
+                            <svg
+                              className="w-4 h-4 flex-shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth="2.5"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            <span>
+                              Código {appliedDiscountCode.code} aplicado (
+                              {appliedDiscountCode.percentage}% de descuento)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAppliedDiscountCode(null);
+                              setDiscountCode("");
+                              setCodeError(null);
+                            }}
+                            className="flex-shrink-0 px-1 py-0.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                            aria-label="Remover código"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selección de código cuando ambos son válidos */}
+                    {showCodeChoice &&
+                      appliedDiscountCode &&
+                      appliedReferralCode && (
+                        <div className="mb-4 pb-4 border-b border-zinc-200">
+                          <p className="text-sm font-medium text-zinc-900 mb-3">
+                            Tienes dos códigos válidos. Elige cuál aplicar:
+                          </p>
+                          <div className="space-y-2">
+                            {/* Opción 1: Código de descuento */}
+                            <label
+                              className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
+                                selectedCodeType === "discount"
+                                  ? "border-[#103948] bg-green-50"
+                                  : "border-zinc-200"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="codeChoice"
+                                value="discount"
+                                checked={selectedCodeType === "discount"}
+                                onChange={() => setSelectedCodeType("discount")}
+                                className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-zinc-900">
+                                    {appliedDiscountCode.code}
+                                  </span>
+                                  {selectedCodeType === "discount" && (
+                                    <svg
+                                      className="w-4 h-4 text-green-600"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth="2.5"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                                <p className="text-xs text-zinc-500 mt-0.5">
+                                  {appliedDiscountCode.percentage}% de descuento
+                                </p>
+                              </div>
+                            </label>
+
+                            {/* Opción 2: Código de referido */}
+                            <label
+                              className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
+                                selectedCodeType === "referral"
+                                  ? "border-[#103948] bg-green-50"
+                                  : "border-zinc-200"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="codeChoice"
+                                value="referral"
+                                checked={selectedCodeType === "referral"}
+                                onChange={() => setSelectedCodeType("referral")}
+                                className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-zinc-900">
+                                    {appliedReferralCode.code}
+                                  </span>
+                                  {selectedCodeType === "referral" && (
+                                    <svg
+                                      className="w-4 h-4 text-green-600"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      strokeWidth="2.5"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                                <p className="text-xs text-zinc-500 mt-0.5">
+                                  {appliedReferralCode.percentage}% de descuento
+                                  (referido)
+                                </p>
+                              </div>
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleApplySelectedCode}
+                            disabled={!selectedCodeType}
+                            className="mt-3 w-full rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d3a] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            Aplicar código seleccionado
+                          </button>
+                        </div>
+                      )}
+
+                    {/* Beneficios Disponibles - Estilo Rappi */}
+                    <div className="mb-6 space-y-3">
+                      {/* Descuento por Fidelización - Siempre visible */}
+                      <div className="flex items-center justify-between py-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-zinc-900">
+                              Descuento por fidelización
+                            </span>
+                            {useLoyaltyDiscount && (
+                              <svg
+                                className="w-4 h-4 text-green-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth="2.5"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                          {reservationCount >= 1 ? (
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              {reservationCount === 1 &&
+                                "3% de descuento (2da reserva)"}
+                              {reservationCount >= 2 &&
+                                reservationCount < 4 &&
+                                "3% de descuento aplicado"}
+                              {reservationCount >= 4 &&
+                                reservationCount < 9 &&
+                                "4% de descuento (5ta reserva)"}
+                              {reservationCount >= 9 &&
+                                "5% de descuento (10ma reserva)"}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              Disponible desde tu 2da reserva
+                            </p>
+                          )}
+                        </div>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={useLoyaltyDiscount}
+                            disabled={reservationCount < 1}
+                            onChange={(e) =>
+                              setUseLoyaltyDiscount(e.target.checked)
+                            }
+                            className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                          />
+                        </label>
+                      </div>
+
+                      {/* Puntos de Lealtad */}
+                      <div className="flex items-center justify-between py-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-zinc-900">
+                              Puntos de lealtad
+                            </span>
+                            {useLoyaltyPoints > 0 && (
+                              <svg
+                                className="w-4 h-4 text-green-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth="2.5"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-xs text-zinc-500">
+                              {availablePoints} puntos disponibles
+                            </span>
+                            {availablePoints >= 100 && useLoyaltyPoints > 0 && (
+                              <span className="text-xs font-medium text-green-600">
+                                • Usando {useLoyaltyPoints} puntos
+                              </span>
+                            )}
+                          </div>
+                          {availablePoints < 100 && (
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              Gana 1 punto por cada $10 gastados
+                            </p>
+                          )}
+                        </div>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={useLoyaltyPoints > 0}
+                            disabled={availablePoints < 100}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const pointsToUse =
+                                  Math.floor(availablePoints / 100) * 100;
+                                setUseLoyaltyPoints(pointsToUse);
+                              } else {
+                                setUseLoyaltyPoints(0);
+                              }
+                            }}
+                            className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                          />
+                        </label>
+                      </div>
+
+                      {/* Créditos */}
+                      <div className="flex items-center justify-between py-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-zinc-900">
+                              Créditos disponibles
+                            </span>
+                            {useCredits > 0 && (
+                              <svg
+                                className="w-4 h-4 text-green-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth="2.5"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-xs text-zinc-500">
+                              ${availableCredits.toLocaleString("es-MX")}{" "}
+                              disponibles
+                            </span>
+                            {useCredits > 0 && (
+                              <span className="text-xs font-medium text-green-600">
+                                • Usando ${useCredits.toLocaleString("es-MX")}
+                              </span>
+                            )}
+                          </div>
+                          {availableCredits === 0 && (
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              Gana $200 por cada amigo que refieras
+                            </p>
+                          )}
+                        </div>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={useCredits > 0}
+                            disabled={availableCredits === 0}
+                            onChange={(e) => {
+                              setUseCredits(
+                                e.target.checked ? availableCredits : 0
+                              );
+                            }}
+                            className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Descuentos Aplicados */}
+                    {priceCalculation && priceCalculation.totalDiscount > 0 && (
+                      <div className="mb-4 pb-4 border-b border-zinc-200">
+                        <p className="text-sm font-medium text-zinc-900 mb-2">
+                          Descuentos aplicados
                         </p>
+                        <div className="space-y-1 text-sm">
+                          {priceCalculation.discounts.discountCode && (
+                            <div className="flex justify-between text-green-600">
+                              <span>
+                                Código{" "}
+                                {priceCalculation.discounts.discountCode.code} (
+                                {
+                                  priceCalculation.discounts.discountCode
+                                    .percentage
+                                }
+                                %)
+                              </span>
+                              <span>
+                                -$
+                                {priceCalculation.discounts.discountCode.amount.toLocaleString(
+                                  "es-MX"
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {priceCalculation.discounts.lastMinute?.applied && (
+                            <div className="flex justify-between text-green-600">
+                              <span>Descuento último minuto (15%)</span>
+                              <span>
+                                -$
+                                {priceCalculation.discounts.lastMinute.amount.toLocaleString(
+                                  "es-MX"
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {priceCalculation.discounts.loyalty && (
+                            <div className="flex justify-between text-green-600">
+                              <span>
+                                Descuento por fidelización (
+                                {priceCalculation.discounts.loyalty.percentage}
+                                %)
+                              </span>
+                              <span>
+                                -$
+                                {priceCalculation.discounts.loyalty.amount.toLocaleString(
+                                  "es-MX"
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {priceCalculation.discounts.referral?.applied && (
+                            <div className="flex justify-between text-green-600">
+                              <span>Descuento por referido (10%)</span>
+                              <span>
+                                -$
+                                {priceCalculation.discounts.referral.amount.toLocaleString(
+                                  "es-MX"
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {priceCalculation.discounts.loyaltyPoints && (
+                            <div className="flex justify-between text-green-600">
+                              <span>
+                                Puntos aplicados (
+                                {
+                                  priceCalculation.discounts.loyaltyPoints
+                                    .points
+                                }{" "}
+                                pts)
+                              </span>
+                              <span>
+                                -$
+                                {priceCalculation.discounts.loyaltyPoints.amount.toLocaleString(
+                                  "es-MX"
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {useCredits > 0 && (
+                            <div className="flex justify-between text-green-600">
+                              <span>Créditos aplicados</span>
+                              <span>
+                                -${useCredits.toLocaleString("es-MX")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Precio Base */}
+                    <div className="mb-2">
+                      <div className="flex justify-between text-sm text-zinc-600">
+                        <span>Precio base</span>
+                        <span>
+                          $
+                          {(
+                            priceCalculation?.basePrice || reservationData.price
+                          ).toLocaleString("es-MX")}
+                        </span>
                       </div>
                     </div>
 
@@ -371,7 +1086,10 @@ export default function FormularioReservaPage() {
                         Total
                       </span>
                       <span className="text-base font-semibold text-zinc-900">
-                        MXN ${reservationData.price.toLocaleString("es-MX")}
+                        MXN $
+                        {(
+                          priceCalculation?.finalPrice || reservationData.price
+                        ).toLocaleString("es-MX")}
                       </span>
                     </div>
                   </div>
@@ -474,7 +1192,7 @@ export default function FormularioReservaPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="p-4 sm:p-5 bg-gray-50">
+                  <div className="p-4 sm:p-5">
                     <ConektaPaymentForm
                       ref={paymentFormRef}
                       onError={(error) => setError(error)}
@@ -616,27 +1334,15 @@ export default function FormularioReservaPage() {
                 Reservación
               </h2>
 
-              {/* Thumbnail/Imagen */}
-              <div className="mb-4 rounded-lg overflow-hidden aspect-video relative bg-zinc-100">
-                <Image
-                  src="/reservation-thumbnail.png"
-                  alt="Estudio de Locación Fotográfica - La Casa de Chuy el Rico"
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, 35vw"
-                  priority
-                />
-              </div>
-
               {/* Detalles */}
               <div className="space-y-3 text-sm text-zinc-700 mb-4">
                 <div>
-                  <p className="font-medium text-zinc-900">Fecha:</p>
-                  <p className="capitalize">
-                    Día: {formatDisplayDate(reservationData.date)}
+                  <p className="font-medium text-zinc-900 mb-1">Fecha:</p>
+                  <p className="text-zinc-600">
+                    {formatDisplayDate(reservationData.date)}
                   </p>
-                  <p>
-                    Hora: {formatDisplayTime(reservationData.time)} -{" "}
+                  <p className="text-zinc-600">
+                    {formatDisplayTime(reservationData.time)} -{" "}
                     {(() => {
                       const [hours, minutes] = reservationData.time
                         .split(":")
@@ -647,19 +1353,443 @@ export default function FormularioReservaPage() {
                     })()}
                   </p>
                 </div>
-                <div>
-                  <p className="font-medium text-zinc-900">Dirección:</p>
-                  <p className="text-zinc-600">
-                    Jose Maria Arteaga 1111, Centro, 64000 Monterrey, N.L, MX.
+              </div>
+
+              {/* Código de Descuento/Referido */}
+              <div className="mb-4 pb-4 border-b border-zinc-200">
+                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                  ¿Tienes un código de descuento?
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={discountCode}
+                    onChange={(e) => setDiscountCode(e.target.value)}
+                    placeholder="Ingresa código"
+                    disabled={validatingCode || !!appliedDiscountCode}
+                    className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => validateDiscountCode(discountCode)}
+                    disabled={
+                      validatingCode ||
+                      !discountCode.trim() ||
+                      !!appliedDiscountCode
+                    }
+                    className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {validatingCode
+                      ? "Validando..."
+                      : appliedDiscountCode
+                      ? "Aplicado"
+                      : "Aplicar"}
+                  </button>
+                </div>
+                {codeError && (
+                  <p className="mt-2 text-sm text-red-600">{codeError}</p>
+                )}
+                {appliedDiscountCode && (
+                  <div className="mt-2 py-1 flex items-center justify-between gap-2 text-sm text-green-600">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="w-4 h-4 flex-shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth="2.5"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <span>
+                        Código {appliedDiscountCode.code} aplicado (
+                        {appliedDiscountCode.percentage}% de descuento)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppliedDiscountCode(null);
+                        setDiscountCode("");
+                        setCodeError(null);
+                      }}
+                      className="flex-shrink-0 px-1 py-0.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                      aria-label="Remover código"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Selección de código cuando ambos son válidos - Desktop */}
+              {showCodeChoice && appliedDiscountCode && appliedReferralCode && (
+                <div className="mb-4 pb-4 border-b border-zinc-200">
+                  <p className="text-sm font-medium text-zinc-900 mb-3">
+                    Tienes dos códigos válidos. Elige cuál aplicar:
                   </p>
+                  <div className="space-y-2">
+                    {/* Opción 1: Código de descuento */}
+                    <label
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
+                        selectedCodeType === "discount"
+                          ? "border-[#103948] bg-green-50"
+                          : "border-zinc-200"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="codeChoice"
+                        value="discount"
+                        checked={selectedCodeType === "discount"}
+                        onChange={() => setSelectedCodeType("discount")}
+                        className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-900">
+                            {appliedDiscountCode.code}
+                          </span>
+                          {selectedCodeType === "discount" && (
+                            <svg
+                              className="w-4 h-4 text-green-600"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth="2.5"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {appliedDiscountCode.percentage}% de descuento
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Opción 2: Código de referido */}
+                    <label
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
+                        selectedCodeType === "referral"
+                          ? "border-[#103948] bg-green-50"
+                          : "border-zinc-200"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="codeChoice"
+                        value="referral"
+                        checked={selectedCodeType === "referral"}
+                        onChange={() => setSelectedCodeType("referral")}
+                        className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-900">
+                            {appliedReferralCode.code}
+                          </span>
+                          {selectedCodeType === "referral" && (
+                            <svg
+                              className="w-4 h-4 text-green-600"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth="2.5"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {appliedReferralCode.percentage}% de descuento
+                          (referido)
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplySelectedCode}
+                    disabled={!selectedCodeType}
+                    className="mt-3 w-full rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d3a] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    Aplicar código seleccionado
+                  </button>
+                </div>
+              )}
+
+              {/* Beneficios Disponibles - Estilo Rappi */}
+              <div className="mb-6 space-y-3">
+                {/* Descuento por Fidelización - Siempre visible */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-zinc-900">
+                        Descuento por fidelización
+                      </span>
+                      {useLoyaltyDiscount && (
+                        <svg
+                          className="w-4 h-4 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2.5"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    {reservationCount >= 1 ? (
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        {reservationCount === 1 &&
+                          "3% de descuento (2da reserva)"}
+                        {reservationCount >= 2 &&
+                          reservationCount < 4 &&
+                          "3% de descuento aplicado"}
+                        {reservationCount >= 4 &&
+                          reservationCount < 9 &&
+                          "4% de descuento (5ta reserva)"}
+                        {reservationCount >= 9 &&
+                          "5% de descuento (10ma reserva)"}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Disponible desde tu 2da reserva
+                      </p>
+                    )}
+                  </div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={useLoyaltyDiscount}
+                      disabled={reservationCount < 2}
+                      onChange={(e) => setUseLoyaltyDiscount(e.target.checked)}
+                      className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                    />
+                  </label>
+                </div>
+
+                {/* Puntos de Lealtad */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-zinc-900">
+                        Puntos de lealtad
+                      </span>
+                      {useLoyaltyPoints > 0 && (
+                        <svg
+                          className="w-4 h-4 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2.5"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-zinc-500">
+                        {availablePoints} puntos disponibles
+                      </span>
+                      {availablePoints >= 100 && useLoyaltyPoints > 0 && (
+                        <span className="text-xs font-medium text-green-600">
+                          • Usando {useLoyaltyPoints} puntos
+                        </span>
+                      )}
+                    </div>
+                    {availablePoints < 100 && (
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Gana 1 punto por cada $10 gastados
+                      </p>
+                    )}
+                  </div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={useLoyaltyPoints > 0}
+                      disabled={availablePoints < 100}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const pointsToUse =
+                            Math.floor(availablePoints / 100) * 100;
+                          setUseLoyaltyPoints(pointsToUse);
+                        } else {
+                          setUseLoyaltyPoints(0);
+                        }
+                      }}
+                      className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                    />
+                  </label>
+                </div>
+
+                {/* Créditos */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-zinc-900">
+                        Créditos disponibles
+                      </span>
+                      {useCredits > 0 && (
+                        <svg
+                          className="w-4 h-4 text-green-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2.5"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-zinc-500">
+                        ${availableCredits.toLocaleString("es-MX")} disponibles
+                      </span>
+                      {useCredits > 0 && (
+                        <span className="text-xs font-medium text-green-600">
+                          • Usando ${useCredits.toLocaleString("es-MX")}
+                        </span>
+                      )}
+                    </div>
+                    {availableCredits === 0 && (
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Gana $200 por cada amigo que refieras
+                      </p>
+                    )}
+                  </div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={useCredits > 0}
+                      disabled={availableCredits === 0}
+                      onChange={(e) => {
+                        setUseCredits(e.target.checked ? availableCredits : 0);
+                      }}
+                      className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                    />
+                  </label>
                 </div>
               </div>
 
-              {/* Precio */}
-              <div className="mb-4">
-                <p className="text-sm font-medium text-zinc-900 mb-1">
-                  ${reservationData.price.toLocaleString("es-MX")}
-                </p>
+              {/* Descuentos Aplicados */}
+              {priceCalculation && priceCalculation.totalDiscount > 0 && (
+                <div className="mb-4 pb-4 border-b border-zinc-200">
+                  <p className="text-sm font-medium text-zinc-900 mb-2">
+                    Descuentos aplicados
+                  </p>
+                  <div className="space-y-1 text-sm">
+                    {priceCalculation.discounts.discountCode && (
+                      <div className="flex justify-between text-green-600">
+                        <span>
+                          Código {priceCalculation.discounts.discountCode.code}{" "}
+                          ({priceCalculation.discounts.discountCode.percentage}
+                          %)
+                        </span>
+                        <span>
+                          -$
+                          {priceCalculation.discounts.discountCode.amount.toLocaleString(
+                            "es-MX"
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {priceCalculation.discounts.lastMinute?.applied && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Descuento último minuto (15%)</span>
+                        <span>
+                          -$
+                          {priceCalculation.discounts.lastMinute.amount.toLocaleString(
+                            "es-MX"
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {priceCalculation.discounts.loyalty && (
+                      <div className="flex justify-between text-green-600">
+                        <span>
+                          Descuento por fidelización (
+                          {priceCalculation.discounts.loyalty.percentage}%)
+                        </span>
+                        <span>
+                          -$
+                          {priceCalculation.discounts.loyalty.amount.toLocaleString(
+                            "es-MX"
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {priceCalculation.discounts.referral?.applied && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Descuento por referido (10%)</span>
+                        <span>
+                          -$
+                          {priceCalculation.discounts.referral.amount.toLocaleString(
+                            "es-MX"
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {priceCalculation.discounts.loyaltyPoints && (
+                      <div className="flex justify-between text-green-600">
+                        <span>
+                          Puntos aplicados (
+                          {priceCalculation.discounts.loyaltyPoints.points} pts)
+                        </span>
+                        <span>
+                          -$
+                          {priceCalculation.discounts.loyaltyPoints.amount.toLocaleString(
+                            "es-MX"
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {useCredits > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Créditos aplicados</span>
+                        <span>-${useCredits.toLocaleString("es-MX")}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Precio Base */}
+              <div className="mb-2">
+                <div className="flex justify-between text-sm text-zinc-600">
+                  <span>Precio base</span>
+                  <span>
+                    $
+                    {(
+                      priceCalculation?.basePrice || reservationData.price
+                    ).toLocaleString("es-MX")}
+                  </span>
+                </div>
               </div>
 
               {/* Total */}
@@ -668,7 +1798,10 @@ export default function FormularioReservaPage() {
                   Total
                 </span>
                 <span className="text-base font-semibold text-zinc-900">
-                  MXN ${reservationData.price.toLocaleString("es-MX")}
+                  MXN $
+                  {(
+                    priceCalculation?.finalPrice || reservationData.price
+                  ).toLocaleString("es-MX")}
                 </span>
               </div>
             </div>
