@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   calculateEndTime,
@@ -16,9 +18,44 @@ import {
   generateGuestToken,
   generateGuestReservationUrl,
 } from "@/lib/auth/guest-tokens";
+import type { Database } from "@/types/database.types";
 
 export async function POST(request: NextRequest) {
   try {
+    // Obtener el usuario autenticado desde las cookies (si existe)
+    // Importante: Ignoramos cualquier userId del body por seguridad
+    let authenticatedUserId: string | null = null;
+    try {
+      const cookieStore = await cookies();
+      const authClient = createServerClient<Database>(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll() {
+              // No necesitamos establecer cookies aquí
+            },
+          },
+        }
+      );
+
+      const {
+        data: { user },
+      } = await authClient.auth.getUser();
+
+      // Si hay usuario autenticado, usar su ID
+      if (user?.id) {
+        authenticatedUserId = user.id;
+      }
+    } catch (authError) {
+      // Si hay error al obtener el usuario, es una reserva de invitado
+      // No es un error crítico, solo significa que no hay sesión activa
+      authenticatedUserId = null;
+    }
+
     const supabase = createServiceRoleClient();
     const body = await request.json();
 
@@ -37,7 +74,6 @@ export async function POST(request: NextRequest) {
       price,
       originalPrice,
       paymentId,
-      userId,
       discountAmount,
       lastMinuteDiscount,
       loyaltyDiscount,
@@ -47,6 +83,9 @@ export async function POST(request: NextRequest) {
       discountCode,
       discountCodeDiscount,
     } = body;
+
+    // Usar el userId autenticado (ignorar cualquier userId del body por seguridad)
+    const userId = authenticatedUserId;
 
     // Validar disponibilidad
     const isAvailable = await validateSlotAvailability(
@@ -62,8 +101,10 @@ export async function POST(request: NextRequest) {
 
     // Crear reserva
     const endTime = calculateEndTime(startTime);
+    // Normalizar email para consistencia (mismo formato que en token de invitado)
+    const normalizedEmail = email.toLowerCase().trim();
     const reservationData = {
-      email,
+      email: normalizedEmail,
       name,
       phone,
       date,
@@ -124,11 +165,11 @@ export async function POST(request: NextRequest) {
 
         if (!codeError && codeData && (codeData as { id: string }).id) {
           const codeId = (codeData as { id: string }).id;
-          // Crear registro de uso
+          // Crear registro de uso (usar normalizedEmail para consistencia)
           await supabase.from("discount_code_uses").insert({
             discount_code_id: codeId,
             user_id: userId || null,
-            email: email.toLowerCase().trim(),
+            email: normalizedEmail,
             reservation_id: reservationId,
           } as never);
 
@@ -151,7 +192,8 @@ export async function POST(request: NextRequest) {
 
     if (!userId) {
       try {
-        guestToken = await generateGuestToken(email, reservationId);
+        // Usar normalizedEmail para consistencia (el token también normaliza internamente)
+        guestToken = await generateGuestToken(normalizedEmail, reservationId);
         guestReservationUrl = generateGuestReservationUrl(guestToken);
       } catch (tokenError) {
         // No fallar la reserva si hay error al generar el token

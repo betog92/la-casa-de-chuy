@@ -113,12 +113,10 @@ export async function verifyGuestToken(
 
 /**
  * Genera la URL del magic link para gestionar una reserva de invitado
+ * Esta función solo se usa en el servidor (API routes)
+ * El módulo ya lanza un error si se importa en el cliente
  */
 export function generateGuestReservationUrl(token: string): string {
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/reservas/${token}`;
-  }
-  // Para uso en servidor
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   return `${baseUrl}/reservas/${token}`;
 }

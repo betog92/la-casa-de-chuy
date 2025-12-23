@@ -30,6 +30,8 @@ export async function GET(
     const { email, reservationId } = tokenResult.payload;
 
     // Obtener la reserva de la base de datos
+    // El email del token ya está normalizado (lowercase), y las reservas también se almacenan normalizadas
+    // Usamos .ilike() para comparación case-insensitive como medida adicional de seguridad
     const supabase = createServiceRoleClient();
     const { data: reservation, error } = await supabase
       .from("reservations")
@@ -37,7 +39,7 @@ export async function GET(
         "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at"
       )
       .eq("id", reservationId)
-      .eq("email", email)
+      .ilike("email", email)
       .single();
 
     if (error || !reservation) {
@@ -45,9 +47,24 @@ export async function GET(
     }
 
     // Verificar que la reserva no esté completada o cancelada
+    const reservationData = reservation as {
+      status: string;
+      id: string;
+      email: string;
+      name: string;
+      phone: string;
+      date: string;
+      start_time: number;
+      end_time: number;
+      price: number;
+      original_price: number;
+      payment_id: string | null;
+      created_at: string;
+    };
+
     if (
-      reservation.status === "completed" ||
-      reservation.status === "cancelled"
+      reservationData.status === "completed" ||
+      reservationData.status === "cancelled"
     ) {
       return errorResponse(
         "Esta reserva ya ha sido completada o cancelada",
@@ -55,7 +72,10 @@ export async function GET(
       );
     }
 
-    return successResponse({ reservation, token: tokenResult.payload });
+    return successResponse({
+      reservation: reservationData,
+      token: tokenResult.payload,
+    });
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Error al cargar la reserva";
