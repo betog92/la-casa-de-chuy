@@ -13,12 +13,15 @@
 -- =====================================================
 -- 1. TABLA DE USUARIOS
 -- =====================================================
+-- Esta tabla se sincroniza automáticamente con auth.users
+-- El id es el mismo que auth.users.id (no se genera aleatoriamente)
+-- Se usa para almacenar datos adicionales del usuario (name, phone)
+-- y para mantener foreign keys desde otras tablas
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   phone TEXT,
-  password_hash TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -56,7 +59,7 @@ CREATE TABLE IF NOT EXISTS time_slots (
 -- =====================================================
 CREATE TABLE IF NOT EXISTS reservations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   email TEXT NOT NULL,
   name TEXT NOT NULL,
   phone TEXT NOT NULL,
@@ -89,7 +92,7 @@ CREATE TABLE IF NOT EXISTS reservations (
 -- =====================================================
 CREATE TABLE IF NOT EXISTS credits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   amount DECIMAL(10, 2) NOT NULL,
   source TEXT NOT NULL, -- 'referral', 'cancellation', etc.
   expires_at DATE NOT NULL,
@@ -102,7 +105,7 @@ CREATE TABLE IF NOT EXISTS credits (
 -- =====================================================
 CREATE TABLE IF NOT EXISTS loyalty_points (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   points INTEGER NOT NULL,
   expires_at DATE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -113,7 +116,7 @@ CREATE TABLE IF NOT EXISTS loyalty_points (
 -- =====================================================
 CREATE TABLE IF NOT EXISTS referrals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  referrer_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  referrer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   referred_email TEXT NOT NULL,
   code TEXT UNIQUE NOT NULL,
   link TEXT UNIQUE NOT NULL,

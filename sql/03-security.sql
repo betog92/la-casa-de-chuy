@@ -72,11 +72,12 @@ CREATE POLICY "Users can update own profile"
 
 -- Los usuarios pueden ver sus propias reservas (por email o user_id)
 -- Nota: Para acceso anónimo, se debe verificar por email en el código de la aplicación
+-- Ahora que users.id = auth.users.id, podemos simplificar la consulta
 CREATE POLICY "Users can view own reservations"
   ON reservations FOR SELECT
   USING (
     (user_id IS NOT NULL AND (select auth.uid()) = user_id)
-    OR (email IS NOT NULL AND email = (SELECT email FROM users WHERE id = (select auth.uid()) LIMIT 1))
+    OR (email IS NOT NULL AND LOWER(TRIM(email)) = LOWER(TRIM((SELECT email FROM auth.users WHERE id = (select auth.uid()) LIMIT 1))))
   );
 
 -- Los usuarios pueden actualizar sus propias reservas
@@ -85,7 +86,7 @@ CREATE POLICY "Users can update own reservations"
   ON reservations FOR UPDATE
   USING (
     (user_id IS NOT NULL AND (select auth.uid()) = user_id)
-    OR (email IS NOT NULL AND email = (SELECT email FROM users WHERE id = (select auth.uid()) LIMIT 1))
+    OR (email IS NOT NULL AND LOWER(TRIM(email)) = LOWER(TRIM((SELECT email FROM auth.users WHERE id = (select auth.uid()) LIMIT 1))))
   );
 
 -- =====================================================

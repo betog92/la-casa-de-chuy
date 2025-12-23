@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthErrorMessage } from "@/utils/auth-error-messages";
+import { syncUserToDatabase } from "@/lib/supabase/user-sync";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -57,6 +58,26 @@ export async function GET(request: NextRequest) {
         ? `/auth/reset-password?error=${encodeURIComponent(translatedError)}`
         : `/auth/login?error=${encodeURIComponent(translatedError)}`;
     return NextResponse.redirect(new URL(errorRedirect, request.url));
+  }
+
+  // Sincronizar usuario después de autenticación exitosa
+  // Solo si no es recovery (cuando es recovery, aún no tienen sesión establecida)
+  if (type !== "recovery") {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user && user.email) {
+        // Sincronizar usuario usando función helper
+        // No interrumpimos el flujo si falla, solo logueamos
+        await syncUserToDatabase(user);
+      }
+    } catch (syncError) {
+      // No interrumpimos el flujo si falla la sincronización
+      // El usuario ya está autenticado y puede usar la app
+      console.error("Error syncing user in callback:", syncError);
+    }
   }
 
   // Retornar la respuesta con las cookies establecidas

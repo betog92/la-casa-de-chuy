@@ -50,7 +50,7 @@ export default function GuestReservationPage() {
           return;
         }
 
-        setReservation(data.data.reservation);
+        setReservation(data.reservation);
       } catch (err) {
         setError("Error inesperado al cargar la reserva");
       } finally {

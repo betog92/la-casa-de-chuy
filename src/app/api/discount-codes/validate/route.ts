@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         .from("discount_code_uses")
         .select("id")
         .eq("discount_code_id", discountCode.id)
-        .eq("email", email.toLowerCase())
+        .eq("email", email.toLowerCase().trim())
         .maybeSingle();
 
       if (existingUse) {

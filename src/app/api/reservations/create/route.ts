@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
           await supabase.from("discount_code_uses").insert({
             discount_code_id: codeId,
             user_id: userId || null,
-            email: email.toLowerCase(),
+            email: email.toLowerCase().trim(),
             reservation_id: reservationId,
           } as never);
 

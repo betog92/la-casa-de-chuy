@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { format, parse } from "date-fns";
+import { format, parse, addHours } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
 import type { Reservation } from "@/types/reservation";
 
 export default function ConfirmacionPage() {
   const searchParams = useSearchParams();
   const reservationId = searchParams.get("id");
+  const { user, loading: authLoading } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +27,14 @@ export default function ConfirmacionPage() {
         return;
       }
 
-      // Verificar si hay un token de invitado guardado
-      const savedGuestUrl = sessionStorage.getItem("guestReservationUrl");
-      if (savedGuestUrl) {
-        setGuestReservationUrl(savedGuestUrl);
-        sessionStorage.removeItem("guestReservationUrl");
-        sessionStorage.removeItem("guestToken");
+      // Verificar si hay un token de invitado guardado (solo si NO está autenticado)
+      if (!user) {
+        const savedGuestUrl = sessionStorage.getItem("guestReservationUrl");
+        if (savedGuestUrl) {
+          setGuestReservationUrl(savedGuestUrl);
+          sessionStorage.removeItem("guestReservationUrl");
+          sessionStorage.removeItem("guestToken");
+        }
       }
 
       try {
@@ -59,24 +63,58 @@ export default function ConfirmacionPage() {
       }
     };
 
-    loadReservation();
+    // Esperar a que se cargue el estado de autenticación
+    if (!authLoading) {
+      loadReservation();
+    }
+  }, [reservationId, user, authLoading]);
+
+  // Scroll al top cuando la página se monta o cambia el reservationId
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [reservationId]);
 
-  // Formatear fecha para mostrar
+  // Formatear fecha para mostrar (solo primera letra en mayúscula)
   const formatDisplayDate = (dateString: string): string => {
     const date = parse(dateString, "yyyy-MM-dd", new Date());
-    return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+    const formatted = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
+      locale: es,
+    });
+    // Capitalizar solo la primera letra
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1).toLowerCase();
   };
 
-  // Formatear hora para mostrar
+  // Formatear hora para mostrar (formato 12 horas)
   const formatDisplayTime = (time: string): string => {
     const [hours, minutes] = time.split(":").slice(0, 2).map(Number);
     const date = new Date();
     date.setHours(hours, minutes, 0, 0);
-    return format(date, "h:mm a", { locale: es });
+    return format(date, "h:mm a", { locale: es }).toLowerCase();
   };
 
-  if (loading) {
+  // Formatear rango de hora completo (1 hora desde start_time)
+  const formatTimeRange = (startTime: string): string => {
+    const [hours, minutes] = startTime.split(":").slice(0, 2).map(Number);
+    const startDate = new Date();
+    startDate.setHours(hours, minutes, 0, 0);
+
+    // Sumar 1 hora completa (sesión real de fotografía)
+    const endDate = addHours(startDate, 1);
+
+    const startFormatted = format(startDate, "h:mm a", {
+      locale: es,
+    }).toLowerCase();
+    const endFormatted = format(endDate, "h:mm a", {
+      locale: es,
+    }).toLowerCase();
+
+    return `${startFormatted} - ${endFormatted}`;
+  };
+
+  // Determinar si mostrar secciones de invitado (solo si NO está autenticado y tiene guestReservationUrl)
+  const isGuest = !user && guestReservationUrl;
+
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-zinc-50 to-white">
         <div className="text-center">
@@ -178,16 +216,11 @@ export default function ConfirmacionPage() {
             <div className="border-t border-zinc-200 pt-4">
               <div className="mb-3 flex justify-between">
                 <span className="font-medium">Fecha:</span>
-                <span className="capitalize">
-                  {formatDisplayDate(reservation.date)}
-                </span>
+                <span>{formatDisplayDate(reservation.date)}</span>
               </div>
               <div className="mb-3 flex justify-between">
                 <span className="font-medium">Hora:</span>
-                <span>
-                  {formatDisplayTime(reservation.start_time)} -{" "}
-                  {formatDisplayTime(reservation.end_time)}
-                </span>
+                <span>{formatTimeRange(reservation.start_time)}</span>
               </div>
               <div className="flex justify-between border-t border-zinc-200 pt-3">
                 <span className="font-semibold text-lg">Total Pagado:</span>
@@ -209,8 +242,8 @@ export default function ConfirmacionPage() {
           </div>
         </div>
 
-        {/* Magic Link para Invitados */}
-        {guestReservationUrl && (
+        {/* Magic Link para Invitados - Solo mostrar si NO está autenticado */}
+        {isGuest && (
           <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-6">
             <h3 className="mb-3 flex items-center text-lg font-semibold text-green-900">
               <svg
@@ -260,7 +293,7 @@ export default function ConfirmacionPage() {
         )}
 
         {/* Invitación a crear cuenta (solo para invitados) */}
-        {guestReservationUrl && (
+        {isGuest && (
           <div className="mb-6 rounded-lg border border-[#103948] bg-[#103948]/5 p-6">
             <h3 className="mb-2 text-lg font-semibold text-[#103948]">
               ¿Quieres acceder a más beneficios?
@@ -276,6 +309,24 @@ export default function ConfirmacionPage() {
               className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
             >
               Crear cuenta
+            </Link>
+          </div>
+        )}
+
+        {/* Para usuarios autenticados: mostrar enlace a su cuenta */}
+        {user && (
+          <div className="mb-6 rounded-lg border border-[#103948] bg-[#103948]/5 p-6">
+            <h3 className="mb-2 text-lg font-semibold text-[#103948]">
+              ¡Reserva agregada a tu cuenta!
+            </h3>
+            <p className="mb-4 text-sm text-zinc-700">
+              Puedes ver y gestionar todas tus reservas desde tu cuenta.
+            </p>
+            <Link
+              href="/account"
+              className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
+            >
+              Ver mis reservas
             </Link>
           </div>
         )}

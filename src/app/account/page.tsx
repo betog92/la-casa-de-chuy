@@ -4,12 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
+import { format, parse } from "date-fns";
+import { es } from "date-fns/locale";
+import axios from "axios";
+import type { Reservation } from "@/types/reservation";
 
 export default function AccountPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const [reservations, setReservations] = useState<any[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationsLoading, setReservationsLoading] = useState(true);
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     if (!loading && !user) {
@@ -19,12 +24,74 @@ export default function AccountPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user) {
-      // TODO: Cargar reservas del usuario desde la API
-      // Por ahora solo marcamos como cargado
-      setReservationsLoading(false);
-    }
+    const loadReservations = async () => {
+      if (!user) {
+        setReservationsLoading(false);
+        return;
+      }
+
+      try {
+        setReservationsLoading(true);
+        setError("");
+        const response = await axios.get("/api/reservations/user");
+        if (response.data.success) {
+          setReservations(response.data.reservations || []);
+        } else {
+          setError(response.data.error || "Error al cargar reservas");
+        }
+      } catch (err) {
+        console.error("Error loading reservations:", err);
+        setError(
+          axios.isAxiosError(err)
+            ? err.response?.data?.error || "Error al cargar reservas"
+            : "Error al cargar reservas"
+        );
+      } finally {
+        setReservationsLoading(false);
+      }
+    };
+
+    loadReservations();
   }, [user]);
+
+  // Funciones para formatear fecha y hora
+  const formatDisplayDate = (dateString: string): string => {
+    try {
+      const date = parse(dateString, "yyyy-MM-dd", new Date());
+      return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatDisplayTime = (time: string): string => {
+    try {
+      const [hours, minutes] = time.split(":").slice(0, 2).map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return format(date, "h:mm a", { locale: es });
+    } catch {
+      return time;
+    }
+  };
+
+  const getStatusLabel = (status: string): string => {
+    const statusLabels: Record<string, string> = {
+      confirmed: "Confirmada",
+      cancelled: "Cancelada",
+      completed: "Completada",
+    };
+    return statusLabels[status] || status;
+  };
+
+  const getStatusColor = (status: string): string => {
+    const statusColors: Record<string, string> = {
+      confirmed: "bg-green-100 text-green-800",
+      cancelled: "bg-red-100 text-red-800",
+      completed: "bg-blue-100 text-blue-800",
+    };
+    return statusColors[status] || "bg-zinc-100 text-zinc-800";
+  };
 
   if (loading || reservationsLoading) {
     return (
@@ -77,6 +144,12 @@ export default function AccountPage() {
             Mis Reservas
           </h2>
 
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
           {reservations.length === 0 ? (
             <div className="text-center py-8">
               <svg
@@ -102,8 +175,72 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* TODO: Listar reservas aquí */}
-              <p className="text-zinc-600">Las reservas aparecerán aquí...</p>
+              {reservations.map((reservation) => (
+                <div
+                  key={reservation.id}
+                  className="border border-zinc-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-[#103948]">
+                          {reservation.name}
+                        </h3>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
+                            reservation.status
+                          )}`}
+                        >
+                          {getStatusLabel(reservation.status)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-zinc-600">
+                        <div>
+                          <span className="font-medium">Fecha:</span>{" "}
+                          {formatDisplayDate(reservation.date)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Horario:</span>{" "}
+                          {formatDisplayTime(reservation.start_time)} -{" "}
+                          {formatDisplayTime(reservation.end_time)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Precio:</span> $
+                          {reservation.price.toLocaleString("es-MX", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                        {reservation.original_price !== reservation.price && (
+                          <div>
+                            <span className="font-medium">
+                              Precio original:
+                            </span>{" "}
+                            <span className="line-through text-zinc-400">
+                              $
+                              {reservation.original_price.toLocaleString(
+                                "es-MX",
+                                {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link
+                        href={`/reservar/confirmacion?reservationId=${reservation.id}`}
+                        className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded-lg hover:bg-[#103948] hover:text-white transition-colors"
+                      >
+                        Ver detalles
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

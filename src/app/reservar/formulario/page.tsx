@@ -21,6 +21,7 @@ import ConektaPaymentForm, {
 } from "@/components/ConektaPaymentForm";
 import type { ReservationData } from "@/types/reservation";
 import axios from "axios";
+import { useAuth } from "@/hooks/useAuth";
 
 // Schema de validación
 const reservationFormSchema = z.object({
@@ -67,6 +68,7 @@ export default function FormularioReservaPage() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
+  const { user } = useAuth();
 
   // Estados para descuentos y beneficios
   const [discountCode, setDiscountCode] = useState("");
@@ -487,6 +489,7 @@ export default function FormularioReservaPage() {
             originalPrice:
               priceCalculation?.originalPrice || reservationData.price,
             paymentId: orderId,
+            userId: user?.id || null,
             discountAmount: priceCalculation?.totalDiscount || 0,
             // Campos específicos de descuentos
             lastMinuteDiscount:

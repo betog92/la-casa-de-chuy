@@ -44,3 +44,10 @@ export function notFoundResponse(resource = "Recurso") {
 export function conflictResponse(message: string) {
   return errorResponse(message, 409);
 }
+
+/**
+ * Crea una respuesta de no autorizado (401)
+ */
+export function unauthorizedResponse(message = "No autorizado") {
+  return errorResponse(message, 401);
+}
