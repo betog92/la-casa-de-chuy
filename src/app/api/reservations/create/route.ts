@@ -212,20 +212,39 @@ export async function POST(request: NextRequest) {
 
         if (!codeError && codeData && (codeData as { id: string }).id) {
           const codeId = (codeData as { id: string }).id;
-          // Crear registro de uso (usar normalizedEmail para consistencia)
-          await supabase.from("discount_code_uses").insert({
-            discount_code_id: codeId,
-            user_id: userId || null,
-            email: normalizedEmail,
-            reservation_id: reservationId,
-          } as never);
 
-          // Incrementar contador de usos de forma atómica usando función SQL
-          // Esto evita condiciones de carrera en actualizaciones concurrentes
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.rpc as any)("increment_discount_code_uses", {
-            code_id: codeId,
-          });
+          // Crear registro de uso (usar normalizedEmail para consistencia)
+          const { error: insertError } = await supabase
+            .from("discount_code_uses")
+            .insert({
+              discount_code_id: codeId,
+              user_id: userId || null,
+              email: normalizedEmail,
+              reservation_id: reservationId,
+            } as never);
+
+          if (insertError) {
+            console.error("Error al insertar uso de código:", insertError);
+            // Continuamos aunque falle el insert, para no bloquear la reserva
+          } else {
+            // Incrementar contador de usos de forma atómica usando función SQL
+            // Esto evita condiciones de carrera en actualizaciones concurrentes
+            const { error: rpcError } = await supabase.rpc(
+              "increment_discount_code_uses",
+              {
+                code_id: codeId,
+              } as never
+            );
+
+            if (rpcError) {
+              console.error(
+                "Error al incrementar contador de usos del código:",
+                rpcError
+              );
+              // Continuamos aunque falle el incremento, para no bloquear la reserva
+              // El contador puede corregirse manualmente si es necesario
+            }
+          }
         }
       } catch (codeErr) {
         // No fallar la reserva si hay error al registrar el código

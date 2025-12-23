@@ -71,8 +71,14 @@ CREATE POLICY "Users can update own profile"
 -- pasen por nuestras API routes donde se validan datos, disponibilidad, y pago.
 
 -- Los usuarios pueden ver sus propias reservas
--- Como el usuario debe verificar su email antes de hacer login (configuración de Supabase),
--- todas sus reservas ya tienen user_id vinculado cuando accede a la aplicación
+-- IMPORTANTE: Esta política solo aplica para usuarios autenticados (user_id IS NOT NULL).
+-- Las reservas de invitados (user_id IS NULL) no pueden accederse a través de RLS porque
+-- los invitados no tienen autenticación de Supabase. En su lugar, los invitados acceden
+-- a sus reservas usando tokens JWT a través del endpoint /api/guest-reservations/[token],
+-- que usa Service Role Key y bypassa RLS completamente.
+-- Cuando un invitado se registra y verifica su email, todas sus reservas se vinculan
+-- automáticamente con user_id a través de syncUserToDatabase(), permitiéndoles entonces
+-- acceder a través de esta política RLS.
 CREATE POLICY "Users can view own reservations"
   ON reservations FOR SELECT
   USING (user_id IS NOT NULL AND (select auth.uid()) = user_id);
