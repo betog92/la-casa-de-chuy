@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       if (user?.id) {
         authenticatedUserId = user.id;
       }
-    } catch (authError) {
+    } catch {
       // Si hay error al obtener el usuario, es una reserva de invitado
       // No es un error crítico, solo significa que no hay sesión activa
       authenticatedUserId = null;
@@ -151,6 +151,53 @@ export async function POST(request: NextRequest) {
         "No se pudo obtener el ID de la reserva creada",
         500
       );
+    }
+
+    // Si hay usuario autenticado, actualizar su perfil con name y phone si no los tiene
+    if (userId) {
+      try {
+        const { data: existingProfile } = await supabase
+          .from("users")
+          .select("name, phone")
+          .eq("id", userId)
+          .maybeSingle();
+
+        // Solo actualizar si el perfil existe y no tiene name o phone
+        if (existingProfile) {
+          const profileData = existingProfile as {
+            name: string | null;
+            phone: string | null;
+          };
+
+          if (!profileData.name || !profileData.phone) {
+            const updateData: {
+              name?: string;
+              phone?: string;
+              updated_at: string;
+            } = {
+              updated_at: new Date().toISOString(),
+            };
+
+            if (!profileData.name && name) {
+              updateData.name = name;
+            }
+            if (!profileData.phone && phone) {
+              updateData.phone = phone;
+            }
+
+            // Solo actualizar si hay algo que actualizar
+            if (updateData.name || updateData.phone) {
+              await supabase
+                .from("users")
+                .update(updateData as never)
+                .eq("id", userId);
+            }
+          }
+        }
+      } catch (profileError) {
+        // No fallar la reserva si hay error al actualizar perfil
+        console.error("Error updating user profile:", profileError);
+      }
     }
 
     // Si se usó un código de descuento, registrar el uso y actualizar contadores

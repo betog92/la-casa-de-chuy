@@ -106,12 +106,22 @@ export default function FormularioReservaPage() {
   const [useCredits, setUseCredits] = useState(0);
   const [useLoyaltyDiscount, setUseLoyaltyDiscount] = useState(false);
   const [reservationCount, setReservationCount] = useState(0); // TODO: Obtener del usuario si está logueado (temporalmente 0 para visualización)
+  const [prefilledFields, setPrefilledFields] = useState<{
+    email: boolean;
+    name: boolean;
+    phone: boolean;
+  }>({
+    email: false,
+    name: false,
+    phone: false,
+  });
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     watch,
+    setValue,
   } = useForm<ReservationFormData>({
     resolver: zodResolver(reservationFormSchema),
   });
@@ -122,6 +132,41 @@ export default function FormularioReservaPage() {
   // Extraer valores de searchParams de forma estable para evitar re-renders innecesarios
   const dateParam = searchParams.get("date");
   const timeParam = searchParams.get("time");
+
+  // Prellenar formulario con datos del usuario si está logueado
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!user?.id) return; // Solo si está logueado
+
+      try {
+        const response = await axios.get("/api/users/profile");
+        if (response.data.success) {
+          const profile = response.data;
+
+          // Prellenar email siempre si está disponible y marcarlo como prellenado
+          if (profile.email) {
+            setValue("email", profile.email);
+            setPrefilledFields((prev) => ({ ...prev, email: true }));
+          }
+          // Prellenar name solo si existe y marcarlo como prellenado
+          if (profile.name) {
+            setValue("name", profile.name);
+            setPrefilledFields((prev) => ({ ...prev, name: true }));
+          }
+          // Prellenar phone solo si existe y marcarlo como prellenado
+          if (profile.phone) {
+            setValue("phone", profile.phone);
+            setPrefilledFields((prev) => ({ ...prev, phone: true }));
+          }
+        }
+      } catch (error) {
+        // Silenciosamente fallar, no es crítico si no se puede cargar el perfil
+        console.error("Error loading user profile:", error);
+      }
+    };
+
+    loadUserProfile();
+  }, [user, setValue]);
 
   // Cargar datos de la reserva desde sessionStorage o query params
   useEffect(() => {
@@ -1127,15 +1172,14 @@ export default function FormularioReservaPage() {
                   <h2 className="text-lg font-semibold text-zinc-900">
                     Contacto
                   </h2>
-                  <button
-                    type="button"
-                    className="text-sm text-[#103948] hover:underline"
-                    onClick={() => {
-                      // Placeholder - implementar login después
-                    }}
-                  >
-                    Iniciar sesión
-                  </button>
+                  {!user && (
+                    <Link
+                      href="/auth/login"
+                      className="text-sm text-[#103948] hover:underline"
+                    >
+                      Iniciar sesión
+                    </Link>
+                  )}
                 </div>
                 <div className="mb-4">
                   <label
@@ -1149,7 +1193,8 @@ export default function FormularioReservaPage() {
                     type="email"
                     {...register("email")}
                     autoComplete="email"
-                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    disabled={prefilledFields.email}
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-500"
                     placeholder="correo@ejemplo.com"
                   />
                   {errors.email && (
@@ -1244,7 +1289,8 @@ export default function FormularioReservaPage() {
                     type="text"
                     {...register("name")}
                     autoComplete="name"
-                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    disabled={prefilledFields.name}
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-500"
                     placeholder="Juan Pérez"
                   />
                   {errors.name && (
@@ -1267,7 +1313,8 @@ export default function FormularioReservaPage() {
                     type="tel"
                     {...register("phone")}
                     autoComplete="tel"
-                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    disabled={prefilledFields.phone}
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-500"
                     placeholder="81 1234 5678"
                   />
                   {errors.phone && (
