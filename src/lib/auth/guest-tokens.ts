@@ -1,8 +1,26 @@
 import { SignJWT, jwtVerify } from "jose";
 
-const SECRET_KEY =
-  process.env.NEXT_PUBLIC_GUEST_TOKEN_SECRET ||
-  "default-secret-key-change-in-production";
+// CRÍTICO: Esta clave secreta NUNCA debe exponerse al cliente
+// Solo usar en código server-side (API routes, server components, etc.)
+// Esta variable debe estar en .env.local o variables de entorno del servidor
+// SIN el prefijo NEXT_PUBLIC_ para que no se exponga al cliente
+const SECRET_KEY = process.env.GUEST_TOKEN_SECRET;
+
+// Validar que la clave esté definida
+if (!SECRET_KEY) {
+  throw new Error(
+    "GUEST_TOKEN_SECRET environment variable is required but not set. " +
+      "Please set it in your .env.local file (without NEXT_PUBLIC_ prefix)."
+  );
+}
+
+// Validar que no se está usando en el cliente (protección adicional)
+if (typeof window !== "undefined") {
+  throw new Error(
+    "guest-tokens.ts cannot be imported in client-side code. " +
+      "This file must only be used in server-side code (API routes, server components)."
+  );
+}
 
 /**
  * Payload del token JWT para invitados

@@ -19,6 +19,11 @@ NEXT_PUBLIC_CONEKTA_PUBLIC_KEY=tu_public_key_conekta_aqui
 # Conekta - Private Key (MODO PRUEBA - SOLO para backend, NUNCA exponer en frontend)
 # Esta key se usa únicamente en las API routes del servidor
 CONEKTA_PRIVATE_KEY=tu_private_key_conekta_aqui
+
+# Guest Token Secret - Solo para uso en API routes del servidor (NUNCA exponer en frontend)
+# Clave secreta para firmar tokens JWT de reservas de invitados
+# Genera una clave segura (puedes usar: openssl rand -base64 32)
+GUEST_TOKEN_SECRET=tu_clave_secreta_aqui
 ```
 
 ## Getting Started
