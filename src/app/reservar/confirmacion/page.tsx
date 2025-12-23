@@ -13,6 +13,7 @@ export default function ConfirmacionPage() {
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [guestReservationUrl, setGuestReservationUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const loadReservation = async () => {
@@ -20,6 +21,14 @@ export default function ConfirmacionPage() {
         setError("No se proporcionó un ID de reserva");
         setLoading(false);
         return;
+      }
+
+      // Verificar si hay un token de invitado guardado
+      const savedGuestUrl = sessionStorage.getItem("guestReservationUrl");
+      if (savedGuestUrl) {
+        setGuestReservationUrl(savedGuestUrl);
+        sessionStorage.removeItem("guestReservationUrl");
+        sessionStorage.removeItem("guestToken");
       }
 
       try {
@@ -197,6 +206,73 @@ export default function ConfirmacionPage() {
             )}
           </div>
         </div>
+
+        {/* Magic Link para Invitados */}
+        {guestReservationUrl && (
+          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-6">
+            <h3 className="mb-3 flex items-center text-lg font-semibold text-green-900">
+              <svg
+                className="mr-2 h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                />
+              </svg>
+              Enlace de gestión de reserva
+            </h3>
+            <p className="mb-4 text-sm text-green-800">
+              Guarda este enlace para gestionar tu reserva (cancelar, reagendar, etc.):
+            </p>
+            <div className="flex items-center gap-2 p-3 bg-white rounded border border-green-200">
+              <input
+                type="text"
+                readOnly
+                value={guestReservationUrl}
+                className="flex-1 text-sm text-zinc-700 bg-transparent border-none outline-none"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(guestReservationUrl);
+                  alert("Enlace copiado al portapapeles");
+                }}
+                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+              >
+                Copiar
+              </button>
+            </div>
+            <Link
+              href={guestReservationUrl}
+              className="mt-3 inline-block text-sm text-green-700 hover:text-green-900 font-medium underline"
+            >
+              Abrir página de gestión →
+            </Link>
+          </div>
+        )}
+
+        {/* Invitación a crear cuenta (solo para invitados) */}
+        {guestReservationUrl && (
+          <div className="mb-6 rounded-lg border border-[#103948] bg-[#103948]/5 p-6">
+            <h3 className="mb-2 text-lg font-semibold text-[#103948]">
+              ¿Quieres acceder a más beneficios?
+            </h3>
+            <p className="mb-4 text-sm text-zinc-700">
+              Crea una cuenta para acceder a descuentos por fidelización, puntos de lealtad, créditos y más.
+            </p>
+            <Link
+              href={`/auth/register?email=${encodeURIComponent(reservation.email)}`}
+              className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
+            >
+              Crear cuenta
+            </Link>
+          </div>
+        )}
 
         {/* Información Importante */}
         <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-6">

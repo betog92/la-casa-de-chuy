@@ -513,6 +513,12 @@ export default function FormularioReservaPage() {
         }
 
         reservationId = reservationResponse.data.reservationId;
+        
+        // Si es un invitado, guardar el token y URL del magic link
+        if (reservationResponse.data.guestToken && reservationResponse.data.guestReservationUrl) {
+          sessionStorage.setItem("guestToken", reservationResponse.data.guestToken);
+          sessionStorage.setItem("guestReservationUrl", reservationResponse.data.guestReservationUrl);
+        }
       } catch (error: unknown) {
         // Manejar errores específicos de la API de reservaciones
         const errorMessage = getErrorMessage(error);

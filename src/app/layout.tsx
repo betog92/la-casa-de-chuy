@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Cormorant } from "next/font/google";
 import Script from "next/script";
 import Header from "@/components/Header";
+import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -58,8 +59,10 @@ export default function RootLayout({
           src="https://cdn.conekta.io/js/latest/conekta.js"
           strategy="beforeInteractive"
         />
-        <Header />
-        {children}
+        <AuthProvider>
+          <Header />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

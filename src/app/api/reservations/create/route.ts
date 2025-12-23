@@ -12,6 +12,10 @@ import {
   validationErrorResponse,
   conflictResponse,
 } from "@/utils/api-response";
+import {
+  generateGuestToken,
+  generateGuestReservationUrl,
+} from "@/lib/auth/guest-tokens";
 
 export async function POST(request: NextRequest) {
   try {
@@ -118,19 +122,21 @@ export async function POST(request: NextRequest) {
           .eq("code", discountCode.toUpperCase())
           .single();
 
-        if (!codeError && codeData) {
+        if (!codeError && codeData && (codeData as { id: string }).id) {
+          const codeId = (codeData as { id: string }).id;
           // Crear registro de uso
           await supabase.from("discount_code_uses").insert({
-            discount_code_id: codeData.id,
+            discount_code_id: codeId,
             user_id: userId || null,
             email: email.toLowerCase(),
             reservation_id: reservationId,
-          });
+          } as never);
 
           // Incrementar contador de usos de forma atómica usando función SQL
           // Esto evita condiciones de carrera en actualizaciones concurrentes
-          await supabase.rpc("increment_discount_code_uses", {
-            code_id: codeData.id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.rpc as any)("increment_discount_code_uses", {
+            code_id: codeId,
           });
         }
       } catch (codeErr) {
@@ -139,7 +145,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return successResponse({ reservationId });
+    // Si es un invitado (no tiene userId), generar token para magic link
+    let guestToken: string | null = null;
+    let guestReservationUrl: string | null = null;
+
+    if (!userId) {
+      try {
+        guestToken = await generateGuestToken(email, reservationId);
+        guestReservationUrl = generateGuestReservationUrl(guestToken);
+      } catch (tokenError) {
+        // No fallar la reserva si hay error al generar el token
+        console.error("Error al generar token de invitado:", tokenError);
+      }
+    }
+
+    return successResponse({
+      reservationId,
+      guestToken, // Token JWT para invitados
+      guestReservationUrl, // URL completa del magic link
+    });
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error

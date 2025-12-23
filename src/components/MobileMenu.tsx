@@ -2,8 +2,9 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { navigation } from "@/constants/navigation";
+import { useAuth } from "@/hooks/useAuth";
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ interface MobileMenuProps {
 
 export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, signOut } = useAuth();
 
   // Cerrar menú al presionar Escape
   useEffect(() => {
@@ -99,33 +102,93 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                 );
               })}
 
-              {/* Botón Iniciar sesión */}
+              {/* Usuario o Iniciar sesión */}
               <li className="pt-2 border-t border-zinc-200 mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    // Placeholder - implementar después
-                  }}
-                  className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
-                  style={{ fontFamily: "var(--font-cormorant), serif" }}
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="1.5"
-                    stroke="currentColor"
-                    aria-hidden="true"
+                {loading ? (
+                  <div className="px-4 py-3 flex items-center gap-3">
+                    <div className="w-5 h-5 animate-pulse bg-zinc-300 rounded-full" />
+                    <span className="text-base text-zinc-400">Cargando...</span>
+                  </div>
+                ) : user ? (
+                  <>
+                    <div className="px-4 pt-3 pb-4 border-b border-zinc-200">
+                      <p className="text-sm font-medium text-[#103948] truncate leading-relaxed">
+                        {user.email}
+                      </p>
+                    </div>
+                    <Link
+                      href="/account"
+                      onClick={onClose}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                      style={{ fontFamily: "var(--font-cormorant), serif" }}
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth="1.5"
+                        stroke="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                        />
+                      </svg>
+                      <span>Mi cuenta</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await signOut();
+                        onClose();
+                        router.push("/");
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                      style={{ fontFamily: "var(--font-cormorant), serif" }}
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth="1.5"
+                        stroke="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                        />
+                      </svg>
+                      <span>Cerrar sesión</span>
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    href="/auth/login"
+                    onClick={onClose}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                    style={{ fontFamily: "var(--font-cormorant), serif" }}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                    />
-                  </svg>
-                  <span>Iniciar sesión</span>
-                </button>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                      />
+                    </svg>
+                    <span>Iniciar sesión</span>
+                  </Link>
+                )}
               </li>
             </ul>
           </nav>
