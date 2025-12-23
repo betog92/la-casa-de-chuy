@@ -54,8 +54,8 @@ export async function GET(
       name: string;
       phone: string;
       date: string;
-      start_time: number;
-      end_time: number;
+      start_time: string; // TIME se devuelve como string desde PostgreSQL
+      end_time: string; // TIME se devuelve como string desde PostgreSQL
       price: number;
       original_price: number;
       payment_id: string | null;
