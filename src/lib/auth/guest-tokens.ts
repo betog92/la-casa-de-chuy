@@ -103,3 +103,4 @@ export function generateGuestReservationUrl(token: string): string {
   return `${baseUrl}/reservas/${token}`;
 }
 
+

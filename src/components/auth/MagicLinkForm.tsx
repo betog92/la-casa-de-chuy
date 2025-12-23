@@ -101,3 +101,4 @@ export default function MagicLinkForm({ onSuccess }: MagicLinkFormProps) {
   );
 }
 
+
