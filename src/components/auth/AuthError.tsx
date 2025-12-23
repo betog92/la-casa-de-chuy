@@ -32,5 +32,3 @@ export default function AuthError({ message, className = "" }: AuthErrorProps) {
     </div>
   );
 }
-
-

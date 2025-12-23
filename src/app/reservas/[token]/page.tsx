@@ -62,21 +62,27 @@ export default function GuestReservationPage() {
   }, [token]);
 
   const handleCancel = async () => {
-    if (!reservation || !confirm("¿Estás seguro de que deseas cancelar esta reserva?")) {
+    if (
+      !reservation ||
+      !confirm("¿Estás seguro de que deseas cancelar esta reserva?")
+    ) {
       return;
     }
 
     setCancelling(true);
     try {
-      const response = await fetch(`/api/reservations/${reservation.id}/cancel`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token, // Enviar token para validación
-        }),
-      });
+      const response = await fetch(
+        `/api/reservations/${reservation.id}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            token, // Enviar token para validación
+          }),
+        }
+      );
 
       const data = await response.json();
 
@@ -143,9 +149,7 @@ export default function GuestReservationPage() {
           >
             Mi Reserva
           </h1>
-          <p className="text-zinc-600">
-            Gestiona tu reserva desde aquí
-          </p>
+          <p className="text-zinc-600">Gestiona tu reserva desde aquí</p>
         </div>
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-8 space-y-6">
@@ -217,14 +221,16 @@ export default function GuestReservationPage() {
             <div className="pt-4 border-t border-zinc-200">
               <p className="text-sm text-zinc-600 mb-1">Precio total</p>
               <p className="text-2xl font-bold text-[#103948]">
-                ${reservation.price.toLocaleString("es-MX", {
+                $
+                {reservation.price.toLocaleString("es-MX", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </p>
               {reservation.original_price > reservation.price && (
                 <p className="text-sm text-zinc-500 line-through mt-1">
-                  ${reservation.original_price.toLocaleString("es-MX", {
+                  $
+                  {reservation.original_price.toLocaleString("es-MX", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -255,11 +261,13 @@ export default function GuestReservationPage() {
               <strong>¿Quieres acceder a más beneficios?</strong>
             </p>
             <p className="text-sm text-green-700 mb-4">
-              Crea una cuenta para acceder a descuentos por fidelización,
-              puntos de lealtad, créditos y más.
+              Crea una cuenta para acceder a descuentos por fidelización, puntos
+              de lealtad, créditos y más.
             </p>
             <Link
-              href={`/auth/register?email=${encodeURIComponent(reservation.email)}`}
+              href={`/auth/register?email=${encodeURIComponent(
+                reservation.email
+              )}`}
               className="inline-block w-full text-center bg-[#103948] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
             >
               Crear cuenta
@@ -270,5 +278,3 @@ export default function GuestReservationPage() {
     </div>
   );
 }
-
-

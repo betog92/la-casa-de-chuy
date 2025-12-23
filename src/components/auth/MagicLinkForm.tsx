@@ -94,11 +94,10 @@ export default function MagicLinkForm({ onSuccess }: MagicLinkFormProps) {
 
       {success && (
         <p className="text-sm text-zinc-600 text-center">
-          Revisa tu bandeja de entrada y haz clic en el enlace para iniciar sesión.
+          Revisa tu bandeja de entrada y haz clic en el enlace para iniciar
+          sesión.
         </p>
       )}
     </form>
   );
 }
-
-

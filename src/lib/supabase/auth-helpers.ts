@@ -1,5 +1,5 @@
 import { createClient } from "./client";
-import type { AuthError } from "@supabase/supabase-js";
+import { getAuthErrorMessage as translateAuthError } from "@/utils/auth-error-messages";
 
 export interface AuthResult {
   success: boolean;
@@ -24,7 +24,7 @@ export async function signInWithPassword(
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -52,14 +52,15 @@ export async function signInWithMagicLink(
     const { data, error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: redirectTo || `${window.location.origin}/auth/callback`,
+        emailRedirectTo:
+          redirectTo || `${window.location.origin}/auth/callback`,
       },
     });
 
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -95,7 +96,7 @@ export async function signUp(
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -122,7 +123,7 @@ export async function signOut(): Promise<AuthResult> {
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -146,14 +147,14 @@ export async function resetPassword(email: string): Promise<AuthResult> {
     const { data, error } = await supabase.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
       }
     );
 
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -172,9 +173,7 @@ export async function resetPassword(email: string): Promise<AuthResult> {
 /**
  * Actualiza la contraseña del usuario
  */
-export async function updatePassword(
-  newPassword: string
-): Promise<AuthResult> {
+export async function updatePassword(newPassword: string): Promise<AuthResult> {
   try {
     const supabase = createClient();
     const { data, error } = await supabase.auth.updateUser({
@@ -184,7 +183,7 @@ export async function updatePassword(
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -219,7 +218,7 @@ export async function resendVerificationEmail(
     if (error) {
       return {
         success: false,
-        error: getAuthErrorMessage(error),
+        error: translateAuthError(error.message),
       };
     }
 
@@ -276,24 +275,3 @@ export async function getCurrentSession() {
     return { session: null, error };
   }
 }
-
-/**
- * Convierte errores de Supabase Auth a mensajes en español
- */
-function getAuthErrorMessage(error: AuthError): string {
-  const errorMessages: Record<string, string> = {
-    "Invalid login credentials": "Email o contraseña incorrectos",
-    "Email not confirmed": "Por favor verifica tu email antes de iniciar sesión",
-    "User already registered": "Este email ya está registrado",
-    "Password should be at least 6 characters":
-      "La contraseña debe tener al menos 6 caracteres",
-    "Signups not allowed": "El registro no está permitido en este momento",
-    "Email rate limit exceeded":
-      "Demasiados intentos. Por favor espera unos minutos",
-    "Forbidden": "No tienes permiso para realizar esta acción",
-    "Token has expired or is invalid": "El enlace ha expirado o no es válido",
-  };
-
-  return errorMessages[error.message] || error.message || "Error de autenticación";
-}
-

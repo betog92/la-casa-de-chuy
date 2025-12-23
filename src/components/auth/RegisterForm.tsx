@@ -109,9 +109,7 @@ export default function RegisterForm({
         {errors.password && (
           <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
         )}
-        <p className="mt-1 text-xs text-zinc-500">
-          Mínimo 6 caracteres
-        </p>
+        <p className="mt-1 text-xs text-zinc-500">Mínimo 6 caracteres</p>
       </div>
 
       <div>
@@ -145,4 +143,3 @@ export default function RegisterForm({
     </form>
   );
 }
-

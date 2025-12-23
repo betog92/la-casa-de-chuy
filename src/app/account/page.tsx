@@ -76,7 +76,7 @@ export default function AccountPage() {
           <h2 className="text-xl font-semibold text-[#103948] mb-4">
             Mis Reservas
           </h2>
-          
+
           {reservations.length === 0 ? (
             <div className="text-center py-8">
               <svg
@@ -92,9 +92,7 @@ export default function AccountPage() {
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
               </svg>
-              <p className="mt-4 text-zinc-600 mb-4">
-                Aún no tienes reservas
-              </p>
+              <p className="mt-4 text-zinc-600 mb-4">Aún no tienes reservas</p>
               <Link
                 href="/reservar"
                 className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
@@ -113,5 +111,3 @@ export default function AccountPage() {
     </div>
   );
 }
-
-

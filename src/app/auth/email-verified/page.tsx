@@ -66,13 +66,12 @@ export default function EmailVerifiedPage() {
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-8 text-center">
           <p className="text-zinc-700 mb-4">
-            Redirigiendo a tu cuenta en {countdown} segundo{countdown !== 1 ? "s" : ""}...
+            Redirigiendo a tu cuenta en {countdown} segundo
+            {countdown !== 1 ? "s" : ""}...
           </p>
-          
+
           {loading && (
-            <p className="text-sm text-zinc-500 mb-4">
-              Verificando sesión...
-            </p>
+            <p className="text-sm text-zinc-500 mb-4">Verificando sesión...</p>
           )}
 
           <Link
@@ -86,4 +85,3 @@ export default function EmailVerifiedPage() {
     </div>
   );
 }
-

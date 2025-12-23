@@ -5,7 +5,10 @@ interface AuthSuccessProps {
   className?: string;
 }
 
-export default function AuthSuccess({ message, className = "" }: AuthSuccessProps) {
+export default function AuthSuccess({
+  message,
+  className = "",
+}: AuthSuccessProps) {
   if (!message) return null;
 
   return (
@@ -32,5 +35,3 @@ export default function AuthSuccess({ message, className = "" }: AuthSuccessProp
     </div>
   );
 }
-
-

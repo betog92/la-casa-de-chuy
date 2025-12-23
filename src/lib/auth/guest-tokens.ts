@@ -1,6 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 
-const SECRET_KEY = process.env.NEXT_PUBLIC_GUEST_TOKEN_SECRET || "default-secret-key-change-in-production";
+const SECRET_KEY =
+  process.env.NEXT_PUBLIC_GUEST_TOKEN_SECRET ||
+  "default-secret-key-change-in-production";
 
 /**
  * Payload del token JWT para invitados
@@ -21,7 +23,7 @@ export async function generateGuestToken(
   reservationId: string
 ): Promise<string> {
   const secret = new TextEncoder().encode(SECRET_KEY);
-  
+
   // Token válido por 1 año (la validación real se hace verificando el estado de la reserva)
   const expirationTime = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
 
@@ -102,5 +104,3 @@ export function generateGuestReservationUrl(token: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   return `${baseUrl}/reservas/${token}`;
 }
-
-

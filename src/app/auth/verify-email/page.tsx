@@ -61,8 +61,8 @@ export default function VerifyEmailPage() {
             Verifica tu email
           </h1>
           <p className="text-zinc-600">
-            Te hemos enviado un enlace de verificación a tu email. Haz clic en el
-            enlace para activar tu cuenta.
+            Te hemos enviado un enlace de verificación a tu email. Haz clic en
+            el enlace para activar tu cuenta.
           </p>
         </div>
 
@@ -118,5 +118,3 @@ export default function VerifyEmailPage() {
     </div>
   );
 }
-
-

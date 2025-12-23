@@ -13,7 +13,9 @@ export default function ConfirmacionPage() {
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [guestReservationUrl, setGuestReservationUrl] = useState<string | null>(null);
+  const [guestReservationUrl, setGuestReservationUrl] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     const loadReservation = async () => {
@@ -227,7 +229,8 @@ export default function ConfirmacionPage() {
               Enlace de gestión de reserva
             </h3>
             <p className="mb-4 text-sm text-green-800">
-              Guarda este enlace para gestionar tu reserva (cancelar, reagendar, etc.):
+              Guarda este enlace para gestionar tu reserva (cancelar, reagendar,
+              etc.):
             </p>
             <div className="flex items-center gap-2 p-3 bg-white rounded border border-green-200">
               <input
@@ -263,10 +266,13 @@ export default function ConfirmacionPage() {
               ¿Quieres acceder a más beneficios?
             </h3>
             <p className="mb-4 text-sm text-zinc-700">
-              Crea una cuenta para acceder a descuentos por fidelización, puntos de lealtad, créditos y más.
+              Crea una cuenta para acceder a descuentos por fidelización, puntos
+              de lealtad, créditos y más.
             </p>
             <Link
-              href={`/auth/register?email=${encodeURIComponent(reservation.email)}`}
+              href={`/auth/register?email=${encodeURIComponent(
+                reservation.email
+              )}`}
               className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
             >
               Crear cuenta

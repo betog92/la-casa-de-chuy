@@ -3,17 +3,33 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
+import { getAuthErrorMessage } from "@/utils/auth-error-messages";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  signUp: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
-  signInWithMagicLink: (email: string) => Promise<{ success: boolean; error?: string }>;
-  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
-  resendVerificationEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithMagicLink: (
+    email: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  resetPassword: (
+    email: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  updatePassword: (
+    newPassword: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  resendVerificationEmail: (
+    email: string
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -105,9 +121,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
       }
     );
+
+    if (error) {
+      return {
+        success: false,
+        error: getAuthErrorMessage(error.message),
+      };
+    }
+
+    return { success: true };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
 
     if (error) {
       return {
@@ -147,6 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     signInWithMagicLink,
     resetPassword,
+    updatePassword,
     resendVerificationEmail,
   };
 
@@ -160,21 +192,3 @@ export function useAuth() {
   }
   return context;
 }
-
-function getAuthErrorMessage(message: string): string {
-  const errorMessages: Record<string, string> = {
-    "Invalid login credentials": "Email o contraseña incorrectos",
-    "Email not confirmed": "Por favor verifica tu email antes de iniciar sesión",
-    "User already registered": "Este email ya está registrado",
-    "Password should be at least 6 characters":
-      "La contraseña debe tener al menos 6 caracteres",
-    "Signups not allowed": "El registro no está permitido en este momento",
-    "Email rate limit exceeded":
-      "Demasiados intentos. Por favor espera unos minutos",
-    "Forbidden": "No tienes permiso para realizar esta acción",
-    "Token has expired or is invalid": "El enlace ha expirado o no es válido",
-  };
-
-  return errorMessages[message] || message || "Error de autenticación";
-}
-

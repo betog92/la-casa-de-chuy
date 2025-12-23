@@ -45,7 +45,10 @@ export async function GET(
     }
 
     // Verificar que la reserva no esté completada o cancelada
-    if (reservation.status === "completed" || reservation.status === "cancelled") {
+    if (
+      reservation.status === "completed" ||
+      reservation.status === "cancelled"
+    ) {
       return errorResponse(
         "Esta reserva ya ha sido completada o cancelada",
         403
@@ -60,5 +63,3 @@ export async function GET(
     return errorResponse(errorMessage, 500);
   }
 }
-
-
