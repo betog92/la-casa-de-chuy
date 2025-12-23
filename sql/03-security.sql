@@ -70,24 +70,18 @@ CREATE POLICY "Users can update own profile"
 -- NOTA: No hay política de INSERT porque queremos forzar que todas las reservas
 -- pasen por nuestras API routes donde se validan datos, disponibilidad, y pago.
 
--- Los usuarios pueden ver sus propias reservas (por email o user_id)
--- Nota: Para acceso anónimo, se debe verificar por email en el código de la aplicación
--- Ahora que users.id = auth.users.id, podemos simplificar la consulta
+-- Los usuarios pueden ver sus propias reservas
+-- Como el usuario debe verificar su email antes de hacer login (configuración de Supabase),
+-- todas sus reservas ya tienen user_id vinculado cuando accede a la aplicación
 CREATE POLICY "Users can view own reservations"
   ON reservations FOR SELECT
-  USING (
-    (user_id IS NOT NULL AND (select auth.uid()) = user_id)
-    OR (email IS NOT NULL AND LOWER(TRIM(email)) = LOWER(TRIM((SELECT email FROM auth.users WHERE id = (select auth.uid()) LIMIT 1))))
-  );
+  USING (user_id IS NOT NULL AND (select auth.uid()) = user_id);
 
 -- Los usuarios pueden actualizar sus propias reservas
 -- (Útil para futuras funcionalidades como cancelar/reagendar desde el cliente)
 CREATE POLICY "Users can update own reservations"
   ON reservations FOR UPDATE
-  USING (
-    (user_id IS NOT NULL AND (select auth.uid()) = user_id)
-    OR (email IS NOT NULL AND LOWER(TRIM(email)) = LOWER(TRIM((SELECT email FROM auth.users WHERE id = (select auth.uid()) LIMIT 1))))
-  );
+  USING (user_id IS NOT NULL AND (select auth.uid()) = user_id);
 
 -- =====================================================
 -- 5. POLÍTICAS RLS PARA AVAILABILITY
