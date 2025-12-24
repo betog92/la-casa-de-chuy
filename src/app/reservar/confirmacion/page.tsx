@@ -81,7 +81,7 @@ export default function ConfirmacionPage() {
       locale: es,
     });
     // Capitalizar solo la primera letra
-    return formatted.charAt(0).toUpperCase() + formatted.slice(1).toLowerCase();
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   };
 
   // Formatear hora para mostrar (formato 12 horas)
