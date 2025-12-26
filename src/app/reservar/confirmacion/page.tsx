@@ -32,10 +32,14 @@ export default function ConfirmacionPage() {
         const savedGuestUrl = sessionStorage.getItem("guestReservationUrl");
         if (savedGuestUrl) {
           setGuestReservationUrl(savedGuestUrl);
+          // Limpiar datos temporales de sesión de reserva
           sessionStorage.removeItem("guestReservationUrl");
           sessionStorage.removeItem("guestToken");
         }
       }
+
+      // Limpiar reservationData si existe (datos temporales de selección de fecha/hora)
+      sessionStorage.removeItem("reservationData");
 
       try {
         // Usar API route en lugar de cliente directo (evita problemas de RLS)

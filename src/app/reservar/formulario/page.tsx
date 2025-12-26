@@ -585,6 +585,8 @@ export default function FormularioReservaPage() {
       }
 
       // Paso 4: Limpiar sessionStorage y redirigir a confirmación
+      // Limpiar datos temporales de reserva (se mantienen guestToken y guestReservationUrl
+      // para que la página de confirmación los use)
       sessionStorage.removeItem("reservationData");
       router.push(`/reservar/confirmacion?id=${reservationId}`);
     } catch (err: unknown) {

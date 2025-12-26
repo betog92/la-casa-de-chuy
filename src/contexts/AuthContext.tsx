@@ -53,10 +53,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escuchar cambios en la autenticación
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Manejo de eventos de expiración y refresh
+      if (event === "TOKEN_REFRESHED") {
+        // Token refrescado exitosamente (automático, no requiere acción del usuario)
+        // Solo logueamos para debugging si es necesario
+        // console.log("Token refrescado automáticamente");
+      } else if (event === "SIGNED_OUT") {
+        // Sesión cerrada (puede ser por expiración del refresh token o signOut explícito)
+        // Las páginas que requieren autenticación manejarán su propia redirección
+        // Aquí solo actualizamos el estado, sin forzar redirección global
+      }
     });
 
     return () => subscription.unsubscribe();
