@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { format, parse } from "date-fns";
+import { format, parse, addHours } from "date-fns";
 import { es } from "date-fns/locale";
 import axios from "axios";
 import type { Reservation } from "@/types/reservation";
@@ -37,6 +37,31 @@ const formatDisplayTime = (time: string): string => {
     return format(date, "h:mm a", { locale: es });
   } catch {
     return time;
+  }
+};
+
+// Formatear rango de hora completo (1 hora desde start_time)
+// NOTA: Aunque los slots técnicos en la BD son de 45 minutos, mostramos 1 hora al usuario
+// porque la sesión real de fotografía es de 1 hora completa.
+const formatTimeRange = (startTime: string): string => {
+  try {
+    const [hours, minutes] = startTime.split(":").slice(0, 2).map(Number);
+    const startDate = new Date();
+    startDate.setHours(hours, minutes, 0, 0);
+
+    // Sumar 1 hora completa (sesión real de fotografía)
+    const endDate = addHours(startDate, 1);
+
+    const startFormatted = format(startDate, "h:mm a", {
+      locale: es,
+    }).toLowerCase();
+    const endFormatted = format(endDate, "h:mm a", {
+      locale: es,
+    }).toLowerCase();
+
+    return `${startFormatted} - ${endFormatted}`;
+  } catch {
+    return startTime;
   }
 };
 
@@ -335,8 +360,7 @@ export default function AccountPage() {
                           {formatDisplayDate(reservation.date)}
                         </p>
                         <p className="text-base text-zinc-700">
-                          {formatDisplayTime(reservation.start_time)} -{" "}
-                          {formatDisplayTime(reservation.end_time)}
+                          {formatTimeRange(reservation.start_time)}
                         </p>
                       </div>
                       <span
@@ -373,7 +397,7 @@ export default function AccountPage() {
                           )}
                         </div>
                         <Link
-                          href={`/reservar/confirmacion?reservationId=${reservation.id}`}
+                          href={`/reservar/confirmacion?id=${reservation.id}`}
                           className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded-lg hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap self-start sm:self-auto"
                         >
                           Ver detalles
