@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -9,12 +9,78 @@ import { es } from "date-fns/locale";
 import axios from "axios";
 import type { Reservation } from "@/types/reservation";
 
+interface UserProfile {
+  email: string;
+  name: string | null;
+  phone: string | null;
+}
+
+// Funciones helper fuera del componente para evitar recrearlas en cada render
+const formatDisplayDate = (dateString: string): string => {
+  try {
+    const date = parse(dateString, "yyyy-MM-dd", new Date());
+    const formatted = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
+      locale: es,
+    });
+    // Capitalizar solo la primera letra (date-fns devuelve en minúsculas)
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  } catch {
+    return dateString;
+  }
+};
+
+const formatDisplayTime = (time: string): string => {
+  try {
+    const [hours, minutes] = time.split(":").slice(0, 2).map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return format(date, "h:mm a", { locale: es });
+  } catch {
+    return time;
+  }
+};
+
+const getStatusLabel = (status: string): string => {
+  const statusLabels: Record<string, string> = {
+    confirmed: "Confirmada",
+    cancelled: "Cancelada",
+    completed: "Completada",
+  };
+  return statusLabels[status] || status;
+};
+
+const getStatusColor = (status: string): string => {
+  const statusColors: Record<string, string> = {
+    confirmed: "bg-green-100 text-green-800",
+    cancelled: "bg-red-100 text-red-800",
+    completed: "bg-blue-100 text-blue-800",
+  };
+  return statusColors[status] || "bg-zinc-100 text-zinc-800";
+};
+
+// Formatear teléfono para mejor legibilidad (ej: "8116605611" -> "81 1660 5611")
+const formatPhone = (phone: string): string => {
+  // Remover todos los espacios, guiones y caracteres especiales
+  const cleaned = phone.replace(/\s|-|\(|\)/g, "");
+
+  // Si tiene 10 dígitos, formatear como "XX XXXX XXXX"
+  if (cleaned.length === 10) {
+    return `${cleaned.slice(0, 2)} ${cleaned.slice(2, 6)} ${cleaned.slice(6)}`;
+  }
+
+  // Si tiene otro formato, retornar el original
+  return phone;
+};
+
 export default function AccountPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationsLoading, setReservationsLoading] = useState(true);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string>("");
+  const hasLoadedRef = useRef(false);
+  const profileLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -25,8 +91,14 @@ export default function AccountPage() {
 
   useEffect(() => {
     const loadReservations = async () => {
-      if (!user) {
+      // Solo cargar si hay usuario y no se han cargado las reservas para este usuario
+      if (!user?.id) {
         setReservationsLoading(false);
+        return;
+      }
+
+      // Evitar recargar si ya se cargaron las reservas para este usuario
+      if (hasLoadedRef.current) {
         return;
       }
 
@@ -36,6 +108,7 @@ export default function AccountPage() {
         const response = await axios.get("/api/reservations/user");
         if (response.data.success) {
           setReservations(response.data.reservations || []);
+          hasLoadedRef.current = true;
         } else {
           setError(response.data.error || "Error al cargar reservas");
         }
@@ -52,46 +125,42 @@ export default function AccountPage() {
     };
 
     loadReservations();
-  }, [user]);
+  }, [user?.id]);
 
-  // Funciones para formatear fecha y hora
-  const formatDisplayDate = (dateString: string): string => {
-    try {
-      const date = parse(dateString, "yyyy-MM-dd", new Date());
-      return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
-    } catch {
-      return dateString;
-    }
-  };
+  // Cargar perfil del usuario
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user?.id) {
+        setProfile(null);
+        profileLoadedRef.current = false;
+        return;
+      }
 
-  const formatDisplayTime = (time: string): string => {
-    try {
-      const [hours, minutes] = time.split(":").slice(0, 2).map(Number);
-      const date = new Date();
-      date.setHours(hours, minutes, 0, 0);
-      return format(date, "h:mm a", { locale: es });
-    } catch {
-      return time;
-    }
-  };
+      // Evitar recargar si ya se cargó el perfil para este usuario
+      if (profileLoadedRef.current) {
+        return;
+      }
 
-  const getStatusLabel = (status: string): string => {
-    const statusLabels: Record<string, string> = {
-      confirmed: "Confirmada",
-      cancelled: "Cancelada",
-      completed: "Completada",
+      try {
+        const response = await axios.get("/api/users/profile");
+        if (response.data.success) {
+          setProfile(response.data);
+          profileLoadedRef.current = true;
+        }
+      } catch (err) {
+        // Silenciosamente fallar, no es crítico si no se puede cargar el perfil
+        console.error("Error loading user profile:", err);
+      }
     };
-    return statusLabels[status] || status;
-  };
 
-  const getStatusColor = (status: string): string => {
-    const statusColors: Record<string, string> = {
-      confirmed: "bg-green-100 text-green-800",
-      cancelled: "bg-red-100 text-red-800",
-      completed: "bg-blue-100 text-blue-800",
-    };
-    return statusColors[status] || "bg-zinc-100 text-zinc-800";
-  };
+    loadProfile();
+  }, [user?.id]);
+
+  // Resetear los flags cuando cambia el usuario
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    profileLoadedRef.current = false;
+  }, [user?.id]);
 
   if (loading || reservationsLoading) {
     return (
@@ -127,14 +196,83 @@ export default function AccountPage() {
 
         {/* Información del usuario */}
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-semibold text-[#103948] mb-4">
+          <h2 className="text-xl font-semibold text-[#103948] mb-6">
             Información de la cuenta
           </h2>
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm text-zinc-600 mb-1">Email</p>
-              <p className="text-lg font-medium text-[#103948]">{user.email}</p>
+          <div className="space-y-5">
+            {profile?.name && (
+              <div className="flex items-start gap-3">
+                <div className="mt-1">
+                  <svg
+                    className="h-5 w-5 text-zinc-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-zinc-600 mb-1">Nombre</p>
+                  <p className="text-lg font-medium text-[#103948]">
+                    {profile.name}
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="flex items-start gap-3">
+              <div className="mt-1">
+                <svg
+                  className="h-5 w-5 text-zinc-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-zinc-600 mb-1">Email</p>
+                <p className="text-lg font-medium text-[#103948]">
+                  {profile?.email || user.email}
+                </p>
+              </div>
             </div>
+            {profile?.phone && (
+              <div className="flex items-start gap-3">
+                <div className="mt-1">
+                  <svg
+                    className="h-5 w-5 text-zinc-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                    />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
+                  <p className="text-lg font-medium text-[#103948]">
+                    {formatPhone(profile.phone)}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -180,43 +318,40 @@ export default function AccountPage() {
                   key={reservation.id}
                   className="border border-zinc-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-[#103948]">
-                          {reservation.name}
-                        </h3>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
-                            reservation.status
-                          )}`}
-                        >
-                          {getStatusLabel(reservation.status)}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-zinc-600">
-                        <div>
-                          <span className="font-medium">Fecha:</span>{" "}
+                  <div className="flex flex-col gap-3">
+                    {/* Fecha, horario y badge de estado */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-lg font-semibold text-[#103948]">
                           {formatDisplayDate(reservation.date)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Horario:</span>{" "}
+                        </p>
+                        <p className="text-base text-zinc-700">
                           {formatDisplayTime(reservation.start_time)} -{" "}
                           {formatDisplayTime(reservation.end_time)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Precio:</span> $
-                          {reservation.price.toLocaleString("es-MX", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
-                        {reservation.original_price !== reservation.price && (
-                          <div>
-                            <span className="font-medium">
-                              Precio original:
-                            </span>{" "}
-                            <span className="line-through text-zinc-400">
+                        </p>
+                      </div>
+                      <span
+                        className={`px-3 py-1.5 text-sm font-medium rounded-full whitespace-nowrap self-center ${getStatusColor(
+                          reservation.status
+                        )}`}
+                      >
+                        {getStatusLabel(reservation.status)}
+                      </span>
+                    </div>
+
+                    {/* Precio y botón Ver detalles */}
+                    <div className="pt-3 border-t border-zinc-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xl font-bold text-[#103948]">
+                            $
+                            {reservation.price.toLocaleString("es-MX", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </p>
+                          {reservation.original_price !== reservation.price && (
+                            <span className="text-sm text-zinc-400 line-through">
                               $
                               {reservation.original_price.toLocaleString(
                                 "es-MX",
@@ -226,17 +361,15 @@ export default function AccountPage() {
                                 }
                               )}
                             </span>
-                          </div>
-                        )}
+                          )}
+                        </div>
+                        <Link
+                          href={`/reservar/confirmacion?reservationId=${reservation.id}`}
+                          className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded-lg hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap self-start sm:self-auto"
+                        >
+                          Ver detalles
+                        </Link>
                       </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/reservar/confirmacion?reservationId=${reservation.id}`}
-                        className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded-lg hover:bg-[#103948] hover:text-white transition-colors"
-                      >
-                        Ver detalles
-                      </Link>
                     </div>
                   </div>
                 </div>
