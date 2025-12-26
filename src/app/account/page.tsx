@@ -81,6 +81,7 @@ export default function AccountPage() {
   const [error, setError] = useState<string>("");
   const hasLoadedRef = useRef(false);
   const profileLoadedRef = useRef(false);
+  const previousUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -91,6 +92,12 @@ export default function AccountPage() {
 
   useEffect(() => {
     const loadReservations = async () => {
+      // Resetear flag si cambió el usuario
+      if (previousUserIdRef.current !== user?.id) {
+        hasLoadedRef.current = false;
+        previousUserIdRef.current = user?.id ?? null;
+      }
+
       // Solo cargar si hay usuario y no se han cargado las reservas para este usuario
       if (!user?.id) {
         setReservationsLoading(false);
@@ -130,9 +137,13 @@ export default function AccountPage() {
   // Cargar perfil del usuario
   useEffect(() => {
     const loadProfile = async () => {
+      // Resetear flag si cambió el usuario
+      if (previousUserIdRef.current !== user?.id) {
+        profileLoadedRef.current = false;
+      }
+
       if (!user?.id) {
         setProfile(null);
-        profileLoadedRef.current = false;
         return;
       }
 
@@ -144,7 +155,9 @@ export default function AccountPage() {
       try {
         const response = await axios.get("/api/users/profile");
         if (response.data.success) {
-          setProfile(response.data);
+          // Extraer solo los datos del perfil, no el objeto completo con success
+          const { email, name, phone } = response.data;
+          setProfile({ email, name, phone });
           profileLoadedRef.current = true;
         }
       } catch (err) {
@@ -154,12 +167,6 @@ export default function AccountPage() {
     };
 
     loadProfile();
-  }, [user?.id]);
-
-  // Resetear los flags cuando cambia el usuario
-  useEffect(() => {
-    hasLoadedRef.current = false;
-    profileLoadedRef.current = false;
   }, [user?.id]);
 
   if (loading || reservationsLoading) {
