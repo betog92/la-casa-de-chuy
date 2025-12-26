@@ -81,7 +81,8 @@ export default function AccountPage() {
   const [error, setError] = useState<string>("");
   const hasLoadedRef = useRef(false);
   const profileLoadedRef = useRef(false);
-  const previousUserIdRef = useRef<string | null>(null);
+  const previousUserIdForReservationsRef = useRef<string | null>(null);
+  const previousUserIdForProfileRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -93,9 +94,9 @@ export default function AccountPage() {
   useEffect(() => {
     const loadReservations = async () => {
       // Resetear flag si cambió el usuario
-      if (previousUserIdRef.current !== user?.id) {
+      if (previousUserIdForReservationsRef.current !== user?.id) {
         hasLoadedRef.current = false;
-        previousUserIdRef.current = user?.id ?? null;
+        previousUserIdForReservationsRef.current = user?.id ?? null;
       }
 
       // Solo cargar si hay usuario y no se han cargado las reservas para este usuario
@@ -138,8 +139,9 @@ export default function AccountPage() {
   useEffect(() => {
     const loadProfile = async () => {
       // Resetear flag si cambió el usuario
-      if (previousUserIdRef.current !== user?.id) {
+      if (previousUserIdForProfileRef.current !== user?.id) {
         profileLoadedRef.current = false;
+        previousUserIdForProfileRef.current = user?.id ?? null;
       }
 
       if (!user?.id) {
