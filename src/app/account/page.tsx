@@ -104,6 +104,7 @@ export default function AccountPage() {
   const [reservationsLoading, setReservationsLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string>("");
+  const [retryKey, setRetryKey] = useState(0); // Para forzar re-ejecución del efecto en caso de error
   const hasLoadedRef = useRef(false);
   const profileLoadedRef = useRef(false);
   const previousUserIdForReservationsRef = useRef<string | null>(null);
@@ -158,7 +159,7 @@ export default function AccountPage() {
     };
 
     loadReservations();
-  }, [user?.id]);
+  }, [user?.id, retryKey]); // Agregar retryKey para permitir reintentos
 
   // Cargar perfil del usuario
   useEffect(() => {
@@ -318,7 +319,17 @@ export default function AccountPage() {
 
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">{error}</p>
+              <p className="text-sm text-red-800 mb-3">{error}</p>
+              <button
+                onClick={() => {
+                  hasLoadedRef.current = false;
+                  setError("");
+                  setRetryKey((prev) => prev + 1); // Incrementar retryKey fuerza re-ejecución del efecto
+                }}
+                className="px-4 py-2 text-sm font-medium bg-[#103948] text-white rounded-lg hover:bg-[#0d2d38] transition-colors"
+              >
+                Reintentar
+              </button>
             </div>
           )}
 
