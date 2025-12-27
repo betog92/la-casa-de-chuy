@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS reservations (
   cancelled_at TIMESTAMP WITH TIME ZONE,  -- Fecha/hora de cancelación
   cancellation_reason TEXT,  -- Razón de cancelación (opcional)
   reschedule_count INTEGER DEFAULT 0,
+  -- Campos de información original para reservas reagendadas (agregados en migration 10)
+  original_date DATE,  -- Fecha original de la reserva antes del reagendamiento
+  original_start_time TIME,  -- Horario original de la reserva antes del reagendamiento
+  original_payment_id TEXT,  -- ID del pago original de la reserva antes del reagendamiento
+  additional_payment_id TEXT,  -- ID del pago adicional realizado para el reagendamiento (si aplica)
+  additional_payment_amount DECIMAL(10, 2),  -- Monto del pago adicional realizado para el reagendamiento (si aplica)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

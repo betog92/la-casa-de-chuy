@@ -6,7 +6,6 @@ import Calendar from "react-calendar";
 import {
   format,
   addMonths,
-  addHours,
   startOfMonth,
   endOfMonth,
   isSameMonth,
@@ -16,6 +15,7 @@ import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
 import { calculatePriceWithCustom, getDayType } from "@/utils/pricing";
+import { formatTimeRange, formatCurrency } from "@/utils/formatters";
 import type { TimeSlot } from "@/utils/availability";
 import "react-calendar/dist/Calendar.css";
 
@@ -122,29 +122,6 @@ export default function ReservarPage() {
       date.getDay() === 0 ? SUNDAY_SLOTS : WEEKDAY_SLOTS,
     []
   );
-
-  // Función para formatear el rango de hora en formato 12 horas - MEMOIZADA
-  // NOTA: Aunque los slots técnicos en la BD son de 45 minutos, mostramos 1 hora al usuario
-  // porque la sesión real de fotografía es de 1 hora completa.
-  // Los 45 minutos del slot permiten tiempo de limpieza/preparación entre sesiones.
-  const formatTimeRange = useCallback((startTime: string): string => {
-    // Parsear la hora de inicio (formato "HH:mm")
-    const [hours, minutes] = startTime.split(":").map(Number);
-
-    // Crear una fecha base para hacer cálculos
-    const baseDate = new Date();
-    baseDate.setHours(hours, minutes, 0, 0);
-
-    // Sumar 1 hora (sesión real de fotografía)
-    const endDate = addHours(baseDate, 1);
-
-    // Formatear ambas horas en formato 12 horas con su período AM/PM respectivo
-    // Esto corrige el caso donde el rango cruza el mediodía (ej: 11:00 AM → 12:00 PM)
-    const startFormatted = format(baseDate, "h:mm a").toLowerCase();
-    const endFormatted = format(endDate, "h:mm a").toLowerCase();
-
-    return `${startFormatted} - ${endFormatted}`;
-  }, []);
 
   // Memoizar la disponibilidad de todos los horarios para evitar cálculos repetidos
   const timeAvailabilityMap = useMemo(() => {
@@ -581,7 +558,7 @@ export default function ReservarPage() {
                           {getDayTypeLabel(selectedDate)}
                         </span>
                         <span className="text-xl font-bold text-zinc-900 sm:text-2xl">
-                          ${price.toLocaleString("es-MX")} MXN
+                          ${formatCurrency(price)} MXN
                         </span>
                       </div>
                     </div>

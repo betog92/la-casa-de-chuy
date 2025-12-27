@@ -4,9 +4,13 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { format, parse, addHours } from "date-fns";
-import { es } from "date-fns/locale";
 import axios from "axios";
+import {
+  formatDisplayDate,
+  formatTimeRange,
+  formatReservationId,
+  formatCurrency,
+} from "@/utils/formatters";
 import type { Reservation } from "@/types/reservation";
 
 interface UserProfile {
@@ -15,57 +19,12 @@ interface UserProfile {
   phone: string | null;
 }
 
-// Funciones helper fuera del componente para evitar recrearlas en cada render
-const formatDisplayDate = (dateString: string): string => {
-  try {
-    const date = parse(dateString, "yyyy-MM-dd", new Date());
-    const formatted = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
-      locale: es,
-    });
-    // Capitalizar solo la primera letra (date-fns devuelve en minúsculas)
-    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-  } catch {
-    return dateString;
+const getStatusLabel = (status: string, rescheduleCount?: number): string => {
+  // Si la reserva fue reagendada y está confirmada, mostrar "Reagendada"
+  if (status === "confirmed" && rescheduleCount && rescheduleCount > 0) {
+    return "Reagendada";
   }
-};
 
-const formatDisplayTime = (time: string): string => {
-  try {
-    const [hours, minutes] = time.split(":").slice(0, 2).map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return format(date, "h:mm a", { locale: es });
-  } catch {
-    return time;
-  }
-};
-
-// Formatear rango de hora completo (1 hora desde start_time)
-// NOTA: Aunque los slots técnicos en la BD son de 45 minutos, mostramos 1 hora al usuario
-// porque la sesión real de fotografía es de 1 hora completa.
-const formatTimeRange = (startTime: string): string => {
-  try {
-    const [hours, minutes] = startTime.split(":").slice(0, 2).map(Number);
-    const startDate = new Date();
-    startDate.setHours(hours, minutes, 0, 0);
-
-    // Sumar 1 hora completa (sesión real de fotografía)
-    const endDate = addHours(startDate, 1);
-
-    const startFormatted = format(startDate, "h:mm a", {
-      locale: es,
-    }).toLowerCase();
-    const endFormatted = format(endDate, "h:mm a", {
-      locale: es,
-    }).toLowerCase();
-
-    return `${startFormatted} - ${endFormatted}`;
-  } catch {
-    return startTime;
-  }
-};
-
-const getStatusLabel = (status: string): string => {
   const statusLabels: Record<string, string> = {
     confirmed: "Confirmada",
     cancelled: "Cancelada",
@@ -74,7 +33,12 @@ const getStatusLabel = (status: string): string => {
   return statusLabels[status] || status;
 };
 
-const getStatusColor = (status: string): string => {
+const getStatusColor = (status: string, rescheduleCount?: number): string => {
+  // Si la reserva fue reagendada y está confirmada, usar color diferente
+  if (status === "confirmed" && rescheduleCount && rescheduleCount > 0) {
+    return "bg-orange-100 text-orange-800";
+  }
+
   const statusColors: Record<string, string> = {
     confirmed: "bg-green-100 text-green-800",
     cancelled: "bg-red-100 text-red-800",
@@ -370,16 +334,25 @@ export default function AccountPage() {
                         <p className="text-lg font-semibold text-[#103948]">
                           {formatDisplayDate(reservation.date)}
                         </p>
-                        <p className="text-base text-zinc-700">
-                          {formatTimeRange(reservation.start_time)}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-base text-zinc-700">
+                            {formatTimeRange(reservation.start_time)}
+                          </p>
+                          <span className="px-2 py-0.5 text-xs font-mono font-medium bg-zinc-100 text-zinc-600 rounded">
+                            ID: {formatReservationId(reservation.id)}
+                          </span>
+                        </div>
                       </div>
                       <span
                         className={`px-3 py-1.5 text-sm font-medium rounded-full whitespace-nowrap self-center ${getStatusColor(
-                          reservation.status
+                          reservation.status,
+                          reservation.reschedule_count
                         )}`}
                       >
-                        {getStatusLabel(reservation.status)}
+                        {getStatusLabel(
+                          reservation.status,
+                          reservation.reschedule_count
+                        )}
                       </span>
                     </div>
 
@@ -388,27 +361,16 @@ export default function AccountPage() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xl font-bold text-[#103948]">
-                            $
-                            {reservation.price.toLocaleString("es-MX", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
+                            ${formatCurrency(reservation.price)}
                           </p>
                           {reservation.original_price !== reservation.price && (
                             <span className="text-sm text-zinc-400 line-through">
-                              $
-                              {reservation.original_price.toLocaleString(
-                                "es-MX",
-                                {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                }
-                              )}
+                              ${formatCurrency(reservation.original_price)}
                             </span>
                           )}
                         </div>
                         <Link
-                          href={`/reservar/confirmacion?id=${reservation.id}`}
+                          href={`/reservaciones/${reservation.id}`}
                           className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded-lg hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap self-start sm:self-auto"
                         >
                           Ver detalles

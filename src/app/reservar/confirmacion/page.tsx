@@ -2,15 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { format, parse, addHours } from "date-fns";
-import { es } from "date-fns/locale";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  formatDisplayDate,
+  formatTimeRange,
+  formatCurrency,
+  formatReservationId,
+} from "@/utils/formatters";
 import type { Reservation } from "@/types/reservation";
 
 export default function ConfirmacionPage() {
   const searchParams = useSearchParams();
   const reservationId = searchParams.get("id");
+  const rescheduled = searchParams.get("rescheduled");
+  const paid = searchParams.get("paid");
+  const additionalAmountParam = searchParams.get("additionalAmount");
   const { user, loading: authLoading } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,43 +84,6 @@ export default function ConfirmacionPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [reservationId]);
-
-  // Formatear fecha para mostrar (solo primera letra en mayúscula)
-  const formatDisplayDate = (dateString: string): string => {
-    const date = parse(dateString, "yyyy-MM-dd", new Date());
-    const formatted = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
-      locale: es,
-    });
-    // Capitalizar solo la primera letra
-    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-  };
-
-  // Formatear hora para mostrar (formato 12 horas)
-  const formatDisplayTime = (time: string): string => {
-    const [hours, minutes] = time.split(":").slice(0, 2).map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return format(date, "h:mm a", { locale: es }).toLowerCase();
-  };
-
-  // Formatear rango de hora completo (1 hora desde start_time)
-  const formatTimeRange = (startTime: string): string => {
-    const [hours, minutes] = startTime.split(":").slice(0, 2).map(Number);
-    const startDate = new Date();
-    startDate.setHours(hours, minutes, 0, 0);
-
-    // Sumar 1 hora completa (sesión real de fotografía)
-    const endDate = addHours(startDate, 1);
-
-    const startFormatted = format(startDate, "h:mm a", {
-      locale: es,
-    }).toLowerCase();
-    const endFormatted = format(endDate, "h:mm a", {
-      locale: es,
-    }).toLowerCase();
-
-    return `${startFormatted} - ${endFormatted}`;
-  };
 
   // Determinar si mostrar secciones de invitado (solo si NO está autenticado y tiene guestReservationUrl)
   const isGuest = !user && guestReservationUrl;
@@ -186,10 +156,16 @@ export default function ConfirmacionPage() {
             </svg>
           </div>
           <h1 className="mb-2 text-3xl font-bold text-zinc-900 sm:text-4xl">
-            ¡Reserva Confirmada!
+            {rescheduled === "true"
+              ? "¡Reserva Reagendada!"
+              : "¡Reserva Confirmada!"}
           </h1>
           <p className="text-zinc-600">
-            Tu reserva ha sido procesada exitosamente
+            {rescheduled === "true"
+              ? paid === "true"
+                ? "Tu reserva ha sido reagendada exitosamente. Se ha procesado el pago adicional."
+                : "Tu reserva ha sido reagendada exitosamente."
+              : "Tu reserva ha sido procesada exitosamente"}
           </p>
         </div>
 
@@ -202,21 +178,26 @@ export default function ConfirmacionPage() {
             <div className="flex justify-between">
               <span className="font-medium">Reserva ID:</span>
               <span className="font-mono text-sm text-zinc-600">
-                {reservation.id.substring(0, 8)}...
+                {formatReservationId(reservation.id)}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Nombre:</span>
-              <span>{reservation.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Email:</span>
-              <span>{reservation.email}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Teléfono:</span>
-              <span>{reservation.phone}</span>
-            </div>
+            {/* Solo mostrar nombre, email y teléfono si NO es un reagendamiento */}
+            {rescheduled !== "true" && (
+              <>
+                <div className="flex justify-between">
+                  <span className="font-medium">Nombre:</span>
+                  <span>{reservation.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Email:</span>
+                  <span>{reservation.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Teléfono:</span>
+                  <span>{reservation.phone}</span>
+                </div>
+              </>
+            )}
             <div className="border-t border-zinc-200 pt-4">
               <div className="mb-3 flex justify-between">
                 <span className="font-medium">Fecha:</span>
@@ -227,9 +208,20 @@ export default function ConfirmacionPage() {
                 <span>{formatTimeRange(reservation.start_time)}</span>
               </div>
               <div className="flex justify-between border-t border-zinc-200 pt-3">
-                <span className="font-semibold text-lg">Total Pagado:</span>
                 <span className="font-semibold text-lg">
-                  ${reservation.price.toLocaleString("es-MX")} MXN
+                  {rescheduled === "true" && paid === "true"
+                    ? "Pago Adicional:"
+                    : "Total Pagado:"}
+                </span>
+                <span className="font-semibold text-lg">
+                  $
+                  {rescheduled === "true" && paid === "true" && additionalAmountParam
+                    ? (() => {
+                        const amount = parseFloat(additionalAmountParam);
+                        return isNaN(amount) ? formatCurrency(reservation.price) : formatCurrency(amount);
+                      })()
+                    : formatCurrency(reservation.price)}{" "}
+                  MXN
                 </span>
               </div>
             </div>
@@ -391,7 +383,7 @@ export default function ConfirmacionPage() {
             href="/reservar"
             className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
           >
-            Hacer Otra Reserva
+            Hacer otra reserva
           </Link>
           <Link
             href="/"

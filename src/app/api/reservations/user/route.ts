@@ -45,11 +45,10 @@ export async function GET(request: NextRequest) {
     const { data: reservations, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount"
       )
       .eq("user_id", user.id)
-      .order("date", { ascending: false })
-      .order("start_time", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error loading user reservations:", error);

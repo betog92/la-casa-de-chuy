@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { getMonterreyToday } from "@/utils/business-days";
 import {
   successResponse,
   errorResponse,
@@ -37,8 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar fecha de expiración
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getMonterreyToday();
 
     const validFrom = new Date(discountCode.valid_from);
     validFrom.setHours(0, 0, 0, 0);

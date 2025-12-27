@@ -1,6 +1,7 @@
-import { format, getDay, isSameDay, differenceInDays } from "date-fns";
+import { format, getDay, isSameDay, differenceInDays, startOfDay } from "date-fns";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { getMonterreyToday } from "./business-days";
 
 // =====================================================
 // CONSTANTES DE PRECIOS BASE
@@ -181,11 +182,8 @@ export function applyLastMinuteDiscount(
   date: Date,
   basePrice: number
 ): { price: number; discount: number; applied: boolean } {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const reservationDate = new Date(date);
-  reservationDate.setHours(0, 0, 0, 0);
+  const today = getMonterreyToday();
+  const reservationDate = startOfDay(date);
 
   // Calcular diferencia en días usando date-fns (más preciso)
   const diffDays = differenceInDays(reservationDate, today);
