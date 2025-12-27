@@ -33,7 +33,9 @@ export default function ReservationDetailsPage() {
   const { user, loading: authLoading } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // Solo para errores de carga inicial
+  const [actionError, setActionError] = useState<string | null>(null); // Para errores de cancelación
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null); // Para errores de reagendamiento
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -141,6 +143,7 @@ export default function ReservationDetailsPage() {
 
     try {
       setCancelling(true);
+      setActionError(null);
       const response = await fetch(
         `/api/reservations/${reservationId}/cancel`,
         {
@@ -151,7 +154,7 @@ export default function ReservationDetailsPage() {
       const result = await response.json();
 
       if (!result.success) {
-        setError(result.error || "Error al cancelar la reserva");
+        setActionError(result.error || "Error al cancelar la reserva");
         setShowCancelModal(false);
         return;
       }
@@ -167,7 +170,7 @@ export default function ReservationDetailsPage() {
       setShowCancelModal(false);
     } catch (err) {
       console.error("Error cancelling reservation:", err);
-      setError("Error inesperado al cancelar la reserva");
+      setActionError("Error inesperado al cancelar la reserva");
       setShowCancelModal(false);
     } finally {
       setCancelling(false);
@@ -179,7 +182,7 @@ export default function ReservationDetailsPage() {
 
     try {
       setRescheduling(true);
-      setError(null);
+      setRescheduleError(null);
       const response = await fetch(
         `/api/reservations/${reservationId}/reschedule`,
         {
@@ -194,8 +197,8 @@ export default function ReservationDetailsPage() {
       const result = await response.json();
 
       if (!result.success) {
-        setError(result.error || "Error al reagendar la reserva");
-        setShowRescheduleModal(false);
+        setRescheduleError(result.error || "Error al reagendar la reserva");
+        // NO cerrar el modal cuando hay error - permitir que el usuario intente de nuevo
         return;
       }
 
@@ -216,11 +219,17 @@ export default function ReservationDetailsPage() {
       );
     } catch (err) {
       console.error("Error rescheduling reservation:", err);
-      setError("Error inesperado al reagendar la reserva");
-      setShowRescheduleModal(false);
+      setRescheduleError("Error inesperado al reagendar la reserva");
+      // NO cerrar el modal cuando hay error
     } finally {
       setRescheduling(false);
     }
+  };
+
+  // Limpiar error de reagendamiento cuando el modal se cierra
+  const handleCloseRescheduleModal = () => {
+    setShowRescheduleModal(false);
+    setRescheduleError(null);
   };
 
   const businessDays = getBusinessDaysUntilReservation();
@@ -271,6 +280,39 @@ export default function ReservationDetailsPage() {
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
+        {/* Mostrar error de cancelación como banner discreto */}
+        {actionError && (
+          <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-red-800 mb-1">
+                  Error
+                </h3>
+                <p className="text-sm text-red-700">{actionError}</p>
+              </div>
+              <button
+                onClick={() => setActionError(null)}
+                className="ml-4 text-red-600 hover:text-red-800"
+                aria-label="Cerrar mensaje de error"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <h1
@@ -692,11 +734,12 @@ export default function ReservationDetailsPage() {
       {reservation && (
         <RescheduleModal
           isOpen={showRescheduleModal}
-          onClose={() => setShowRescheduleModal(false)}
+          onClose={handleCloseRescheduleModal}
           onConfirm={handleReschedule}
           currentDate={reservation.date}
           currentStartTime={reservation.start_time}
           isRescheduling={rescheduling}
+          externalError={rescheduleError}
         />
       )}
     </div>

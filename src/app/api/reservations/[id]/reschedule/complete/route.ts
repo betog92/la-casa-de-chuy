@@ -60,16 +60,16 @@ export async function POST(
 
     // Validar campos requeridos
     if (!date || !startTime || !paymentId) {
-      return validationErrorResponse(
-        "Fecha, hora y ID de pago son requeridos"
-      );
+      return validationErrorResponse("Fecha, hora y ID de pago son requeridos");
     }
 
     // Obtener la reserva y verificar que pertenece al usuario
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
-      .select("id, user_id, status, reschedule_count, date, start_time, payment_id")
+      .select(
+        "id, user_id, status, reschedule_count, date, start_time, payment_id"
+      )
       .eq("id", reservationId)
       .single();
 
@@ -113,7 +113,11 @@ export async function POST(
     };
 
     // Si hay monto adicional, guardarlo
-    if (additionalAmount && typeof additionalAmount === "number" && additionalAmount > 0) {
+    if (
+      additionalAmount &&
+      typeof additionalAmount === "number" &&
+      additionalAmount > 0
+    ) {
       updateData.additional_payment_amount = additionalAmount;
     }
 
@@ -152,4 +156,3 @@ export async function POST(
     return errorResponse(errorMessage, 500);
   }
 }
-

@@ -25,6 +25,7 @@ interface RescheduleModalProps {
   currentDate: string; // Fecha actual de la reserva en formato "yyyy-MM-dd"
   currentStartTime?: string; // Hora actual de la reserva en formato "HH:MM" o "HH:MM:SS"
   isRescheduling?: boolean; // Indica si se está procesando el reagendamiento
+  externalError?: string | null; // Error externo (por ejemplo, de la API de reagendamiento)
 }
 
 // Horarios disponibles según día de la semana
@@ -75,6 +76,7 @@ export default function RescheduleModal({
   currentDate,
   currentStartTime,
   isRescheduling = false,
+  externalError = null,
 }: RescheduleModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
@@ -211,7 +213,6 @@ export default function RescheduleModal({
     fetchAvailability();
   }, [selectedDate, isOpen]);
 
-
   // Memoizar la disponibilidad de todos los horarios
   const timeAvailabilityMap = useMemo(() => {
     if (!selectedDate || availableSlots.length === 0) {
@@ -233,7 +234,7 @@ export default function RescheduleModal({
   const isTimeAvailable = useCallback(
     (time: string): boolean => {
       const isAvailable = timeAvailabilityMap.get(time) ?? false;
-      
+
       // Si no está disponible según la API, retornar false
       if (!isAvailable) return false;
 
@@ -245,7 +246,7 @@ export default function RescheduleModal({
           // Normalizar formato de tiempo (puede venir como "HH:MM:SS" o "HH:MM")
           const currentTimeNormalized = currentStartTime.substring(0, 5); // "HH:MM"
           const timeNormalized = time.substring(0, 5); // "HH:MM"
-          
+
           // Si es el mismo horario, no está disponible
           if (timeNormalized === currentTimeNormalized) {
             return false;
@@ -258,35 +259,39 @@ export default function RescheduleModal({
     [timeAvailabilityMap, selectedDate, currentDate, currentStartTime]
   );
 
-  const handleDateChange = useCallback((value: unknown) => {
-    if (value instanceof Date) {
-      const normalizedNewDate = normalizeDate(value);
-      const normalizedCurrentDate = selectedDate
-        ? normalizeDate(selectedDate)
-        : null;
+  const handleDateChange = useCallback(
+    (value: unknown) => {
+      if (value instanceof Date) {
+        const normalizedNewDate = normalizeDate(value);
+        const normalizedCurrentDate = selectedDate
+          ? normalizeDate(selectedDate)
+          : null;
 
-      if (
-        normalizedCurrentDate &&
-        normalizedCurrentDate.getTime() === normalizedNewDate.getTime()
-      ) {
-        return;
+        if (
+          normalizedCurrentDate &&
+          normalizedCurrentDate.getTime() === normalizedNewDate.getTime()
+        ) {
+          return;
+        }
+
+        setSelectedTime(null);
+        setSelectedDate(value);
       }
-
-      setSelectedTime(null);
-      setSelectedDate(value);
-    }
-  }, [selectedDate]);
+    },
+    [selectedDate]
+  );
 
   const handleTimeSelect = useCallback((time: string) => {
     setSelectedTime(time);
   }, []);
 
   const handleConfirm = useCallback(() => {
-    if (!selectedDate || !selectedTime) return;
+    if (!selectedDate || !selectedTime || !confirmed) return;
 
     const dateString = format(selectedDate, "yyyy-MM-dd");
+    // El error externo se limpiará desde el parent cuando se llame a onConfirm
     onConfirm(dateString, selectedTime);
-  }, [selectedDate, selectedTime, onConfirm]);
+  }, [selectedDate, selectedTime, confirmed, onConfirm]);
 
   const handleClose = useCallback(() => {
     setSelectedDate(null);
@@ -504,6 +509,17 @@ export default function RescheduleModal({
             </div>
           </div>
 
+          {/* Mostrar error externo si existe */}
+          {externalError && (
+            <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm text-red-700">{externalError}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Botones */}
           <div className="mt-6 space-y-4">
             {/* Checkbox de confirmación */}
@@ -522,7 +538,10 @@ export default function RescheduleModal({
                   isRescheduling ? "opacity-50" : ""
                 }`}
               >
-                <strong>Entiendo que solo tengo una oportunidad de reagendar.</strong> Al confirmar, no podré volver a reagendar esta reserva.
+                <strong>
+                  Entiendo que solo tengo una oportunidad de reagendar.
+                </strong>{" "}
+                Al confirmar, no podré volver a reagendar esta reserva.
               </label>
             </div>
 
@@ -536,7 +555,9 @@ export default function RescheduleModal({
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={!selectedDate || !selectedTime || !confirmed || isRescheduling}
+                disabled={
+                  !selectedDate || !selectedTime || !confirmed || isRescheduling
+                }
                 className="px-6 py-2 rounded-lg bg-[#103948] font-medium text-white transition-colors hover:bg-[#0d2d38] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
               >
                 {isRescheduling ? (
@@ -555,4 +576,3 @@ export default function RescheduleModal({
     </div>
   );
 }
-
