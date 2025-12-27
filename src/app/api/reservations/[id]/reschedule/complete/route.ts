@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   calculateEndTime,
+  validateSlotAvailability,
   formatTimeToSeconds,
 } from "@/utils/reservation-helpers";
 import {
@@ -12,6 +13,7 @@ import {
   unauthorizedResponse,
   validationErrorResponse,
   notFoundResponse,
+  conflictResponse,
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
 
@@ -97,6 +99,18 @@ export async function POST(
       return errorResponse(
         "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento.",
         400
+      );
+    }
+
+    // Validar que el nuevo slot esté disponible (evita race condition)
+    const isAvailable = await validateSlotAvailability(
+      supabase,
+      date,
+      startTime
+    );
+    if (!isAvailable) {
+      return conflictResponse(
+        "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
       );
     }
 
