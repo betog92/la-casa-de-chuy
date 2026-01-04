@@ -11,6 +11,7 @@ import {
   formatReservationId,
 } from "@/utils/formatters";
 import type { Reservation } from "@/types/reservation";
+import axios from "axios";
 
 export default function ConfirmacionPage() {
   const searchParams = useSearchParams();
@@ -25,6 +26,7 @@ export default function ConfirmacionPage() {
   const [guestReservationUrl, setGuestReservationUrl] = useState<string | null>(
     null
   );
+  const [loyaltyLevelName, setLoyaltyLevelName] = useState<string | null>(null);
 
   useEffect(() => {
     const loadReservation = async () => {
@@ -85,8 +87,44 @@ export default function ConfirmacionPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [reservationId]);
 
+  // Cargar nivel de fidelización para usuarios logueados
+  useEffect(() => {
+    const loadLoyalty = async () => {
+      if (!user) return;
+      try {
+        const res = await axios.get("/api/users/profile");
+        if (res.data?.success) {
+          setLoyaltyLevelName(res.data.loyaltyLevelName || null);
+        }
+      } catch (err) {
+        console.error("Error loading loyalty level:", err);
+      }
+    };
+    loadLoyalty();
+  }, [user]);
+
   // Determinar si mostrar secciones de invitado (solo si NO está autenticado y tiene guestReservationUrl)
   const isGuest = !user && guestReservationUrl;
+  const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
+
+  // Calcular monto adicional (usado en múltiples lugares)
+  const additionalAmountFromParam = additionalAmountParam
+    ? parseFloat(additionalAmountParam)
+    : NaN;
+  const additionalAmount = !isNaN(additionalAmountFromParam)
+    ? additionalAmountFromParam
+    : Number(
+        (
+          reservation as Reservation & {
+            additional_payment_amount?: number | null;
+          }
+        )?.additional_payment_amount ?? 0
+      );
+  const additionalPaymentId = (
+    reservation as Reservation & {
+      additional_payment_id?: string | null;
+    }
+  )?.additional_payment_id;
 
   if (loading || authLoading) {
     return (
@@ -169,6 +207,17 @@ export default function ConfirmacionPage() {
           </p>
         </div>
 
+        {/* Banner de puntos para usuarios autenticados */}
+        {user && rescheduled !== "true" && (
+          <div className="mt-3 mb-4 inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 border border-green-200">
+            <span className="font-semibold">🎉 ¡Felicidades!</span>
+            <span>Ganaste {pointsEarned} puntos.</span>
+            {loyaltyLevelName && (
+              <span className="font-semibold">Nivel: {loyaltyLevelName}</span>
+            )}
+          </div>
+        )}
+
         {/* Detalles de la Reserva */}
         <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold text-zinc-900">
@@ -207,34 +256,77 @@ export default function ConfirmacionPage() {
                 <span className="font-medium">Hora:</span>
                 <span>{formatTimeRange(reservation.start_time)}</span>
               </div>
-              <div className="flex justify-between border-t border-zinc-200 pt-3">
-                <span className="font-semibold text-lg">
-                  {rescheduled === "true" && paid === "true"
-                    ? "Pago Adicional:"
-                    : "Total Pagado:"}
-                </span>
-                <span className="font-semibold text-lg">
-                  $
-                  {rescheduled === "true" && paid === "true" && additionalAmountParam
-                    ? (() => {
-                        const amount = parseFloat(additionalAmountParam);
-                        return isNaN(amount) ? formatCurrency(reservation.price) : formatCurrency(amount);
-                      })()
-                    : formatCurrency(reservation.price)}{" "}
-                  MXN
-                </span>
-              </div>
+              {(() => {
+                // Mostrar pago adicional solo si es reagendado y hay monto > 0
+                if (rescheduled === "true" && additionalAmount > 0) {
+                  return (
+                    <div className="flex justify-between border-t border-zinc-200 pt-3">
+                      <span className="font-semibold text-lg">
+                        Pago Adicional:
+                      </span>
+                      <span className="font-semibold text-lg">
+                        ${formatCurrency(additionalAmount)} MXN
+                      </span>
+                    </div>
+                  );
+                }
+
+                // Si no es reagendado, mostrar total pagado
+                if (rescheduled !== "true") {
+                  return (
+                    <div className="flex justify-between border-t border-zinc-200 pt-3">
+                      <span className="font-semibold text-lg">
+                        Total Pagado:
+                      </span>
+                      <span className="font-semibold text-lg">
+                        ${formatCurrency(reservation.price)} MXN
+                      </span>
+                    </div>
+                  );
+                }
+
+                // Reagendado sin pago adicional: no mostrar bloque de pago
+                return null;
+              })()}
             </div>
-            {reservation.payment_id && (
-              <div className="border-t border-zinc-200 pt-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">ID de Pago:</span>
-                  <span className="font-mono text-zinc-600">
-                    {reservation.payment_id}
-                  </span>
-                </div>
-              </div>
-            )}
+            {(() => {
+              // Reagendado con pago adicional: mostrar ID de pago adicional si existe
+              if (
+                rescheduled === "true" &&
+                additionalAmount > 0 &&
+                additionalPaymentId
+              ) {
+                return (
+                  <div className="border-t border-zinc-200 pt-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-500">
+                        ID de Pago Adicional:
+                      </span>
+                      <span className="font-mono text-zinc-600">
+                        {additionalPaymentId}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Reserva normal: mostrar ID de pago original si existe
+              if (rescheduled !== "true" && reservation.payment_id) {
+                return (
+                  <div className="border-t border-zinc-200 pt-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-500">ID de Pago:</span>
+                      <span className="font-mono text-zinc-600">
+                        {reservation.payment_id}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Reagendado sin pago adicional: no mostrar ID de pago
+              return null;
+            })()}
           </div>
         </div>
 

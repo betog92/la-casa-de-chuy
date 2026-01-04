@@ -67,6 +67,11 @@ export default function AccountPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationsLoading, setReservationsLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [benefits, setBenefits] = useState<{
+    loyaltyPoints: number;
+    credits: number;
+    loyaltyLevelName: string;
+  } | null>(null);
   const [error, setError] = useState<string>("");
   const [retryKey, setRetryKey] = useState(0); // Para forzar re-ejecución del efecto en caso de error
   const hasLoadedRef = useRef(false);
@@ -147,9 +152,21 @@ export default function AccountPage() {
       try {
         const response = await axios.get("/api/users/profile");
         if (response.data.success) {
-          // Extraer solo los datos del perfil, no el objeto completo con success
-          const { email, name, phone } = response.data;
+          const {
+            email,
+            name,
+            phone,
+            loyaltyPoints = 0,
+            credits = 0,
+            loyaltyLevelName = "Inicial",
+          } = response.data;
+
           setProfile({ email, name, phone });
+          setBenefits({
+            loyaltyPoints,
+            credits,
+            loyaltyLevelName,
+          });
           profileLoadedRef.current = true;
         }
       } catch (err) {
@@ -193,81 +210,81 @@ export default function AccountPage() {
           </p>
         </div>
 
-        {/* Información del usuario */}
-        <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-semibold text-[#103948] mb-6">
+        {/* Información del usuario + Beneficios en dos columnas */}
+        <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-5 mb-6">
+          <h2 className="text-2xl font-semibold text-[#103948] mb-1.5">
             Información de la cuenta
           </h2>
-          <div className="space-y-5">
-            {profile?.name && (
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  <svg
-                    className="h-5 w-5 text-zinc-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-zinc-600 mb-1">Nombre</p>
-                  <p className="text-lg font-medium text-[#103948]">
+          <p className="text-xs text-zinc-500 mb-4">
+            Datos personales y beneficios
+          </p>
+          <div className="grid gap-8 lg:grid-cols-2 lg:items-start lg:gap-12">
+            <div className="flex flex-col items-center text-center gap-7 py-6 lg:pr-8 lg:max-w-md w-full mx-auto">
+              {profile?.name && (
+                <div className="space-y-1">
+                  <p className="text-sm text-zinc-500">Nombre</p>
+                  <p className="text-lg font-semibold text-[#103948]">
                     {profile.name}
                   </p>
                 </div>
-              </div>
-            )}
-            <div className="flex items-start gap-3">
-              <div className="mt-1">
-                <svg
-                  className="h-5 w-5 text-zinc-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-zinc-600 mb-1">Email</p>
-                <p className="text-lg font-medium text-[#103948]">
+              )}
+              <div className="space-y-1">
+                <p className="text-sm text-zinc-500">Email</p>
+                <p className="text-lg font-semibold text-[#103948]">
                   {profile?.email || user.email}
                 </p>
               </div>
-            </div>
-            {profile?.phone && (
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  <svg
-                    className="h-5 w-5 text-zinc-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
-                  <p className="text-lg font-medium text-[#103948]">
+              {profile?.phone && (
+                <div className="space-y-1">
+                  <p className="text-sm text-zinc-500">Teléfono</p>
+                  <p className="text-lg font-semibold text-[#103948]">
                     {formatPhone(profile.phone)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {benefits && (
+              <div className="flex flex-col items-center text-center gap-6 w-full lg:max-w-sm mx-auto py-5 lg:px-6 lg:bg-zinc-50 lg:rounded-lg lg:shadow-sm lg:border lg:border-zinc-200 transition-shadow duration-200 hover:shadow-md hover:border-zinc-300">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1 justify-center text-sm text-zinc-500">
+                    <span
+                      title="Sube con reservas confirmadas: Elite 10+, VIP 5-9, Frecuente 1-4."
+                      className="cursor-help"
+                    >
+                      Nivel de fidelización
+                    </span>
+                  </div>
+                  <p className="text-lg font-semibold text-[#103948]">
+                    {benefits.loyaltyLevelName}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1 justify-center text-sm text-zinc-500">
+                    <span
+                      title="Puntos disponibles (no revocados ni usados)."
+                      className="cursor-help"
+                    >
+                      Puntos de fidelización
+                    </span>
+                  </div>
+                  <p className="text-xl font-semibold text-[#103948]">
+                    {benefits.loyaltyPoints}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1 justify-center text-sm text-zinc-500">
+                    <span
+                      title="Créditos vigentes (no revocados ni usados)."
+                      className="cursor-help"
+                    >
+                      Créditos disponibles
+                    </span>
+                  </div>
+                  <p className="text-xl font-semibold text-[#103948]">
+                    {formatCurrency(benefits.credits || 0)}
                   </p>
                 </div>
               </div>

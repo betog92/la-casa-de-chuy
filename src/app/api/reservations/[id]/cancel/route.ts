@@ -3,7 +3,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { parse, addDays, startOfDay } from "date-fns";
-import { calculateBusinessDays, getMonterreyToday } from "@/utils/business-days";
+import {
+  calculateBusinessDays,
+  getMonterreyToday,
+} from "@/utils/business-days";
 import {
   calculateTotalPaid,
   calculateRefundAmount,
@@ -52,7 +55,9 @@ export async function POST(
     } = await authClient.auth.getUser();
 
     if (authError || !user) {
-      return unauthorizedResponse("Debes iniciar sesión para cancelar una reserva");
+      return unauthorizedResponse(
+        "Debes iniciar sesión para cancelar una reserva"
+      );
     }
 
     // Obtener la reserva y verificar que pertenece al usuario
@@ -67,38 +72,50 @@ export async function POST(
       return notFoundResponse("Reserva");
     }
 
+    const reservationRow = reservation as {
+      id: string;
+      user_id: string | null;
+      status: string;
+      date: string;
+      price: number;
+      additional_payment_amount: number | null;
+    };
+
     // Verificar que la reserva pertenece al usuario autenticado
-    if (reservation.user_id !== user.id) {
-      return unauthorizedResponse("No tienes permisos para cancelar esta reserva");
+    if (reservationRow.user_id !== user.id) {
+      return unauthorizedResponse(
+        "No tienes permisos para cancelar esta reserva"
+      );
     }
 
     // Verificar que el status es 'confirmed'
-    if (reservation.status !== "confirmed") {
-      return errorResponse(
-        "Solo se pueden cancelar reservas confirmadas",
-        400
-      );
+    if (reservationRow.status !== "confirmed") {
+      return errorResponse("Solo se pueden cancelar reservas confirmadas", 400);
     }
 
     // Calcular días hábiles desde mañana hasta la fecha de la reserva
     const today = getMonterreyToday();
     const tomorrow = addDays(today, 1);
-    const reservationDate = startOfDay(parse(reservation.date, "yyyy-MM-dd", new Date()));
+    const reservationDate = startOfDay(
+      parse(reservationRow.date, "yyyy-MM-dd", new Date())
+    );
 
     const businessDays = calculateBusinessDays(tomorrow, reservationDate);
 
     // Si < 5 días hábiles, rechazar cancelación completamente
     if (businessDays < 5) {
       return errorResponse(
-        `La cancelación solo está disponible con al menos 5 días hábiles de anticipación. Faltan ${businessDays} día${businessDays !== 1 ? "s" : ""} hábil${businessDays !== 1 ? "es" : ""}.`,
+        `La cancelación solo está disponible con al menos 5 días hábiles de anticipación. Faltan ${businessDays} día${
+          businessDays !== 1 ? "s" : ""
+        } hábil${businessDays !== 1 ? "es" : ""}.`,
         400
       );
     }
 
     // Calcular el total pagado (precio + pago adicional si existe)
     const totalPaid = calculateTotalPaid(
-      reservation.price,
-      reservation.additional_payment_amount
+      reservationRow.price,
+      reservationRow.additional_payment_amount
     );
 
     // Calcular reembolso del 80% del total pagado
@@ -117,12 +134,88 @@ export async function POST(
         refund_status: "pending",
         refund_id: dummyRefundId,
         cancelled_at: new Date().toISOString(),
-      })
+      } as never)
       .eq("id", reservationId);
 
     if (updateError) {
       console.error("Error cancelling reservation:", updateError);
       return errorResponse("Error al cancelar la reserva", 500);
+    }
+
+    // Revocar puntos y créditos asociados a esta reserva
+    // Incluye puntos de referidos: si el referido cancela, se revocan también
+    // los puntos otorgados al que refirió (asumiendo que se almacenan con este reservation_id).
+    const revokeTimestamp = new Date().toISOString();
+
+    // Puntos de lealtad (revocar todos los ligados a la reserva)
+    type LoyaltyRow = {
+      id: string;
+      user_id: string | null;
+      points: number | null;
+      used: boolean;
+      expires_at: string | null;
+    };
+
+    const { data: loyaltyData, error: fetchLoyaltyError } = await supabase
+      .from("loyalty_points")
+      .select("id, user_id, points, used, expires_at")
+      .eq("reservation_id", reservationId)
+      .eq("revoked", false);
+
+    if (fetchLoyaltyError) {
+      console.error("Error consultando puntos de lealtad:", fetchLoyaltyError);
+    } else {
+      const loyaltyRows = (loyaltyData as LoyaltyRow[] | null) || [];
+
+      if (loyaltyRows.length > 0) {
+        const loyaltyIds = loyaltyRows.map((row) => row.id);
+
+        const { error: revokeAllLoyaltyError } = await supabase
+          .from("loyalty_points")
+          .update({ revoked: true, revoked_at: revokeTimestamp } as never)
+          .in("id", loyaltyIds);
+
+        if (revokeAllLoyaltyError) {
+          console.error(
+            "Error revocando puntos de lealtad:",
+            revokeAllLoyaltyError
+          );
+        }
+      }
+    }
+
+    // Créditos: revocar todos los ligados a la reserva
+    type CreditRow = {
+      id: string;
+      user_id: string | null;
+      amount: number | null;
+      used: boolean;
+      expires_at: string | null;
+    };
+
+    const { data: creditsData, error: fetchCreditsError } = await supabase
+      .from("credits")
+      .select("id, user_id, amount, used, expires_at")
+      .eq("reservation_id", reservationId)
+      .eq("revoked", false);
+
+    if (fetchCreditsError) {
+      console.error("Error consultando créditos:", fetchCreditsError);
+    } else {
+      const creditRows = (creditsData as CreditRow[] | null) || [];
+
+      if (creditRows.length > 0) {
+        const creditIds = creditRows.map((row) => row.id);
+
+        const { error: revokeAllCreditsError } = await supabase
+          .from("credits")
+          .update({ revoked: true, revoked_at: revokeTimestamp } as never)
+          .in("id", creditIds);
+
+        if (revokeAllCreditsError) {
+          console.error("Error revocando créditos:", revokeAllCreditsError);
+        }
+      }
     }
 
     return successResponse({
@@ -137,4 +230,3 @@ export async function POST(
     return errorResponse(errorMessage, 500);
   }
 }
-

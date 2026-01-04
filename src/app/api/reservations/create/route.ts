@@ -153,6 +153,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Otorgar puntos de lealtad por la reserva (1 punto por cada $10 pagados)
+    // Solo para usuarios autenticados y si hay monto positivo
+    if (userId && price && Number(price) > 0) {
+      const pointsToGrant = Math.floor(Number(price) / 10);
+      if (pointsToGrant > 0) {
+        const expiresAt = new Date();
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+        try {
+          const { error: loyaltyInsertError } = await supabase
+            .from("loyalty_points")
+            .insert({
+              user_id: userId,
+              points: pointsToGrant,
+              expires_at: expiresAt.toISOString().slice(0, 10),
+              reservation_id: reservationId,
+              used: false,
+              revoked: false,
+            } as never);
+
+          if (loyaltyInsertError) {
+            console.error(
+              "Error otorgando puntos de lealtad en creación de reserva:",
+              loyaltyInsertError
+            );
+          }
+        } catch (loyaltyErr) {
+          console.error(
+            "Error inesperado otorgando puntos de lealtad:",
+            loyaltyErr
+          );
+        }
+      }
+    }
+
     // Si hay usuario autenticado, actualizar su perfil con name y phone si no los tiene
     if (userId) {
       try {

@@ -37,10 +37,12 @@ BEGIN
     WHERE table_name = 'time_slots'
       AND column_name = 'reservations_count'
   ) THEN
+    -- Paso 3b: Normalizar nulos antes de verificar
+    UPDATE time_slots SET is_occupied = FALSE WHERE is_occupied IS NULL;
+
     SELECT COUNT(*) INTO v_count_mismatch
     FROM time_slots
-    WHERE (COALESCE(reservations_count, 0) > 0) != is_occupied
-       OR is_occupied IS NULL;
+    WHERE (COALESCE(reservations_count, 0) > 0) != is_occupied;
     
     IF v_count_mismatch > 0 THEN
       RAISE EXCEPTION 'Error en migración: % registros no coinciden', v_count_mismatch;
@@ -52,9 +54,6 @@ BEGIN
     RAISE NOTICE 'Columna reservations_count no existe; se omite verificación de migración.';
   END IF;
 END $$;
-
--- Paso 3b: Normalizar nulos por seguridad
-UPDATE time_slots SET is_occupied = FALSE WHERE is_occupied IS NULL;
 
 -- Paso 4: Eliminar función y trigger antiguos ANTES de crear los nuevos
 DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;

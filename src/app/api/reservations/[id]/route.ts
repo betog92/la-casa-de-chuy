@@ -41,12 +41,7 @@ export async function GET(
 
     const {
       data: { user },
-      error: authError,
     } = await authClient.auth.getUser();
-
-    if (authError || !user) {
-      return unauthorizedResponse("Debes iniciar sesión para ver esta reserva");
-    }
 
     // Obtener la reserva usando service role para evitar problemas de RLS
     const supabase = createServiceRoleClient();
@@ -63,8 +58,8 @@ export async function GET(
       return notFoundResponse("Reserva");
     }
 
-    // Verificar que la reserva pertenece al usuario autenticado
-    if (data.user_id !== user.id) {
+    // Si hay usuario autenticado, verificar pertenencia; si no, permitir (flujo invitado/confirmación)
+    if (user && data.user_id && data.user_id !== user.id) {
       return unauthorizedResponse("No tienes permisos para ver esta reserva");
     }
 
