@@ -10,7 +10,7 @@ BEGIN;
 ALTER TABLE time_slots 
 ADD COLUMN IF NOT EXISTS is_occupied BOOLEAN DEFAULT FALSE;
 
--- Paso 2: Migrar datos solo si la columna legacy existe
+-- Paso 2: Migrar datos solo si la columna legacy existe (normalizando NULL)
 DO $$
 BEGIN
   IF EXISTS (
@@ -20,12 +20,13 @@ BEGIN
       AND column_name = 'reservations_count'
   ) THEN
     UPDATE time_slots 
-    SET is_occupied = (reservations_count > 0);
+    SET is_occupied = (COALESCE(reservations_count, 0) > 0);
   ELSE
     RAISE NOTICE 'Columna reservations_count no existe; se omite la migración de datos.';
   END IF;
 END $$;
 
+-- Paso 3: Verificar migración (incluye nulos)
 DO $$
 DECLARE
   v_count_mismatch INTEGER;
@@ -38,7 +39,8 @@ BEGIN
   ) THEN
     SELECT COUNT(*) INTO v_count_mismatch
     FROM time_slots
-    WHERE (reservations_count > 0) != is_occupied;
+    WHERE (COALESCE(reservations_count, 0) > 0) != is_occupied
+       OR is_occupied IS NULL;
     
     IF v_count_mismatch > 0 THEN
       RAISE EXCEPTION 'Error en migración: % registros no coinciden', v_count_mismatch;
@@ -50,6 +52,9 @@ BEGIN
     RAISE NOTICE 'Columna reservations_count no existe; se omite verificación de migración.';
   END IF;
 END $$;
+
+-- Paso 3b: Normalizar nulos por seguridad
+UPDATE time_slots SET is_occupied = FALSE WHERE is_occupied IS NULL;
 
 -- Paso 4: Eliminar función y trigger antiguos ANTES de crear los nuevos
 DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
