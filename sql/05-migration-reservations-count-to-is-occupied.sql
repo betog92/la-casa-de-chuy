@@ -10,25 +10,45 @@ BEGIN;
 ALTER TABLE time_slots 
 ADD COLUMN IF NOT EXISTS is_occupied BOOLEAN DEFAULT FALSE;
 
--- Paso 2: Migrar datos: convertir reservations_count a is_occupied
-UPDATE time_slots 
-SET is_occupied = (reservations_count > 0);
+-- Paso 2: Migrar datos solo si la columna legacy existe
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'time_slots'
+      AND column_name = 'reservations_count'
+  ) THEN
+    UPDATE time_slots 
+    SET is_occupied = (reservations_count > 0);
+  ELSE
+    RAISE NOTICE 'Columna reservations_count no existe; se omite la migración de datos.';
+  END IF;
+END $$;
 
--- Paso 3: Verificar migración
 DO $$
 DECLARE
   v_count_mismatch INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_count_mismatch
-  FROM time_slots
-  WHERE (reservations_count > 0) != is_occupied;
-  
-  IF v_count_mismatch > 0 THEN
-    RAISE EXCEPTION 'Error en migración: % registros no coinciden', v_count_mismatch;
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'time_slots'
+      AND column_name = 'reservations_count'
+  ) THEN
+    SELECT COUNT(*) INTO v_count_mismatch
+    FROM time_slots
+    WHERE (reservations_count > 0) != is_occupied;
+    
+    IF v_count_mismatch > 0 THEN
+      RAISE EXCEPTION 'Error en migración: % registros no coinciden', v_count_mismatch;
+    END IF;
+    
+    RAISE NOTICE 'Migración de datos exitosa: % registros verificados', 
+      (SELECT COUNT(*) FROM time_slots);
+  ELSE
+    RAISE NOTICE 'Columna reservations_count no existe; se omite verificación de migración.';
   END IF;
-  
-  RAISE NOTICE 'Migración de datos exitosa: % registros verificados', 
-    (SELECT COUNT(*) FROM time_slots);
 END $$;
 
 -- Paso 4: Eliminar función y trigger antiguos ANTES de crear los nuevos
@@ -131,6 +151,10 @@ DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
 CREATE TRIGGER update_time_slot_occupied_on_reservation
 AFTER INSERT OR UPDATE OR DELETE ON reservations
 FOR EACH ROW EXECUTE FUNCTION update_time_slot_occupied();
+
+-- Paso 7: Eliminar la columna legacy reservations_count (ya no se usa)
+ALTER TABLE time_slots
+  DROP COLUMN IF EXISTS reservations_count;
 
 COMMIT;
 
