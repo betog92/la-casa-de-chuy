@@ -266,7 +266,7 @@ export default function AccountPage() {
                       title="Puntos disponibles (no revocados ni usados)."
                       className="cursor-help"
                     >
-                      Puntos de fidelización
+                      Puntos de lealtad
                     </span>
                   </div>
                   <p className="text-xl font-semibold text-[#103948]">

@@ -6,6 +6,7 @@ import {
   errorResponse,
   unauthorizedResponse,
 } from "@/utils/api-response";
+import { calculateLoyaltyLevel } from "@/utils/loyalty";
 import type { Database } from "@/types/database.types";
 
 export async function GET(request: NextRequest) {
@@ -87,16 +88,13 @@ export async function GET(request: NextRequest) {
 
     const confirmedCount = reservationsAgg.count || 0;
 
-    const loyaltyLevelName =
-      confirmedCount >= 10
-        ? "Elite"
-        : confirmedCount >= 5
-          ? "VIP"
-          : confirmedCount >= 1
-            ? "Frecuente"
-            : "Inicial";
+    const loyaltyLevelName = calculateLoyaltyLevel(confirmedCount);
 
-    const baseProfile = profile || { email: user.email, name: null, phone: null };
+    const baseProfile = profile || {
+      email: user.email,
+      name: null,
+      phone: null,
+    };
 
     return successResponse({
       email: baseProfile.email || user.email,

@@ -453,7 +453,7 @@ export default function ReservationDetailsPage() {
                   }
                   return (
                     <DiscountRow
-                      label={`Puntos de fidelización usados (${reservation.loyalty_points_used} puntos)`}
+                      label={`Puntos de lealtad usados (${reservation.loyalty_points_used} puntos)`}
                       amount={pointsDiscount}
                     />
                   );

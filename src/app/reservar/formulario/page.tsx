@@ -576,6 +576,29 @@ export default function FormularioReservaPage() {
             reservationResponse.data.guestReservationUrl
           );
         }
+
+        // Paso 4: Limpiar sessionStorage y redirigir a confirmación
+        // Limpiar datos temporales de reserva (se mantienen guestToken y guestReservationUrl
+        // para que la página de confirmación los use)
+        sessionStorage.removeItem("reservationData");
+
+        // Construir query params para la página de confirmación
+        const queryParams = new URLSearchParams({
+          id: reservationId,
+        });
+
+        // Agregar información de cambio de nivel si está disponible
+        if (reservationResponse.data.loyaltyLevelChanged) {
+          queryParams.set("loyaltyLevelChanged", "true");
+          if (reservationResponse.data.newLoyaltyLevel) {
+            queryParams.set(
+              "newLoyaltyLevel",
+              reservationResponse.data.newLoyaltyLevel
+            );
+          }
+        }
+
+        router.push(`/reservar/confirmacion?${queryParams.toString()}`);
       } catch (error: unknown) {
         // Manejar errores específicos de la API de reservaciones
         const errorMessage = getErrorMessage(error);
@@ -583,12 +606,6 @@ export default function FormularioReservaPage() {
         setLoading(false);
         return;
       }
-
-      // Paso 4: Limpiar sessionStorage y redirigir a confirmación
-      // Limpiar datos temporales de reserva (se mantienen guestToken y guestReservationUrl
-      // para que la página de confirmación los use)
-      sessionStorage.removeItem("reservationData");
-      router.push(`/reservar/confirmacion?id=${reservationId}`);
     } catch (err: unknown) {
       // Catch genérico para errores inesperados
       const errorMessage = getErrorMessage(err);

@@ -18,6 +18,7 @@ import {
   generateGuestToken,
   generateGuestReservationUrl,
 } from "@/lib/auth/guest-tokens";
+import { calculateLoyaltyLevel } from "@/utils/loyalty";
 import type { Database } from "@/types/database.types";
 
 export async function POST(request: NextRequest) {
@@ -97,6 +98,32 @@ export async function POST(request: NextRequest) {
       return conflictResponse(
         "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
       );
+    }
+
+    // Calcular nivel de fidelización anterior (antes de insertar la nueva reserva)
+    let newLoyaltyLevel: string | null = null;
+    let loyaltyLevelChanged = false;
+
+    if (userId) {
+      try {
+        const { count: previousCount } = await supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("status", "confirmed");
+
+        const previousCountNum = previousCount || 0;
+        const previousLoyaltyLevel = calculateLoyaltyLevel(previousCountNum);
+
+        // El nivel nuevo será con una reserva más
+        const newCount = previousCountNum + 1;
+        newLoyaltyLevel = calculateLoyaltyLevel(newCount);
+
+        loyaltyLevelChanged = previousLoyaltyLevel !== newLoyaltyLevel;
+      } catch (levelError) {
+        // No fallar la reserva si hay error al calcular el nivel
+        console.error("Error calculating loyalty level:", levelError);
+      }
     }
 
     // Crear reserva
@@ -305,6 +332,8 @@ export async function POST(request: NextRequest) {
       reservationId,
       guestToken, // Token JWT para invitados
       guestReservationUrl, // URL completa del magic link
+      loyaltyLevelChanged, // Si el nivel cambió
+      newLoyaltyLevel, // Nuevo nivel de fidelización
     });
   } catch (error: unknown) {
     const errorMessage =

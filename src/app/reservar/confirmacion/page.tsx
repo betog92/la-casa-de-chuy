@@ -19,6 +19,9 @@ export default function ConfirmacionPage() {
   const rescheduled = searchParams.get("rescheduled");
   const paid = searchParams.get("paid");
   const additionalAmountParam = searchParams.get("additionalAmount");
+  const loyaltyLevelChanged =
+    searchParams.get("loyaltyLevelChanged") === "true";
+  const newLoyaltyLevelFromParams = searchParams.get("newLoyaltyLevel");
   const { user, loading: authLoading } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,9 @@ export default function ConfirmacionPage() {
   // Determinar si mostrar secciones de invitado (solo si NO está autenticado y tiene guestReservationUrl)
   const isGuest = !user && guestReservationUrl;
   const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
+
+  // Usar el nivel de los query params si está disponible, sino usar el cargado desde la API
+  const displayLoyaltyLevel = newLoyaltyLevelFromParams || loyaltyLevelName;
 
   // Calcular monto adicional (usado en múltiples lugares)
   const additionalAmountFromParam = additionalAmountParam
@@ -211,9 +217,14 @@ export default function ConfirmacionPage() {
         {user && rescheduled !== "true" && (
           <div className="mt-3 mb-4 inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 border border-green-200">
             <span className="font-semibold">🎉 ¡Felicidades!</span>
-            <span>Ganaste {pointsEarned} puntos.</span>
-            {loyaltyLevelName && (
-              <span className="font-semibold">Nivel: {loyaltyLevelName}</span>
+            <span>Ganaste {pointsEarned} puntos de lealtad.</span>
+            {loyaltyLevelChanged && displayLoyaltyLevel && (
+              <>
+                <span className="font-semibold">¡Subiste de nivel!</span>
+                <span className="font-semibold">
+                  Ahora eres: {displayLoyaltyLevel}
+                </span>
+              </>
             )}
           </div>
         )}
