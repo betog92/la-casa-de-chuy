@@ -18,6 +18,7 @@ import {
   generateGuestToken,
   generateGuestReservationUrl,
 } from "@/lib/auth/guest-tokens";
+import { sendReservationConfirmation } from "@/lib/email";
 import { calculateLoyaltyLevel } from "@/utils/loyalty";
 import type { Database } from "@/types/database.types";
 
@@ -336,6 +337,30 @@ export async function POST(request: NextRequest) {
       } catch (tokenError) {
         // No fallar la reserva si hay error al generar el token
         console.error("Error al generar token de invitado:", tokenError);
+      }
+    }
+
+    // Email de confirmación (no fallar la reserva si falla el envío)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const manageUrl = guestReservationUrl
+      ? guestReservationUrl
+      : `${baseUrl}/reservaciones/${reservationId}`;
+    if (normalizedEmail) {
+      try {
+        const emailResult = await sendReservationConfirmation({
+          to: normalizedEmail,
+          name,
+          date,
+          startTime,
+          price: Number.isFinite(Number(price)) ? Number(price) : 0,
+          reservationId,
+          manageUrl,
+        });
+        if (!emailResult.ok) {
+          console.error("Error al enviar email de confirmación:", emailResult.error);
+        }
+      } catch (emailErr) {
+        console.error("Error inesperado al enviar email de confirmación:", emailErr);
       }
     }
 
