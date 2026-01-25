@@ -1,5 +1,9 @@
 import { createClient } from "./client";
 import { getAuthErrorMessage as translateAuthError } from "@/utils/auth-error-messages";
+import {
+  getAuthCallbackUrl,
+  getPasswordResetCallbackUrl,
+} from "@/utils/url-helpers";
 
 export interface AuthResult {
   success: boolean;
@@ -52,8 +56,7 @@ export async function signInWithMagicLink(
     const { data, error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo:
-          redirectTo || `${window.location.origin}/auth/callback`,
+        emailRedirectTo: redirectTo || getAuthCallbackUrl(),
       },
     });
 
@@ -89,7 +92,7 @@ export async function signUp(
       email: email.trim().toLowerCase(),
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     });
 
@@ -147,7 +150,7 @@ export async function resetPassword(email: string): Promise<AuthResult> {
     const { data, error } = await supabase.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+        redirectTo: getPasswordResetCallbackUrl(),
       }
     );
 
@@ -211,7 +214,7 @@ export async function resendVerificationEmail(
       type: "signup",
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     });
 

@@ -4,6 +4,10 @@ import { createContext, useContext, useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import { getAuthErrorMessage } from "@/utils/auth-error-messages";
+import {
+  getAuthCallbackUrl,
+  getPasswordResetCallbackUrl,
+} from "@/utils/url-helpers";
 
 interface AuthContextType {
   user: User | null;
@@ -83,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: email.trim().toLowerCase(),
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     });
 
@@ -105,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     });
 
@@ -123,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+        redirectTo: getPasswordResetCallbackUrl(),
       }
     );
 
@@ -157,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       type: "signup",
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     });
 
