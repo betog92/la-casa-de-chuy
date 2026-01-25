@@ -222,6 +222,7 @@ export async function POST(
       message: "Reserva cancelada exitosamente",
       refund_amount: refundAmount,
       refund_id: dummyRefundId,
+      refund_status: "pending",
     });
   } catch (error: unknown) {
     const errorMessage =

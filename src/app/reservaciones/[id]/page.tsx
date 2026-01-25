@@ -165,6 +165,7 @@ export default function ReservationDetailsPage() {
         status: "cancelled",
         refund_amount: result.refund_amount,
         refund_id: result.refund_id || null,
+        refund_status: result.refund_status || "pending",
         cancelled_at: new Date().toISOString(),
       });
       setShowCancelModal(false);
@@ -239,6 +240,9 @@ export default function ReservationDetailsPage() {
     businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
+  const hasAdditionalPayment =
+    (reservation?.additional_payment_amount ?? 0) > 0;
+  const showPriceBreakdown = hasDiscounts || hasAdditionalPayment;
 
   if (loading || authLoading) {
     return (
@@ -399,97 +403,138 @@ export default function ReservationDetailsPage() {
             </div>
           </div>
 
-          {/* Desglose de descuentos */}
-          {hasDiscounts && (
+          {/* Desglose de precios (descuentos y/o pago adicional por reagendamiento) */}
+          {showPriceBreakdown && (
             <div className="pt-4 border-t border-zinc-200">
               <h3 className="text-lg font-semibold text-[#103948] mb-4">
                 Desglose de Precios
               </h3>
               <div className="space-y-2">
-                <div className="flex justify-between text-zinc-700">
-                  <span>Precio original:</span>
-                  <span className="line-through text-zinc-400">
-                    ${formatCurrency(reservation.original_price)}
-                  </span>
-                </div>
+                {hasDiscounts && (
+                  <>
+                    <div className="flex justify-between text-zinc-700">
+                      <span>Precio original:</span>
+                      <span className="line-through text-zinc-400">
+                        ${formatCurrency(reservation.original_price)}
+                      </span>
+                    </div>
 
-                {isValidDiscount(reservation.last_minute_discount) && (
-                  <DiscountRow
-                    label="Descuento último minuto"
-                    amount={reservation.last_minute_discount!}
-                  />
+                    {isValidDiscount(reservation.last_minute_discount) && (
+                      <DiscountRow
+                        label="Descuento último minuto"
+                        amount={reservation.last_minute_discount!}
+                      />
+                    )}
+
+                    {isValidDiscount(reservation.loyalty_discount) && (
+                      <DiscountRow
+                        label="Descuento fidelización (10%)"
+                        amount={reservation.loyalty_discount!}
+                      />
+                    )}
+
+                    {isValidDiscount(reservation.referral_discount) && (
+                      <DiscountRow
+                        label="Descuento por referido"
+                        amount={reservation.referral_discount!}
+                      />
+                    )}
+
+                    {isValidDiscountCode(
+                      reservation.discount_code,
+                      reservation.discount_code_discount
+                    ) && (
+                      <DiscountRow
+                        label={`Descuento código "${reservation.discount_code!.trim()}"`}
+                        amount={reservation.discount_code_discount!}
+                      />
+                    )}
+
+                    {(() => {
+                      const pointsDiscount = calculatePointsDiscount(
+                        reservation.loyalty_points_used
+                      );
+                      if (pointsDiscount <= 0) {
+                        return null;
+                      }
+                      return (
+                        <DiscountRow
+                          label={`Puntos de lealtad usados (${reservation.loyalty_points_used} puntos)`}
+                          amount={pointsDiscount}
+                        />
+                      );
+                    })()}
+
+                    {isValidDiscount(reservation.credits_used) && (
+                      <DiscountRow
+                        label="Créditos usados"
+                        amount={reservation.credits_used!}
+                      />
+                    )}
+                  </>
                 )}
 
-                {isValidDiscount(reservation.loyalty_discount) && (
-                  <DiscountRow
-                    label="Descuento fidelización (10%)"
-                    amount={reservation.loyalty_discount!}
-                  />
+                {!hasDiscounts && hasAdditionalPayment && (
+                  <div className="flex justify-between text-zinc-700">
+                    <span>Precio de la reserva:</span>
+                    <span>
+                      ${formatCurrency(reservation.price)}
+                    </span>
+                  </div>
                 )}
 
-                {isValidDiscount(reservation.referral_discount) && (
-                  <DiscountRow
-                    label="Descuento por referido"
-                    amount={reservation.referral_discount!}
-                  />
+                {hasAdditionalPayment && (
+                  <div className="flex justify-between text-sm text-zinc-700">
+                    <span>Pago adicional por reagendamiento:</span>
+                    <span className="text-[#103948]">
+                      +$
+                      {formatCurrency(
+                        reservation.additional_payment_amount ?? 0
+                      )}
+                    </span>
+                  </div>
                 )}
 
-                {isValidDiscountCode(
-                  reservation.discount_code,
-                  reservation.discount_code_discount
-                ) && (
-                  <DiscountRow
-                    label={`Descuento código "${reservation.discount_code!.trim()}"`}
-                    amount={reservation.discount_code_discount!}
-                  />
-                )}
-
-                {(() => {
-                  const pointsDiscount = calculatePointsDiscount(
-                    reservation.loyalty_points_used
-                  );
-                  if (pointsDiscount <= 0) {
-                    return null;
-                  }
-                  return (
-                    <DiscountRow
-                      label={`Puntos de lealtad usados (${reservation.loyalty_points_used} puntos)`}
-                      amount={pointsDiscount}
-                    />
-                  );
-                })()}
-
-                {isValidDiscount(reservation.credits_used) && (
-                  <DiscountRow
-                    label="Créditos usados"
-                    amount={reservation.credits_used!}
-                  />
-                )}
-
-                <div className="pt-5 pb-0 border-t border-zinc-200 flex justify-between font-semibold text-lg">
+                <div className="pt-5 border-t border-zinc-200 flex justify-between font-semibold text-lg">
                   <span>Total pagado:</span>
                   <span className="text-[#103948]">
-                    ${formatCurrency(reservation.price)}
+                    $
+                    {formatCurrency(
+                      calculateTotalPaid(
+                        reservation.price,
+                        reservation.additional_payment_amount
+                      )
+                    )}
                   </span>
                 </div>
+                {reservation.payment_id && (
+                  <p className="mt-2 text-sm text-zinc-500 font-mono">
+                    ID de pago: {reservation.payment_id}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
-          {/* Precio sin descuentos */}
-          {!hasDiscounts && (
-            <div className="pt-5 pb-0 border-t border-zinc-200">
+          {/* Precio sin descuentos ni pago adicional */}
+          {!showPriceBreakdown && (
+            <div className="pt-5 border-t border-zinc-200">
               <div className="flex justify-between font-semibold text-lg">
                 <span>Precio total:</span>
                 <span className="text-[#103948]">
                   ${formatCurrency(reservation.price)}
                 </span>
               </div>
+              {reservation.payment_id && (
+                <p className="mt-2 text-sm text-zinc-500 font-mono">
+                  ID de pago: {reservation.payment_id}
+                </p>
+              )}
             </div>
           )}
 
           {/* Información de reagendamiento */}
-          {reservation.reschedule_count && reservation.reschedule_count > 0 && (
+          {(reservation.reschedule_count ?? 0) > 0 && (
             <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
               <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
                 <h3 className="text-lg font-semibold text-orange-900 mb-3">
@@ -513,32 +558,22 @@ export default function ReservationDetailsPage() {
                       <p className="text-orange-700 font-medium mb-1">
                         Pago adicional por reagendamiento:
                       </p>
-                      {reservation.additional_payment_amount && (
+                      {(reservation.additional_payment_amount ?? 0) > 0 && (
                         <p className="text-orange-900 font-semibold mb-1">
                           $
                           {formatCurrency(
-                            reservation.additional_payment_amount
+                            reservation.additional_payment_amount ?? 0
                           )}{" "}
                           MXN
                         </p>
                       )}
                       <p className="text-orange-900 font-mono text-xs">
-                        ID: {reservation.additional_payment_id}
+                        ID de pago: {reservation.additional_payment_id}
                       </p>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Información de pago */}
-          {reservation.payment_id && (
-            <div className="pt-4 border-t border-zinc-200">
-              <p className="text-sm text-zinc-600 mb-1">ID de pago</p>
-              <p className="text-sm font-mono text-[#103948]">
-                {reservation.payment_id}
-              </p>
             </div>
           )}
 
@@ -567,17 +602,50 @@ export default function ReservationDetailsPage() {
                       <strong>Monto del reembolso:</strong> $
                       {formatCurrency(reservation.refund_amount)} MXN
                     </div>
-                    {reservation.refund_id && (
-                      <div>
-                        <p className="text-red-700 font-medium mb-1">
-                          ID de reembolso:
-                        </p>
-                        <p className="text-red-900 font-mono text-xs">
-                          {reservation.refund_id}
-                        </p>
+                    {(reservation.refund_id || reservation.refund_status) && (
+                      <div className="space-y-1">
+                        {reservation.refund_id && (
+                          <div className="text-red-700">
+                            <span className="font-medium">ID de reembolso:</span>{" "}
+                            <span className="font-mono text-xs text-red-900">
+                              {reservation.refund_id}
+                            </span>
+                          </div>
+                        )}
+                        {(reservation.refund_status ||
+                          reservation.refund_id?.startsWith("refund_dummy_")) && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-red-700 font-medium text-sm">
+                              Estado del reembolso:
+                            </span>
+                            <span
+                              className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full ${
+                                reservation.refund_id?.startsWith(
+                                  "refund_dummy_"
+                                )
+                                  ? "bg-green-100 text-green-800"
+                                  : reservation.refund_status === "processed"
+                                    ? "bg-green-100 text-green-800"
+                                    : reservation.refund_status === "failed"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-amber-100 text-amber-800"
+                              }`}
+                            >
+                              {reservation.refund_id?.startsWith(
+                                "refund_dummy_"
+                              )
+                                ? "Procesado"
+                                : reservation.refund_status === "processed"
+                                  ? "Procesado"
+                                  : reservation.refund_status === "failed"
+                                    ? "Fallido"
+                                    : "Pendiente"}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
-                    <div className="mt-3 p-3 bg-white rounded border border-red-200">
+                    <div className="mt-3">
                       <p className="text-xs text-red-700">
                         <strong>Información sobre el reembolso:</strong>
                       </p>
@@ -589,10 +657,6 @@ export default function ReservationDetailsPage() {
                         <li>
                           El monto se reembolsará al método de pago original
                           utilizado para la reserva.
-                        </li>
-                        <li>
-                          Si tienes alguna pregunta sobre tu reembolso, contacta
-                          a soporte.
                         </li>
                       </ul>
                     </div>
