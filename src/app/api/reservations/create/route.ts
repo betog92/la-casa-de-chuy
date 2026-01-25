@@ -85,8 +85,21 @@ export async function POST(request: NextRequest) {
       discountCodeDiscount,
     } = body;
 
-    // Usar el userId autenticado (ignorar cualquier userId del body por seguridad)
-    const userId = authenticatedUserId;
+    const normalizedEmail = (email || "").toLowerCase().trim();
+
+    // Usar el userId autenticado; si no hay sesión pero el email tiene cuenta, crear como usuario igual
+    let userId: string | null = authenticatedUserId;
+    if (!userId && normalizedEmail) {
+      const { data: userByEmail } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle();
+      if (userByEmail && (userByEmail as { id: string }).id) {
+        userId = (userByEmail as { id: string }).id;
+      }
+    }
 
     // Validar disponibilidad
     const isAvailable = await validateSlotAvailability(
@@ -128,8 +141,6 @@ export async function POST(request: NextRequest) {
 
     // Crear reserva
     const endTime = calculateEndTime(startTime);
-    // Normalizar email para consistencia (mismo formato que en token de invitado)
-    const normalizedEmail = email.toLowerCase().trim();
     const reservationData = {
       email: normalizedEmail,
       name,

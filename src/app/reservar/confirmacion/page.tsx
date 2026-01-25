@@ -112,7 +112,7 @@ function ConfirmacionContent() {
 
   // Determinar si mostrar secciones de invitado (solo si NO está autenticado, tiene guestReservationUrl y el email NO tiene cuenta)
   const isGuest = !user && guestReservationUrl && !hasAccount;
-  const showNormalAccountBlock = user || (!!guestReservationUrl && hasAccount);
+  const showNormalAccountBlock = user || !!hasAccount;
   const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
 
   // Usar el nivel de los query params si está disponible, sino usar el cargado desde la API
