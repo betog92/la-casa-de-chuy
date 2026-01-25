@@ -11,6 +11,8 @@ import {
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
 
+type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -58,12 +60,15 @@ export async function GET(
       return notFoundResponse("Reserva");
     }
 
+    // Type assertion para ayudar a TypeScript
+    const reservationData = data as ReservationRow;
+
     // Si hay usuario autenticado, verificar pertenencia; si no, permitir (flujo invitado/confirmación)
-    if (user && data.user_id && data.user_id !== user.id) {
+    if (user && reservationData.user_id && reservationData.user_id !== user.id) {
       return unauthorizedResponse("No tienes permisos para ver esta reserva");
     }
 
-    return successResponse({ reservation: data });
+    return successResponse({ reservation: reservationData });
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Error al cargar la reserva";

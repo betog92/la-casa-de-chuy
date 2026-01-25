@@ -17,6 +17,9 @@ import {
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
 
+type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
+type ReservationUpdate = Database["public"]["Tables"]["reservations"]["Update"];
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -79,15 +82,21 @@ export async function POST(
       return notFoundResponse("Reserva");
     }
 
+    // Type assertion para ayudar a TypeScript
+    const reservationRow = reservation as Pick<
+      ReservationRow,
+      "id" | "user_id" | "status" | "reschedule_count" | "date" | "start_time" | "payment_id"
+    >;
+
     // Verificar que la reserva pertenece al usuario autenticado
-    if (reservation.user_id !== user.id) {
+    if (reservationRow.user_id !== user.id) {
       return unauthorizedResponse(
         "No tienes permisos para completar el reagendamiento de esta reserva"
       );
     }
 
     // Verificar que el status es 'confirmed'
-    if (reservation.status !== "confirmed") {
+    if (reservationRow.status !== "confirmed") {
       return errorResponse(
         "Solo se pueden reagendar reservas confirmadas",
         400
@@ -95,7 +104,7 @@ export async function POST(
     }
 
     // Verificar límite de reagendamientos (solo 1 intento permitido)
-    if ((reservation.reschedule_count || 0) >= 1) {
+    if ((reservationRow.reschedule_count || 0) >= 1) {
       return errorResponse(
         "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento.",
         400
@@ -118,12 +127,12 @@ export async function POST(
     const endTime = calculateEndTime(startTime);
 
     // Guardar valores originales antes de actualizar (solo si es la primera vez que se reagenda)
-    const updateData: Record<string, unknown> = {
+    const updateData: ReservationUpdate = {
       date,
       start_time: formatTimeToSeconds(startTime),
       end_time: endTime,
       additional_payment_id: paymentId, // Guardar el ID del pago adicional
-      reschedule_count: (reservation.reschedule_count || 0) + 1,
+      reschedule_count: (reservationRow.reschedule_count || 0) + 1,
     };
 
     // Si hay monto adicional, guardarlo
@@ -136,17 +145,18 @@ export async function POST(
     }
 
     // Si es la primera vez que se reagenda, guardar valores originales
-    if ((reservation.reschedule_count || 0) === 0) {
-      updateData.original_date = reservation.date;
-      updateData.original_start_time = reservation.start_time;
-      if (reservation.payment_id) {
-        updateData.original_payment_id = reservation.payment_id;
+    if ((reservationRow.reschedule_count || 0) === 0) {
+      updateData.original_date = reservationRow.date;
+      updateData.original_start_time = reservationRow.start_time;
+      if (reservationRow.payment_id) {
+        updateData.original_payment_id = reservationRow.payment_id;
       }
     }
 
     // Actualizar la reserva
     const { data: updatedReservation, error: updateError } = await supabase
       .from("reservations")
+      // @ts-ignore - TypeScript tiene problemas con tipos de Supabase cuando se usan selects parciales
       .update(updateData)
       .eq("id", reservationId)
       .select()

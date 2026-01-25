@@ -1,5 +1,8 @@
 import { createServiceRoleClient } from "./server";
 import type { User } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+
+type UserInsert = Database["public"]["Tables"]["users"]["Insert"];
 
 /**
  * Sincroniza un usuario de auth.users con la tabla public.users
@@ -24,17 +27,18 @@ export async function syncUserToDatabase(user: User): Promise<{
     const normalizedEmail = user.email.toLowerCase().trim();
 
     // 1. Insertar o actualizar en users (idempotente)
-    const { error: upsertError } = await serviceClient.from("users").upsert(
-      {
-        id: user.id,
-        email: normalizedEmail,
-        created_at: user.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
+    const userData: UserInsert = {
+      id: user.id,
+      email: normalizedEmail,
+      created_at: user.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const { error: upsertError } = await serviceClient
+      .from("users")
+      // @ts-ignore - TypeScript tiene problemas con tipos de Supabase en upsert
+      .upsert(userData, {
         onConflict: "id",
-      }
-    );
+      });
 
     if (upsertError) {
       console.error("Error syncing user to database:", upsertError);
@@ -47,6 +51,7 @@ export async function syncUserToDatabase(user: User): Promise<{
     // 2. Vincular reservas de invitado que tengan el mismo email
     const { error: linkError } = await serviceClient
       .from("reservations")
+      // @ts-ignore - TypeScript tiene problemas con tipos de Supabase en update
       .update({ user_id: user.id })
       .is("user_id", null)
       .ilike("email", normalizedEmail);

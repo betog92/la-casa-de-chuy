@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -57,7 +57,7 @@ function getErrorMessage(error: unknown): string {
   return "Ocurrió un error al procesar la reserva. Por favor intenta nuevamente.";
 }
 
-export default function FormularioReservaPage() {
+function FormularioReservaContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [reservationData, setReservationData] =
@@ -1904,5 +1904,22 @@ export default function FormularioReservaPage() {
         onClose={() => setShowTermsModal(false)}
       />
     </div>
+  );
+}
+
+export default function FormularioReservaPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#103948] mx-auto"></div>
+            <p className="mt-4 text-zinc-600">Cargando formulario...</p>
+          </div>
+        </div>
+      }
+    >
+      <FormularioReservaContent />
+    </Suspense>
   );
 }

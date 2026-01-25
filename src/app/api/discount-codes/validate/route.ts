@@ -1,11 +1,14 @@
 import { NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getMonterreyToday } from "@/utils/business-days";
+import type { Database } from "@/types/database.types";
 import {
   successResponse,
   errorResponse,
   validationErrorResponse,
 } from "@/utils/api-response";
+
+type DiscountCode = Database["public"]["Tables"]["discount_codes"]["Row"];
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,18 +35,21 @@ export async function POST(request: NextRequest) {
       return errorResponse("Código de descuento no válido", 404);
     }
 
+    // Type assertion para ayudar a TypeScript
+    const discountCodeRow = discountCode as DiscountCode;
+
     // Validar que esté activo
-    if (!discountCode.active) {
+    if (!discountCodeRow.active) {
       return errorResponse("Este código de descuento no está activo", 400);
     }
 
     // Validar fecha de expiración
     const today = getMonterreyToday();
 
-    const validFrom = new Date(discountCode.valid_from);
+    const validFrom = new Date(discountCodeRow.valid_from);
     validFrom.setHours(0, 0, 0, 0);
 
-    const validUntil = new Date(discountCode.valid_until);
+    const validUntil = new Date(discountCodeRow.valid_until);
     validUntil.setHours(23, 59, 59, 999);
 
     if (today < validFrom) {
@@ -60,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar límite de usos totales
-    if (discountCode.current_uses >= discountCode.max_uses) {
+    if (discountCodeRow.current_uses >= discountCodeRow.max_uses) {
       return errorResponse(
         "Este código de descuento ha alcanzado su límite de usos",
         400
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest) {
       const { data: existingUse, error: useError } = await supabase
         .from("discount_code_uses")
         .select("id")
-        .eq("discount_code_id", discountCode.id)
+        .eq("discount_code_id", discountCodeRow.id)
         .eq("email", email.toLowerCase().trim())
         .maybeSingle();
 
@@ -87,9 +93,9 @@ export async function POST(request: NextRequest) {
     // Retornar información del código válido
     return successResponse({
       valid: true,
-      code: discountCode.code,
-      description: discountCode.description,
-      discountPercentage: Number(discountCode.discount_percentage),
+      code: discountCodeRow.code,
+      description: discountCodeRow.description,
+      discountPercentage: Number(discountCodeRow.discount_percentage),
     });
   } catch (error: unknown) {
     const errorMessage =

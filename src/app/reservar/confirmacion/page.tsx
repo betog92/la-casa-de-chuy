@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,7 +13,7 @@ import {
 import type { Reservation } from "@/types/reservation";
 import axios from "axios";
 
-export default function ConfirmacionPage() {
+function ConfirmacionContent() {
   const searchParams = useSearchParams();
   const reservationId = searchParams.get("id");
   const rescheduled = searchParams.get("rescheduled");
@@ -497,5 +497,21 @@ export default function ConfirmacionPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ConfirmacionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-zinc-50 to-white">
+          <div className="text-center">
+            <p className="text-zinc-600">Cargando información de tu reserva...</p>
+          </div>
+        </div>
+      }
+    >
+      <ConfirmacionContent />
+    </Suspense>
   );
 }
