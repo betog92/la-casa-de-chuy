@@ -33,10 +33,11 @@ const ConektaPaymentForm = forwardRef<
   ConektaPaymentFormRef,
   ConektaPaymentFormProps
 >(({ onError, disabled = false }, ref) => {
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardName, setCardName] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
+  // Valores pre-llenados para testing (Conekta test card)
+  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
+  const [cardName, setCardName] = useState("Julio Andres");
+  const [cardExpiry, setCardExpiry] = useState("06/26");
+  const [cardCvc, setCardCvc] = useState("123");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const scriptLoaded = useRef(false);
@@ -190,7 +191,7 @@ const ConektaPaymentForm = forwardRef<
           // Traducir mensajes comunes
           if (errorMessage.includes("Your code could not be processed")) {
             errorMessage =
-              "No se pudo procesar el código. Por favor verifica los datos de tu tarjeta e intenta nuevamente.";
+              "No se pudo procesar tu tarjeta. Por favor verifica los datos e intenta nuevamente.";
           } else if (errorMessage.includes("The card was declined")) {
             errorMessage =
               "La tarjeta fue rechazada. Por favor verifica los datos o usa otra tarjeta.";

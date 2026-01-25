@@ -671,27 +671,6 @@ export default function ReservationDetailsPage() {
             <div className="pt-6 border-t border-zinc-200 space-y-4">
               <div>
                 <button
-                  onClick={() => setShowCancelModal(true)}
-                  disabled={!canCancel}
-                  className="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  Cancelar Reserva
-                </button>
-                <p className="mt-2 text-xs text-red-600">
-                  La cancelación solo está disponible con al menos 5 días
-                  hábiles de anticipación.
-                  {businessDays !== null && (
-                    <>
-                      {" "}
-                      Faltan {businessDays} día
-                      {businessDays !== 1 ? "s" : ""} hábil
-                      {businessDays !== 1 ? "es" : ""}.
-                    </>
-                  )}
-                </p>
-              </div>
-              <div>
-                <button
                   onClick={() => setShowRescheduleModal(true)}
                   disabled={!canReschedule || rescheduling}
                   className="w-full bg-[#103948] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
@@ -717,22 +696,37 @@ export default function ReservationDetailsPage() {
                   )}
                 </p>
               </div>
+              <div>
+                <button
+                  onClick={() => setShowCancelModal(true)}
+                  disabled={!canCancel}
+                  className="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Cancelar Reserva
+                </button>
+                <p className="mt-2 text-xs text-red-600">
+                  La cancelación solo está disponible con al menos 5 días
+                  hábiles de anticipación.
+                  {businessDays !== null && (
+                    <>
+                      {" "}
+                      Faltan {businessDays} día
+                      {businessDays !== 1 ? "s" : ""} hábil
+                      {businessDays !== 1 ? "es" : ""}.
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
           )}
 
           {/* Navegación */}
-          <div className="pt-6 border-t border-zinc-200 flex flex-col sm:flex-row gap-3">
+          <div className="pt-6 border-t border-zinc-200">
             <Link
               href="/account"
-              className="flex-1 text-center rounded-lg border border-zinc-300 bg-white px-6 py-3 font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+              className="block w-full text-center rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
             >
               Volver a mis reservas
-            </Link>
-            <Link
-              href="/reservar"
-              className="flex-1 text-center rounded-lg bg-[#103948] px-6 py-3 font-medium text-white transition-colors hover:bg-[#0d2d38]"
-            >
-              Hacer nueva reserva
             </Link>
           </div>
         </div>

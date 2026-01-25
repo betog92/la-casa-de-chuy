@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
         errorMessage.includes("code could not be processed")
       ) {
         errorMessage =
-          "No se pudo procesar el código de la tarjeta. Por favor verifica los datos e intenta nuevamente.";
+          "No se pudo procesar tu tarjeta. Por favor verifica los datos e intenta nuevamente.";
       } else if (
         errorMessage.includes("card was declined") ||
         errorMessage.includes("declined")

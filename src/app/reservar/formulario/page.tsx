@@ -65,6 +65,7 @@ function FormularioReservaContent() {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [conektaError, setConektaError] = useState<string | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
@@ -470,6 +471,7 @@ function FormularioReservaContent() {
 
     setLoading(true);
     setError(null);
+    setConektaError(null);
 
     try {
       // Paso 1: Crear token de tarjeta con Conekta
@@ -481,8 +483,7 @@ function FormularioReservaContent() {
 
       const token = await paymentFormRef.current.createToken();
       if (!token) {
-        // El error ya fue manejado por el componente de pago (se muestra en errors.general del componente)
-        // No necesitamos mostrar otro error aquí para evitar duplicación
+        // Errores de Conekta (token) los maneja onError → conektaError
         setLoading(false);
         return;
       }
@@ -505,16 +506,17 @@ function FormularioReservaContent() {
         });
 
         if (!orderResponse.data.success) {
-          setError(orderResponse.data.error || "Error al procesar el pago");
+          setConektaError(
+            orderResponse.data.error || "Error al procesar el pago"
+          );
           setLoading(false);
           return;
         }
 
         orderId = orderResponse.data.orderId;
-      } catch (error: unknown) {
-        // Manejar errores específicos de la API de Conekta
-        const errorMessage = getErrorMessage(error);
-        setError(errorMessage);
+      } catch (err: unknown) {
+        const errorMessage = getErrorMessage(err);
+        setConektaError(errorMessage);
         setLoading(false);
         return;
       }
@@ -607,7 +609,6 @@ function FormularioReservaContent() {
         return;
       }
     } catch (err: unknown) {
-      // Catch genérico para errores inesperados
       const errorMessage = getErrorMessage(err);
       console.error("Error en proceso de reserva:", err);
       setError(errorMessage);
@@ -645,7 +646,56 @@ function FormularioReservaContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F6F7] py-6 sm:py-8">
+    <div className="min-h-screen bg-[#F6F6F7] py-6 sm:py-8 relative">
+      {/* Overlay: loading o error de Conekta (token/create-order) */}
+      {(loading || conektaError) && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 shadow-xl max-w-sm w-full mx-4">
+            <div className="text-center">
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#103948] mx-auto mb-4"></div>
+                  <p className="text-lg font-medium text-zinc-900 mb-2">
+                    Procesando pago...
+                  </p>
+                  <p className="text-sm text-zinc-600">
+                    Por favor espera, no cierres esta página
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                    <svg
+                      className="h-6 w-6 text-red-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-lg font-medium text-zinc-900 mb-2">
+                    Error en el pago
+                  </p>
+                  <p className="text-sm text-zinc-600 mb-5">{conektaError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setConektaError(null)}
+                    className="w-full rounded-lg bg-[#103948] px-6 py-3 font-semibold text-white transition-colors hover:bg-[#0d2d38]"
+                  >
+                    Entendido
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-4 max-w-7xl">
         {/* Layout de dos columnas */}
         <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -1282,7 +1332,11 @@ function FormularioReservaContent() {
                   <div className="p-4 sm:p-5">
                     <ConektaPaymentForm
                       ref={paymentFormRef}
-                      onError={(error) => setError(error)}
+                      onError={(msg) => {
+                        if (msg !== "Por favor corrige los errores en el formulario de pago") {
+                          setConektaError(msg);
+                        }
+                      }}
                       disabled={loading}
                     />
                   </div>
@@ -1381,7 +1435,7 @@ function FormularioReservaContent() {
                 )}
               </div>
 
-              {/* Error general */}
+              {/* Error general (no Conekta: reserva, formulario, etc.) */}
               {error && (
                 <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 text-sm">
                   {error}
@@ -1394,7 +1448,7 @@ function FormularioReservaContent() {
                 disabled={loading}
                 className="w-full rounded-lg bg-[#103948] px-6 py-3 font-semibold text-white transition-colors hover:bg-[#0d2d3a] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? "Procesando..." : "Pagar ahora"}
+                Pagar ahora
               </button>
 
               {/* Links de política y términos */}
