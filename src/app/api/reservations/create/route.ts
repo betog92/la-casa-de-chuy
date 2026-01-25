@@ -340,28 +340,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Email de confirmación (no fallar la reserva si falla el envío)
+    // Email de confirmación en segundo plano (no bloquear la respuesta ni el loading)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const manageUrl = guestReservationUrl
       ? guestReservationUrl
       : `${baseUrl}/reservaciones/${reservationId}`;
     if (normalizedEmail) {
-      try {
-        const emailResult = await sendReservationConfirmation({
-          to: normalizedEmail,
-          name,
-          date,
-          startTime,
-          price: Number.isFinite(Number(price)) ? Number(price) : 0,
-          reservationId,
-          manageUrl,
+      sendReservationConfirmation({
+        to: normalizedEmail,
+        name,
+        date,
+        startTime,
+        price: Number.isFinite(Number(price)) ? Number(price) : 0,
+        reservationId,
+        manageUrl,
+        baseUrl,
+      })
+        .then((r) => {
+          if (!r.ok) {
+            console.error("Error al enviar email de confirmación:", r.error);
+          }
+        })
+        .catch((e) => {
+          console.error("Error inesperado al enviar email de confirmación:", e);
         });
-        if (!emailResult.ok) {
-          console.error("Error al enviar email de confirmación:", emailResult.error);
-        }
-      } catch (emailErr) {
-        console.error("Error inesperado al enviar email de confirmación:", emailErr);
-      }
     }
 
     return successResponse({

@@ -5,7 +5,14 @@ import {
   formatCurrency,
 } from "@/utils/formatters";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return null;
+  if (!resendClient) resendClient = new Resend(key);
+  return resendClient;
+}
 
 const FROM = "La Casa de Chuy el Rico <reservas@lacasadechuyelrico.com>";
 
@@ -18,6 +25,8 @@ export interface SendReservationConfirmationParams {
   reservationId: string;
   /** URL para gestionar la reserva (guest: /reservas/[token], user: /reservaciones/[id]) */
   manageUrl: string;
+  /** Base URL de la app (opcional); si no se pasa, se usa env o localhost */
+  baseUrl?: string;
 }
 
 /**
@@ -27,7 +36,8 @@ export interface SendReservationConfirmationParams {
 export async function sendReservationConfirmation(
   params: SendReservationConfirmationParams
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!process.env.RESEND_API_KEY?.trim()) {
+  const resend = getResend();
+  if (!resend) {
     return { ok: false, error: "RESEND_API_KEY no configurada" };
   }
   if (!params.to?.trim()) {
@@ -35,7 +45,8 @@ export async function sendReservationConfirmation(
   }
 
   const to = params.to.trim();
-  const { name, date, startTime, price, reservationId, manageUrl } = params;
+  const { name, date, startTime, price, reservationId, manageUrl, baseUrl: baseUrlParam } =
+    params;
 
   const dateFormatted = formatDisplayDate(date);
   const timeFormatted = formatTimeRange(startTime);
@@ -44,7 +55,10 @@ export async function sendReservationConfirmation(
 
   const subject = `Reserva confirmada – La Casa de Chuy el Rico – ${dateFormatted}`;
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl =
+    baseUrlParam?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
   const logoUrl = `${baseUrl}/logo.webp`;
 
   const html = `
