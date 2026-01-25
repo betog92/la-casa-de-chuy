@@ -29,6 +29,7 @@ function ConfirmacionContent() {
   const [guestReservationUrl, setGuestReservationUrl] = useState<string | null>(
     null
   );
+  const [hasAccount, setHasAccount] = useState<boolean | null>(null);
   const [loyaltyLevelName, setLoyaltyLevelName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,6 +72,9 @@ function ConfirmacionContent() {
         }
 
         setReservation(result.reservation as Reservation);
+        setHasAccount(
+          typeof result.hasAccount === "boolean" ? result.hasAccount : null
+        );
       } catch (err) {
         console.error("Error loading reservation:", err);
         setError("Ocurrió un error al cargar la reserva");
@@ -106,8 +110,9 @@ function ConfirmacionContent() {
     loadLoyalty();
   }, [user]);
 
-  // Determinar si mostrar secciones de invitado (solo si NO está autenticado y tiene guestReservationUrl)
-  const isGuest = !user && guestReservationUrl;
+  // Determinar si mostrar secciones de invitado (solo si NO está autenticado, tiene guestReservationUrl y el email NO tiene cuenta)
+  const isGuest = !user && guestReservationUrl && !hasAccount;
+  const showNormalAccountBlock = user || (!!guestReservationUrl && hasAccount);
   const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
 
   // Usar el nivel de los query params si está disponible, sino usar el cargado desde la API
@@ -412,8 +417,8 @@ function ConfirmacionContent() {
           </div>
         )}
 
-        {/* Para usuarios autenticados: mostrar enlace a su cuenta */}
-        {user && (
+        {/* Para usuarios autenticados o invitados cuyo email ya tiene cuenta: mostrar enlace a su cuenta */}
+        {showNormalAccountBlock && (
           <div className="mb-6 rounded-lg border border-[#103948] bg-[#103948]/5 p-6">
             <h3 className="mb-2 text-lg font-semibold text-[#103948]">
               ¡Reserva agregada a tu cuenta!

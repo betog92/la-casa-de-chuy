@@ -68,7 +68,23 @@ export async function GET(
       return unauthorizedResponse("No tienes permisos para ver esta reserva");
     }
 
-    return successResponse({ reservation: reservationData });
+    // Si no hay sesión, comprobar si el email de la reserva ya tiene cuenta (para UI de confirmación)
+    let hasAccount: boolean | undefined;
+    if (!user && reservationData.email) {
+      const normalized = String(reservationData.email).toLowerCase().trim();
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", normalized)
+        .limit(1)
+        .maybeSingle();
+      hasAccount = !!userRow;
+    }
+
+    return successResponse({
+      reservation: reservationData,
+      ...(hasAccount !== undefined && { hasAccount }),
+    });
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Error al cargar la reserva";
