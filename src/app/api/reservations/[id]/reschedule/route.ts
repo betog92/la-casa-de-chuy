@@ -19,6 +19,7 @@ import {
   conflictResponse,
 } from "@/utils/api-response";
 import { sendRescheduleConfirmation } from "@/lib/email";
+import { verifyGuestToken } from "@/lib/auth/guest-tokens";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -34,6 +35,15 @@ export async function POST(
     if (!reservationId) {
       return validationErrorResponse("ID de reserva requerido");
     }
+
+    // Obtener el cuerpo de la solicitud
+    let body: { date?: string; startTime?: string; token?: string } = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Si no hay body o es inválido, body queda como objeto vacío
+    }
+    const { date, startTime, token: guestToken } = body;
 
     // Obtener el usuario autenticado
     const cookieStore = await cookies();
@@ -57,14 +67,6 @@ export async function POST(
       error: authError,
     } = await authClient.auth.getUser();
 
-    if (authError || !user) {
-      return unauthorizedResponse("Debes iniciar sesión para reagendar una reserva");
-    }
-
-    // Obtener el cuerpo de la solicitud
-    const body = await request.json();
-    const { date, startTime } = body;
-
     // Validar campos requeridos
     if (!date || !startTime) {
       return validationErrorResponse("Fecha y hora de reagendamiento requeridas");
@@ -85,11 +87,11 @@ export async function POST(
       return validationErrorResponse("No se puede reagendar a una fecha pasada");
     }
 
-    // Obtener la reserva y verificar que pertenece al usuario
+    // Obtener la reserva
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
-      .select("id, user_id, status, date, start_time, reschedule_count, price, payment_id")
+      .select("id, user_id, status, date, start_time, reschedule_count, price, payment_id, email")
       .eq("id", reservationId)
       .single();
 
@@ -100,12 +102,35 @@ export async function POST(
     // Type assertion para ayudar a TypeScript
     const reservationRow = reservation as Pick<
       ReservationRow,
-      "id" | "user_id" | "status" | "date" | "start_time" | "reschedule_count" | "price" | "payment_id"
+      "id" | "user_id" | "status" | "date" | "start_time" | "reschedule_count" | "price" | "payment_id" | "email"
     >;
 
-    // Verificar que la reserva pertenece al usuario autenticado
-    if (reservationRow.user_id !== user.id) {
-      return unauthorizedResponse("No tienes permisos para reagendar esta reserva");
+    // Validar autorización: usuario autenticado O token de invitado válido
+    if (user) {
+      // Usuario autenticado: verificar que la reserva pertenece al usuario
+      if (reservationRow.user_id !== user.id) {
+        return unauthorizedResponse("No tienes permisos para reagendar esta reserva");
+      }
+    } else if (guestToken) {
+      // Invitado: verificar token
+      const tokenResult = await verifyGuestToken(guestToken);
+      if (!tokenResult.valid || !tokenResult.payload) {
+        return unauthorizedResponse(
+          tokenResult.error || "Token inválido o expirado"
+        );
+      }
+
+      // Verificar que el email del token coincide con el email de la reserva
+      const tokenEmail = (tokenResult.payload.email || "").toLowerCase().trim();
+      const reservationEmail = ((reservationRow.email as string) || "").toLowerCase().trim();
+      if (tokenEmail !== reservationEmail || tokenResult.payload.reservationId !== reservationId) {
+        return unauthorizedResponse("No tienes permisos para reagendar esta reserva");
+      }
+    } else {
+      // Sin autenticación ni token
+      return unauthorizedResponse(
+        "Debes iniciar sesión o proporcionar un token válido para reagendar una reserva"
+      );
     }
 
     // Verificar que el status es 'confirmed'

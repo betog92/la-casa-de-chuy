@@ -45,6 +45,7 @@ function ReschedulePaymentContent() {
   const newDate = searchParams.get("newDate");
   const newStartTime = searchParams.get("newStartTime");
   const additionalAmountParam = searchParams.get("additionalAmount");
+  const guestToken = searchParams.get("token"); // Token de invitado (opcional)
 
   // Estados
   const [currentReservation, setCurrentReservation] =
@@ -180,6 +181,7 @@ function ReschedulePaymentContent() {
             startTime: newStartTime,
             paymentId: orderId,
             additionalAmount: additionalAmount,
+            ...(guestToken && { token: guestToken }), // Incluir token si es invitado
           }
         );
 

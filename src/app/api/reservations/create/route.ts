@@ -78,8 +78,6 @@ export async function POST(request: NextRequest) {
       paymentId,
       discountAmount,
       lastMinuteDiscount,
-      loyaltyDiscount,
-      loyaltyPointsUsed,
       creditsUsed,
       referralDiscount,
       discountCode,
@@ -100,6 +98,14 @@ export async function POST(request: NextRequest) {
       if (userByEmail && (userByEmail as { id: string }).id) {
         userId = (userByEmail as { id: string }).id;
       }
+    }
+
+    // Invitados (sin userId) no pueden usar beneficios de fidelización
+    let loyaltyDiscount = 0;
+    let loyaltyPointsUsed = 0;
+    if (userId) {
+      loyaltyDiscount = Number(body.loyaltyDiscount) || 0;
+      loyaltyPointsUsed = Number(body.loyaltyPointsUsed) || 0;
     }
 
     // Validar disponibilidad

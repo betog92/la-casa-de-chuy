@@ -20,6 +20,7 @@ import {
   notFoundResponse,
 } from "@/utils/api-response";
 import { sendCancellationConfirmation } from "@/lib/email";
+import { verifyGuestToken } from "@/lib/auth/guest-tokens";
 import type { Database } from "@/types/database.types";
 
 export async function POST(
@@ -32,6 +33,10 @@ export async function POST(
     if (!reservationId) {
       return validationErrorResponse("ID de reserva requerido");
     }
+
+    // Obtener el body para verificar si hay token de invitado
+    const body = await request.json().catch(() => ({}));
+    const guestToken = body.token as string | undefined;
 
     // Obtener el usuario autenticado
     const cookieStore = await cookies();
@@ -55,13 +60,7 @@ export async function POST(
       error: authError,
     } = await authClient.auth.getUser();
 
-    if (authError || !user) {
-      return unauthorizedResponse(
-        "Debes iniciar sesión para cancelar una reserva"
-      );
-    }
-
-    // Obtener la reserva y verificar que pertenece al usuario
+    // Obtener la reserva
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
@@ -87,10 +86,35 @@ export async function POST(
       name: string | null;
     };
 
-    // Verificar que la reserva pertenece al usuario autenticado
-    if (reservationRow.user_id !== user.id) {
+    // Validar autorización: usuario autenticado O token de invitado válido
+    if (user) {
+      // Usuario autenticado: verificar que la reserva pertenece al usuario
+      if (reservationRow.user_id !== user.id) {
+        return unauthorizedResponse(
+          "No tienes permisos para cancelar esta reserva"
+        );
+      }
+    } else if (guestToken) {
+      // Invitado: verificar token
+      const tokenResult = await verifyGuestToken(guestToken);
+      if (!tokenResult.valid || !tokenResult.payload) {
+        return unauthorizedResponse(
+          tokenResult.error || "Token inválido o expirado"
+        );
+      }
+
+      // Verificar que el email del token coincide con el email de la reserva
+      const tokenEmail = (tokenResult.payload.email || "").toLowerCase().trim();
+      const reservationEmail = (reservationRow.email || "").toLowerCase().trim();
+      if (tokenEmail !== reservationEmail || tokenResult.payload.reservationId !== reservationId) {
+        return unauthorizedResponse(
+          "No tienes permisos para cancelar esta reserva"
+        );
+      }
+    } else {
+      // Sin autenticación ni token
       return unauthorizedResponse(
-        "No tienes permisos para cancelar esta reserva"
+        "Debes iniciar sesión o proporcionar un token válido para cancelar una reserva"
       );
     }
 

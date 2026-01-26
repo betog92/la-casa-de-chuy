@@ -36,7 +36,7 @@ export async function GET(
     const { data: reservation, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_amount, additional_payment_id, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at"
       )
       .eq("id", reservationId)
       .ilike("email", email)
@@ -46,34 +46,8 @@ export async function GET(
       return notFoundResponse("Reserva");
     }
 
-    // Verificar que la reserva no esté completada o cancelada
-    const reservationData = reservation as {
-      status: string;
-      id: string;
-      email: string;
-      name: string;
-      phone: string;
-      date: string;
-      start_time: string; // TIME se devuelve como string desde PostgreSQL
-      end_time: string; // TIME se devuelve como string desde PostgreSQL
-      price: number;
-      original_price: number;
-      payment_id: string | null;
-      created_at: string;
-    };
-
-    if (
-      reservationData.status === "completed" ||
-      reservationData.status === "cancelled"
-    ) {
-      return errorResponse(
-        "Esta reserva ya ha sido completada o cancelada",
-        403
-      );
-    }
-
     return successResponse({
-      reservation: reservationData,
+      reservation,
       token: tokenResult.payload,
     });
   } catch (error: unknown) {
