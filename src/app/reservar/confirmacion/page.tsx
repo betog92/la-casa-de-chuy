@@ -218,8 +218,8 @@ function ConfirmacionContent() {
           </p>
         </div>
 
-        {/* Banner de puntos para usuarios autenticados */}
-        {user && rescheduled !== "true" && (
+        {/* Banner de puntos: usuario logueado o reserva creada como usuario (email ya registrado) */}
+        {(user || hasAccount) && rescheduled !== "true" && (
           <div className="mt-3 mb-4 inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 border border-green-200">
             <span className="font-semibold">🎉 ¡Felicidades!</span>
             <span>Ganaste {pointsEarned} puntos de lealtad.</span>

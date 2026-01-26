@@ -25,8 +25,6 @@ export interface SendReservationConfirmationParams {
   reservationId: string;
   /** URL para gestionar la reserva (guest: /reservas/[token], user: /reservaciones/[id]) */
   manageUrl: string;
-  /** Base URL de la app (opcional); si no se pasa, se usa env o localhost */
-  baseUrl?: string;
 }
 
 /**
@@ -45,8 +43,7 @@ export async function sendReservationConfirmation(
   }
 
   const to = params.to.trim();
-  const { name, date, startTime, price, reservationId, manageUrl, baseUrl: baseUrlParam } =
-    params;
+  const { name, date, startTime, price, reservationId, manageUrl } = params;
 
   const dateFormatted = formatDisplayDate(date);
   const timeFormatted = formatTimeRange(startTime);
@@ -54,12 +51,6 @@ export async function sendReservationConfirmation(
   const priceFormatted = formatCurrency(safePrice);
 
   const subject = `Reserva confirmada – La Casa de Chuy el Rico – ${dateFormatted}`;
-
-  const baseUrl =
-    baseUrlParam?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
-  const logoUrl = `${baseUrl}/logo.webp`;
 
   const html = `
 <!DOCTYPE html>
@@ -71,7 +62,6 @@ export async function sendReservationConfirmation(
 <body style="margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
   <div style="max-width:480px; margin:0 auto; padding:24px;">
     <div style="background:#fff; border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08);">
-      <img src="${escapeHtml(logoUrl)}" alt="La Casa de Chuy el Rico" width="80" height="80" style="display:block; margin-bottom:12px;" />
       <h1 style="margin:0 0 8px; font-size:1.25rem; color:#103948;">La Casa de Chuy el Rico</h1>
       <p style="margin:0 0 28px; font-size:0.875rem; color:#71717a;">¡Tu reserva está confirmada!</p>
 

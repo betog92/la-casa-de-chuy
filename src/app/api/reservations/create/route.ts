@@ -192,17 +192,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Otorgar puntos de lealtad por la reserva (1 punto por cada $10 pagados)
-    // Solo para usuarios autenticados y si hay monto positivo
-    if (userId && price && Number(price) > 0) {
-      const pointsToGrant = Math.floor(Number(price) / 10);
-      if (pointsToGrant > 0) {
-        const expiresAt = new Date();
-        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-        try {
-          const { error: loyaltyInsertError } = await supabase
-            .from("loyalty_points")
-            .insert({
+    // Tareas post-insert independientes: ejecutar en paralelo para reducir latencia
+    let guestToken: string | null = null;
+    let guestReservationUrl: string | null = null;
+
+    const pointsToGrant =
+      userId && price && Number(price) > 0
+        ? Math.floor(Number(price) / 10)
+        : 0;
+
+    const postInsertTasks: Promise<void>[] = [];
+
+    if (userId && pointsToGrant > 0) {
+      postInsertTasks.push(
+        (async () => {
+          try {
+            const expiresAt = new Date();
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+            const { error: e } = await supabase.from("loyalty_points").insert({
               user_id: userId,
               points: pointsToGrant,
               expires_at: expiresAt.toISOString().slice(0, 10),
@@ -210,135 +217,110 @@ export async function POST(request: NextRequest) {
               used: false,
               revoked: false,
             } as never);
-
-          if (loyaltyInsertError) {
-            console.error(
-              "Error otorgando puntos de lealtad en creación de reserva:",
-              loyaltyInsertError
-            );
+            if (e) {
+              console.error("Error otorgando puntos de lealtad:", e);
+            }
+          } catch (err) {
+            console.error("Error inesperado otorgando puntos de lealtad:", err);
           }
-        } catch (loyaltyErr) {
-          console.error(
-            "Error inesperado otorgando puntos de lealtad:",
-            loyaltyErr
-          );
-        }
-      }
+        })()
+      );
     }
 
-    // Si hay usuario autenticado, actualizar su perfil con name y phone si no los tiene
     if (userId) {
-      try {
-        const { data: existingProfile } = await supabase
-          .from("users")
-          .select("name, phone")
-          .eq("id", userId)
-          .maybeSingle();
-
-        // Solo actualizar si el perfil existe y no tiene name o phone
-        if (existingProfile) {
-          const profileData = existingProfile as {
-            name: string | null;
-            phone: string | null;
-          };
-
-          if (!profileData.name || !profileData.phone) {
+      postInsertTasks.push(
+        (async () => {
+          try {
+            const { data: existingProfile } = await supabase
+              .from("users")
+              .select("name, phone")
+              .eq("id", userId)
+              .maybeSingle();
+            if (!existingProfile) return;
+            const p = existingProfile as {
+              name: string | null;
+              phone: string | null;
+            };
+            if (p.name && p.phone) return;
             const updateData: {
               name?: string;
               phone?: string;
               updated_at: string;
-            } = {
-              updated_at: new Date().toISOString(),
-            };
-
-            if (!profileData.name && name) {
-              updateData.name = name;
-            }
-            if (!profileData.phone && phone) {
-              updateData.phone = phone;
-            }
-
-            // Solo actualizar si hay algo que actualizar
+            } = { updated_at: new Date().toISOString() };
+            if (!p.name && name) updateData.name = name;
+            if (!p.phone && phone) updateData.phone = phone;
             if (updateData.name || updateData.phone) {
               await supabase
                 .from("users")
                 .update(updateData as never)
                 .eq("id", userId);
             }
+          } catch (err) {
+            console.error("Error updating user profile:", err);
           }
-        }
-      } catch (profileError) {
-        // No fallar la reserva si hay error al actualizar perfil
-        console.error("Error updating user profile:", profileError);
-      }
+        })()
+      );
     }
 
-    // Si se usó un código de descuento, registrar el uso y actualizar contadores
     if (discountCode) {
-      try {
-        // Buscar el código de descuento
-        const { data: codeData, error: codeError } = await supabase
-          .from("discount_codes")
-          .select("id")
-          .eq("code", discountCode.toUpperCase())
-          .single();
-
-        if (!codeError && codeData && (codeData as { id: string }).id) {
-          const codeId = (codeData as { id: string }).id;
-
-          // Crear registro de uso (usar normalizedEmail para consistencia)
-          const { error: insertError } = await supabase
-            .from("discount_code_uses")
-            .insert({
-              discount_code_id: codeId,
-              user_id: userId || null,
-              email: normalizedEmail,
-              reservation_id: reservationId,
-            } as never);
-
-          if (insertError) {
-            console.error("Error al insertar uso de código:", insertError);
-            // Continuamos aunque falle el insert, para no bloquear la reserva
-          } else {
-            // Incrementar contador de usos de forma atómica usando función SQL
-            // Esto evita condiciones de carrera en actualizaciones concurrentes
+      postInsertTasks.push(
+        (async () => {
+          try {
+            const { data: codeData, error: codeError } = await supabase
+              .from("discount_codes")
+              .select("id")
+              .eq("code", discountCode.toUpperCase())
+              .single();
+            if (codeError || !codeData || !(codeData as { id: string }).id)
+              return;
+            const codeId = (codeData as { id: string }).id;
+            const { error: insertError } = await supabase
+              .from("discount_code_uses")
+              .insert({
+                discount_code_id: codeId,
+                user_id: userId || null,
+                email: normalizedEmail,
+                reservation_id: reservationId,
+              } as never);
+            if (insertError) {
+              console.error("Error al insertar uso de código:", insertError);
+              return;
+            }
             const { error: rpcError } = await supabase.rpc(
               "increment_discount_code_uses",
-              {
-                code_id: codeId,
-              } as never
+              { code_id: codeId } as never
             );
-
             if (rpcError) {
               console.error(
                 "Error al incrementar contador de usos del código:",
                 rpcError
               );
-              // Continuamos aunque falle el incremento, para no bloquear la reserva
-              // El contador puede corregirse manualmente si es necesario
             }
+          } catch (err) {
+            console.error("Error al registrar uso de código:", err);
           }
-        }
-      } catch (codeErr) {
-        // No fallar la reserva si hay error al registrar el código
-        console.error("Error al registrar uso de código:", codeErr);
-      }
+        })()
+      );
     }
-
-    // Si es un invitado (no tiene userId), generar token para magic link
-    let guestToken: string | null = null;
-    let guestReservationUrl: string | null = null;
 
     if (!userId) {
-      try {
-        // Usar normalizedEmail para consistencia (el token también normaliza internamente)
-        guestToken = await generateGuestToken(normalizedEmail, reservationId);
-        guestReservationUrl = generateGuestReservationUrl(guestToken);
-      } catch (tokenError) {
-        // No fallar la reserva si hay error al generar el token
-        console.error("Error al generar token de invitado:", tokenError);
-      }
+      postInsertTasks.push(
+        (async () => {
+          try {
+            const tok = await generateGuestToken(
+              normalizedEmail,
+              reservationId
+            );
+            guestToken = tok;
+            guestReservationUrl = generateGuestReservationUrl(tok);
+          } catch (err) {
+            console.error("Error al generar token de invitado:", err);
+          }
+        })()
+      );
     }
+
+    await Promise.all(postInsertTasks);
 
     // Email de confirmación en segundo plano (no bloquear la respuesta ni el loading)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -354,7 +336,6 @@ export async function POST(request: NextRequest) {
         price: Number.isFinite(Number(price)) ? Number(price) : 0,
         reservationId,
         manageUrl,
-        baseUrl,
       })
         .then((r) => {
           if (!r.ok) {
