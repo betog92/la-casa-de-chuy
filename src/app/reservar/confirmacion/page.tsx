@@ -429,15 +429,9 @@ function ConfirmacionContent() {
             <div className="flex flex-wrap gap-3">
               <Link
                 href={`/reservaciones/${reservation.id}`}
-                className="inline-block bg-white text-[#103948] py-2 px-6 rounded-lg font-medium border border-[#103948] hover:bg-[#103948]/5 transition-colors"
-              >
-                Gestionar mi reserva
-              </Link>
-              <Link
-                href="/account"
                 className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
               >
-                Ver mis reservas
+                Gestionar mi reserva
               </Link>
             </div>
           </div>
@@ -483,23 +477,16 @@ function ConfirmacionContent() {
                 anticipación.
               </span>
             </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                Si tienes alguna pregunta, contáctanos al teléfono proporcionado
-                o por email.
-              </span>
-            </li>
           </ul>
         </div>
 
         {/* Botón de Acción */}
         <div className="flex flex-col gap-4 sm:flex-row">
           <Link
-            href="/reservar"
+            href="/account"
             className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
           >
-            Hacer otra reserva
+            Ver mis reservas
           </Link>
         </div>
       </div>

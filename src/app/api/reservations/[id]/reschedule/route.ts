@@ -18,6 +18,7 @@ import {
   notFoundResponse,
   conflictResponse,
 } from "@/utils/api-response";
+import { sendRescheduleConfirmation } from "@/lib/email";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -188,15 +189,47 @@ export async function POST(
     // Actualizar la reserva
     const { data: updatedReservation, error: updateError } = await supabase
       .from("reservations")
-      // @ts-ignore - TypeScript tiene problemas con tipos de Supabase cuando se usan selects parciales
+      // @ts-expect-error - TypeScript tiene problemas con tipos de Supabase cuando se usan selects parciales
       .update(updateData)
       .eq("id", reservationId)
-      .select()
+      .select("email, name, date, start_time, additional_payment_amount")
       .single();
 
     if (updateError) {
       console.error("Error rescheduling reservation:", updateError);
       return errorResponse("Error al reagendar la reserva", 500);
+    }
+
+    // Enviar email de confirmación (no hay pago adicional)
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+    const row = updatedReservation as {
+      email?: string | null;
+      name?: string | null;
+      date?: string;
+      start_time?: string | null;
+      additional_payment_amount?: number | null;
+    };
+    const to = (row.email || "").trim();
+    const name = (row.name || "Cliente").trim();
+
+    if (to) {
+      sendRescheduleConfirmation({
+        to,
+        name,
+        date: row.date || "",
+        startTime: row.start_time || "00:00",
+        reservationId,
+        manageUrl,
+        additionalAmount: null, // No hay pago adicional en este caso
+      })
+        .then((r) => {
+          if (!r.ok) console.error("Error email reagendamiento:", r.error);
+        })
+        .catch((e) =>
+          console.error("Error inesperado enviando email reagendamiento:", e)
+        );
     }
 
     return successResponse({

@@ -19,6 +19,7 @@ import {
   validationErrorResponse,
   notFoundResponse,
 } from "@/utils/api-response";
+import { sendCancellationConfirmation } from "@/lib/email";
 import type { Database } from "@/types/database.types";
 
 export async function POST(
@@ -64,7 +65,9 @@ export async function POST(
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
-      .select("id, user_id, status, date, price, additional_payment_amount")
+      .select(
+        "id, user_id, status, date, start_time, price, additional_payment_amount, email, name"
+      )
       .eq("id", reservationId)
       .single();
 
@@ -77,8 +80,11 @@ export async function POST(
       user_id: string | null;
       status: string;
       date: string;
+      start_time: string | null;
       price: number;
       additional_payment_amount: number | null;
+      email: string | null;
+      name: string | null;
     };
 
     // Verificar que la reserva pertenece al usuario autenticado
@@ -216,6 +222,31 @@ export async function POST(
           console.error("Error revocando créditos:", revokeAllCreditsError);
         }
       }
+    }
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+    const to = (reservationRow.email || "").trim();
+    const name = (reservationRow.name || "Cliente").trim();
+    const startTime = reservationRow.start_time || "00:00";
+
+    if (to) {
+      sendCancellationConfirmation({
+        to,
+        name,
+        date: reservationRow.date || "",
+        startTime,
+        refundAmount,
+        reservationId,
+        manageUrl,
+      })
+        .then((r) => {
+          if (!r.ok) console.error("Error email cancelación:", r.error);
+        })
+        .catch((e) =>
+          console.error("Error inesperado enviando email cancelación:", e)
+        );
     }
 
     return successResponse({
