@@ -50,7 +50,7 @@ export async function sendReservationConfirmation(
   const safePrice = Number.isFinite(Number(price)) ? Number(price) : 0;
   const priceFormatted = formatCurrency(safePrice);
 
-  const subject = `Reserva confirmada – La Casa de Chuy el Rico – ${dateFormatted}`;
+  const subject = `Reserva confirmada – ${dateFormatted}`;
 
   const html = `
 <!DOCTYPE html>
@@ -62,8 +62,7 @@ export async function sendReservationConfirmation(
 <body style="margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
   <div style="max-width:480px; margin:0 auto; padding:24px;">
     <div style="background:#fff; border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08);">
-      <h1 style="margin:0 0 8px; font-size:1.25rem; color:#103948;">La Casa de Chuy el Rico</h1>
-      <p style="margin:0 0 28px; font-size:0.875rem; color:#71717a;">¡Tu reserva está confirmada!</p>
+      <h1 style="margin:0 0 28px; font-size:1.25rem; color:#103948;">¡Tu reserva está confirmada!</h1>
 
       <p style="margin:0 0 20px; font-size:0.9375rem; line-height:1.5;">Hola ${escapeHtml(name)},</p>
       <p style="margin:0 0 28px; font-size:0.9375rem; color:#3f3f46; line-height:1.5;">Gracias por reservar con nosotros. Estos son los detalles de tu sesión:</p>
@@ -134,7 +133,7 @@ export async function sendCancellationConfirmation(
   const refundFormatted = formatCurrency(refundAmount);
   const idShort = reservationId.slice(0, 8).toUpperCase();
 
-  const subject = `Reserva cancelada – La Casa de Chuy el Rico – ${dateFormatted}`;
+  const subject = `Reserva cancelada – ${dateFormatted}`;
   const html = `
 <!DOCTYPE html>
 <html>
@@ -145,8 +144,7 @@ export async function sendCancellationConfirmation(
 <body style="margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
   <div style="max-width:480px; margin:0 auto; padding:24px;">
     <div style="background:#fff; border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08);">
-      <h1 style="margin:0 0 8px; font-size:1.25rem; color:#103948;">La Casa de Chuy el Rico</h1>
-      <p style="margin:0 0 28px; font-size:0.875rem; color:#71717a;">Tu reserva ha sido cancelada.</p>
+      <h1 style="margin:0 0 28px; font-size:1.25rem; color:#103948;">Tu reserva ha sido cancelada.</h1>
 
       <p style="margin:0 0 20px; font-size:0.9375rem; line-height:1.5;">Hola ${escapeHtml(name)},</p>
       <p style="margin:0 0 28px; font-size:0.9375rem; color:#3f3f46; line-height:1.5;">Confirmamos la cancelación de tu sesión programada para el <strong>${escapeHtml(dateFormatted)}</strong> a las <strong>${escapeHtml(timeFormatted)}</strong> (ID ${escapeHtml(idShort)}).</p>
@@ -213,7 +211,7 @@ export async function sendRescheduleConfirmation(
   const hasExtra = Number(additionalAmount) > 0;
   const extraFormatted = formatCurrency(Number(additionalAmount));
 
-  const subject = `Reserva reagendada – La Casa de Chuy el Rico – ${dateFormatted}`;
+  const subject = `Reserva reagendada – ${dateFormatted}`;
   const html = `
 <!DOCTYPE html>
 <html>
@@ -224,8 +222,7 @@ export async function sendRescheduleConfirmation(
 <body style="margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
   <div style="max-width:480px; margin:0 auto; padding:24px;">
     <div style="background:#fff; border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08);">
-      <h1 style="margin:0 0 8px; font-size:1.25rem; color:#103948;">La Casa de Chuy el Rico</h1>
-      <p style="margin:0 0 28px; font-size:0.875rem; color:#71717a;">¡Tu reserva ha sido reagendada!</p>
+      <h1 style="margin:0 0 28px; font-size:1.25rem; color:#103948;">¡Tu reserva ha sido reagendada!</h1>
 
       <p style="margin:0 0 20px; font-size:0.9375rem; line-height:1.5;">Hola ${escapeHtml(name)},</p>
       <p style="margin:0 0 28px; font-size:0.9375rem; color:#3f3f46; line-height:1.5;">Tu sesión ha sido reagendada. Nuevos datos:</p>

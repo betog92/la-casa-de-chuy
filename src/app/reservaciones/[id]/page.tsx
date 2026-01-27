@@ -15,6 +15,7 @@ import {
   formatTimeRange,
   formatReservationId,
   formatCurrency,
+  formatBusinessDaysMessage,
 } from "@/utils/formatters";
 import {
   isValidDiscount,
@@ -238,6 +239,9 @@ export default function ReservationDetailsPage() {
   const canCancel = businessDays !== null && businessDays >= 5;
   const canReschedule =
     businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
+
+  // Determinar si el texto debe ser rojo (menos de 5 días hábiles)
+  const isPastDeadline = businessDays !== null && businessDays < 5;
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
   const hasAdditionalPayment =
@@ -388,17 +392,6 @@ export default function ReservationDetailsPage() {
               </p>
               <p className="text-lg font-medium text-[#103948]">
                 {formatTimeRange(reservation.start_time)}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-zinc-600 mb-1">Fecha de creación</p>
-              <p className="text-lg font-medium text-[#103948]">
-                {format(
-                  new Date(reservation.created_at),
-                  "d 'de' MMMM 'de' yyyy 'a las' h:mm a",
-                  { locale: es }
-                )}
               </p>
             </div>
           </div>
@@ -687,9 +680,14 @@ export default function ReservationDetailsPage() {
                       {businessDays !== null && (
                         <>
                           {" "}
-                          Faltan {businessDays} día
-                          {businessDays !== 1 ? "s" : ""} hábil
-                          {businessDays !== 1 ? "es" : ""}.
+                          <span
+                            className={
+                              isPastDeadline ? "text-red-600" : "text-zinc-600"
+                            }
+                          >
+                            {formatBusinessDaysMessage(businessDays)}
+                          </span>
+                          .
                         </>
                       )}
                     </>
@@ -704,15 +702,20 @@ export default function ReservationDetailsPage() {
                 >
                   Cancelar Reserva
                 </button>
-                <p className="mt-2 text-xs text-red-600">
+                <p className="mt-2 text-xs text-zinc-600">
                   La cancelación solo está disponible con al menos 5 días
                   hábiles de anticipación.
                   {businessDays !== null && (
                     <>
                       {" "}
-                      Faltan {businessDays} día
-                      {businessDays !== 1 ? "s" : ""} hábil
-                      {businessDays !== 1 ? "es" : ""}.
+                      <span
+                        className={
+                          isPastDeadline ? "text-red-600" : "text-zinc-600"
+                        }
+                      >
+                        {formatBusinessDaysMessage(businessDays)}
+                      </span>
+                      .
                     </>
                   )}
                 </p>

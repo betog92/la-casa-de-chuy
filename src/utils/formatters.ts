@@ -62,5 +62,17 @@ export function formatCurrency(amount: number): string {
   });
 }
 
-
-
+/**
+ * Formatea el mensaje de días hábiles restantes
+ * @example 1 -> "Queda 1 día hábil"
+ * @example 4 -> "Quedan 4 días hábiles"
+ * @example 0 -> "Quedan 0 días hábiles"
+ */
+export function formatBusinessDaysMessage(days: number | null): string {
+  if (days === null) return "";
+  const daysValue = Math.max(0, days); // Asegurar que no sea negativo
+  if (daysValue === 1) {
+    return "Queda 1 día hábil";
+  }
+  return `Quedan ${daysValue} días hábiles`;
+}

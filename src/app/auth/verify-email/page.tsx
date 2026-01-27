@@ -1,45 +1,64 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import AuthError from "@/components/auth/AuthError";
 import AuthSuccess from "@/components/auth/AuthSuccess";
 import Link from "next/link";
 
-const verifyEmailSchema = z.object({
-  email: z.string().email("Email inválido"),
-});
-
-type VerifyEmailFormData = z.infer<typeof verifyEmailSchema>;
+const COUNTDOWN_SECONDS = 60; // Tiempo recomendado por Supabase: 60 segundos
 
 export default function VerifyEmailPage() {
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const { resendVerificationEmail } = useAuth();
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
+  const [isCountdownActive, setIsCountdownActive] = useState(true);
+  const { resendVerificationEmail, user } = useAuth();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<VerifyEmailFormData>({
-    resolver: zodResolver(verifyEmailSchema),
-  });
+  // Obtener el email de la URL o del contexto del usuario
+  const email = user?.email || searchParams.get("email") || "";
 
-  const onSubmit = async (data: VerifyEmailFormData) => {
+  // Contador regresivo
+  useEffect(() => {
+    if (!isCountdownActive) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          setIsCountdownActive(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isCountdownActive]);
+
+  const handleResend = async () => {
+    if (!email) {
+      setError("No se pudo obtener tu email. Por favor, inicia sesión nuevamente.");
+      return;
+    }
+
     setError("");
     setSuccess("");
     setLoading(true);
 
     try {
-      const result = await resendVerificationEmail(data.email);
+      const result = await resendVerificationEmail(email);
       if (result.success) {
         setSuccess(
           "Te hemos enviado un nuevo enlace de verificación. Revisa tu bandeja de entrada."
         );
+        // Reiniciar el contador
+        setCountdown(COUNTDOWN_SECONDS);
+        setIsCountdownActive(true);
       } else {
         setError(result.error || "Error al reenviar email de verificación");
       }
@@ -48,6 +67,12 @@ export default function VerifyEmailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   return (
@@ -67,40 +92,31 @@ export default function VerifyEmailPage() {
         </div>
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-8">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="space-y-6">
             <AuthError message={error} />
             <AuthSuccess message={success} />
 
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-[#103948] mb-2"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                {...register("email")}
-                className="w-full px-4 py-3 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-[#103948] focus:border-transparent outline-none transition-all"
-                placeholder="tu@email.com"
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.email.message}
+            {email && (
+              <div className="text-center">
+                <p className="text-sm text-zinc-600 mb-2">
+                  Email registrado:
                 </p>
-              )}
-            </div>
+                <p className="text-sm font-medium text-[#103948]">
+                  {email}
+                </p>
+              </div>
+            )}
 
             <button
-              type="submit"
-              disabled={loading || !!success}
+              type="button"
+              onClick={handleResend}
+              disabled={loading || isCountdownActive}
               className="w-full bg-[#103948] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading
                 ? "Enviando..."
-                : success
-                ? "Email enviado"
+                : isCountdownActive
+                ? `Espera ${formatTime(countdown)} para reenviar`
                 : "Reenviar enlace de verificación"}
             </button>
 
@@ -112,7 +128,7 @@ export default function VerifyEmailPage() {
                 Volver a iniciar sesión
               </Link>
             </div>
-          </form>
+          </div>
         </div>
       </div>
     </div>

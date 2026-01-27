@@ -14,6 +14,7 @@ import {
   formatTimeRange,
   formatReservationId,
   formatCurrency,
+  formatBusinessDaysMessage,
 } from "@/utils/formatters";
 import {
   isValidDiscount,
@@ -228,6 +229,9 @@ export default function GuestReservationPage() {
   const canCancel = businessDays !== null && businessDays >= 5;
   const canReschedule =
     businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
+
+  // Determinar si el texto debe ser rojo (menos de 5 días hábiles)
+  const isPastDeadline = businessDays !== null && businessDays < 5;
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
   const hasAdditionalPayment =
@@ -685,9 +689,14 @@ export default function GuestReservationPage() {
                       {businessDays !== null && (
                         <>
                           {" "}
-                          Faltan {businessDays} día
-                          {businessDays !== 1 ? "s" : ""} hábil
-                          {businessDays !== 1 ? "es" : ""}.
+                          <span
+                            className={
+                              isPastDeadline ? "text-red-600" : "text-zinc-600"
+                            }
+                          >
+                            {formatBusinessDaysMessage(businessDays)}
+                          </span>
+                          .
                         </>
                       )}
                     </>
@@ -702,15 +711,20 @@ export default function GuestReservationPage() {
                 >
                   Cancelar Reserva
                 </button>
-                <p className="mt-2 text-xs text-red-600">
+                <p className="mt-2 text-xs text-zinc-600">
                   La cancelación solo está disponible con al menos 5 días
                   hábiles de anticipación.
                   {businessDays !== null && (
                     <>
                       {" "}
-                      Faltan {businessDays} día
-                      {businessDays !== 1 ? "s" : ""} hábil
-                      {businessDays !== 1 ? "es" : ""}.
+                      <span
+                        className={
+                          isPastDeadline ? "text-red-600" : "text-zinc-600"
+                        }
+                      >
+                        {formatBusinessDaysMessage(businessDays)}
+                      </span>
+                      .
                     </>
                   )}
                 </p>
