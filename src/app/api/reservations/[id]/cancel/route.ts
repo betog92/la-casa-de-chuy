@@ -20,7 +20,7 @@ import {
   notFoundResponse,
 } from "@/utils/api-response";
 import { sendCancellationConfirmation } from "@/lib/email";
-import { verifyGuestToken } from "@/lib/auth/guest-tokens";
+import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
 import type { Database } from "@/types/database.types";
 
 export async function POST(
@@ -250,7 +250,9 @@ export async function POST(
 
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+    const manageUrl = guestToken
+      ? generateGuestReservationUrl(guestToken)
+      : `${baseUrl}/reservaciones/${reservationId}`;
     const to = (reservationRow.email || "").trim();
     const name = (reservationRow.name || "Cliente").trim();
     const startTime = reservationRow.start_time || "00:00";

@@ -18,7 +18,7 @@ import {
 import {
   sendRescheduleConfirmation,
 } from "@/lib/email";
-import { verifyGuestToken } from "@/lib/auth/guest-tokens";
+import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -202,7 +202,9 @@ export async function POST(
 
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+    const manageUrl = guestToken
+      ? generateGuestReservationUrl(guestToken)
+      : `${baseUrl}/reservaciones/${reservationId}`;
     const row = updatedReservation as {
       email?: string | null;
       name?: string | null;
