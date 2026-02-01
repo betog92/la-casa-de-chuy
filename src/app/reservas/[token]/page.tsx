@@ -208,7 +208,7 @@ export default function GuestReservationPage() {
       // No requiere pago - reagendamiento exitoso, redirigir a confirmación
       setShowRescheduleModal(false);
       router.push(
-        `/reservar/confirmacion?id=${reservation.id}&rescheduled=true`
+        `/reservar/confirmacion?id=${reservation.id}&rescheduled=true&token=${token}`
       );
     } catch (err) {
       console.error("Error rescheduling reservation:", err);
