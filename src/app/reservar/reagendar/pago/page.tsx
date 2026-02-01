@@ -104,12 +104,12 @@ function ReschedulePaymentContent() {
     authLoading,
   ]);
 
-  // Verificar autenticación
+  // Verificar autenticación: redirigir a login solo si no hay usuario NI token de invitado
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !guestToken) {
       router.push("/auth/login");
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, guestToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,9 +201,16 @@ function ReschedulePaymentContent() {
           setLoading(false);
           return;
         }
-        router.push(
-          `/reservar/confirmacion?id=${reservationId}&rescheduled=true&paid=true&additionalAmount=${additionalAmount.toString()}`
-        );
+        const confirmUrl = new URLSearchParams({
+          id: reservationId,
+          rescheduled: "true",
+          paid: "true",
+          additionalAmount: additionalAmount.toString(),
+        });
+        if (guestToken) {
+          confirmUrl.set("token", guestToken);
+        }
+        router.push(`/reservar/confirmacion?${confirmUrl.toString()}`);
       } catch (error: unknown) {
         const errorMessage = getErrorMessage(error);
         setError(errorMessage);
@@ -455,7 +462,7 @@ function ReschedulePaymentContent() {
         {/* Link de regreso */}
         <div className="mt-6 text-center">
           <Link
-            href={`/reservaciones/${reservationId}`}
+            href={guestToken ? `/reservas/${guestToken}` : `/reservaciones/${reservationId}`}
             className="text-sm text-[#103948] hover:underline"
           >
             ← Volver a los detalles de la reserva

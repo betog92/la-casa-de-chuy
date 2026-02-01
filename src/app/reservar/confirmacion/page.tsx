@@ -22,6 +22,7 @@ function ConfirmacionContent() {
   const loyaltyLevelChanged =
     searchParams.get("loyaltyLevelChanged") === "true";
   const newLoyaltyLevelFromParams = searchParams.get("newLoyaltyLevel");
+  const guestTokenFromParams = searchParams.get("token");
   const { user, loading: authLoading } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,14 +41,17 @@ function ConfirmacionContent() {
         return;
       }
 
-      // Verificar si hay un token de invitado guardado (solo si NO está autenticado)
+      // Verificar si es invitado: sessionStorage (nueva reserva) o token en URL (reagendamiento + pago)
       if (!user) {
         const savedGuestUrl = sessionStorage.getItem("guestReservationUrl");
         if (savedGuestUrl) {
           setGuestReservationUrl(savedGuestUrl);
-          // Limpiar datos temporales de sesión de reserva
           sessionStorage.removeItem("guestReservationUrl");
           sessionStorage.removeItem("guestToken");
+        } else if (guestTokenFromParams && typeof window !== "undefined") {
+          setGuestReservationUrl(
+            `${window.location.origin}/reservas/${guestTokenFromParams}`
+          );
         }
       }
 
@@ -87,7 +91,7 @@ function ConfirmacionContent() {
     if (!authLoading) {
       loadReservation();
     }
-  }, [reservationId, user, authLoading]);
+  }, [reservationId, user, authLoading, guestTokenFromParams]);
 
   // Scroll al top cuando la página se monta o cambia el reservationId
   useEffect(() => {
@@ -110,8 +114,13 @@ function ConfirmacionContent() {
     loadLoyalty();
   }, [user]);
 
-  // Determinar si mostrar secciones de invitado (solo si NO está autenticado, tiene guestReservationUrl y el email NO tiene cuenta)
-  const isGuest = !user && guestReservationUrl && !hasAccount;
+  // Invitado: por sessionStorage (nueva reserva) o por token en URL (reagendamiento + pago)
+  const guestReservationLink =
+    guestReservationUrl ??
+    (guestTokenFromParams ? `/reservas/${guestTokenFromParams}` : null);
+  const displayGuestUrl = guestReservationUrl ?? "";
+  const isGuest =
+    !user && (guestReservationUrl || guestTokenFromParams) && hasAccount === false;
   const showNormalAccountBlock = user || !!hasAccount;
   const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
 
@@ -346,8 +355,8 @@ function ConfirmacionContent() {
           </div>
         </div>
 
-        {/* Magic Link para Invitados - Solo mostrar si NO está autenticado */}
-        {isGuest && (
+        {/* Magic Link para Invitados - Solo en nueva reserva (no en reagendamiento; ahí ya tienen el enlace del correo) */}
+        {isGuest && !guestTokenFromParams && (
           <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-6">
             <h3 className="mb-3 flex items-center text-lg font-semibold text-green-900">
               <svg
@@ -373,14 +382,16 @@ function ConfirmacionContent() {
               <input
                 type="text"
                 readOnly
-                value={guestReservationUrl}
+                value={displayGuestUrl}
                 className="flex-1 text-sm text-zinc-700 bg-transparent border-none outline-none"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(guestReservationUrl);
-                  alert("Enlace copiado al portapapeles");
+                  if (displayGuestUrl) {
+                    navigator.clipboard.writeText(displayGuestUrl);
+                    alert("Enlace copiado al portapapeles");
+                  }
                 }}
                 className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
               >
@@ -388,7 +399,7 @@ function ConfirmacionContent() {
               </button>
             </div>
             <Link
-              href={guestReservationUrl}
+              href={guestReservationLink ?? "#"}
               className="mt-3 inline-block text-sm text-green-700 hover:text-green-900 font-medium underline"
             >
               Abrir página de gestión →
@@ -396,8 +407,8 @@ function ConfirmacionContent() {
           </div>
         )}
 
-        {/* Invitación a crear cuenta (solo para invitados) */}
-        {isGuest && (
+        {/* Invitación a crear cuenta (solo para invitados en nueva reserva, no en reagendamiento) */}
+        {isGuest && !guestTokenFromParams && reservation && (
           <div className="mb-6 rounded-lg border border-[#103948] bg-[#103948]/5 p-6">
             <h3 className="mb-2 text-lg font-semibold text-[#103948]">
               ¿Quieres acceder a más beneficios?
@@ -470,24 +481,35 @@ function ConfirmacionContent() {
                 antes de tu cita.
               </span>
             </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                Puedes reagendar sin costo con mínimo 5 días hábiles de
-                anticipación.
-              </span>
-            </li>
+            {rescheduled !== "true" && (
+              <li className="flex items-start">
+                <span className="mr-2">•</span>
+                <span>
+                  Puedes reagendar sin costo con mínimo 5 días hábiles de
+                  anticipación.
+                </span>
+              </li>
+            )}
           </ul>
         </div>
 
-        {/* Botón de Acción */}
+        {/* Botón de Acción: invitado → Ver/Volver a mi reserva; con cuenta → Ver mis reservas */}
         <div className="flex flex-col gap-4 sm:flex-row">
-          <Link
-            href="/account"
-            className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
-          >
-            Ver mis reservas
-          </Link>
+          {isGuest && guestReservationLink ? (
+            <Link
+              href={guestReservationLink}
+              className="flex-1 rounded-lg bg-[#103948] px-6 py-3 text-center font-semibold text-white transition-colors hover:bg-[#0d2d38]"
+            >
+              {guestTokenFromParams ? "Volver a mi reserva" : "Ver mi reserva"}
+            </Link>
+          ) : (
+            <Link
+              href="/account"
+              className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+            >
+              Ver mis reservas
+            </Link>
+          )}
         </div>
       </div>
     </div>
