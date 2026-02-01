@@ -28,10 +28,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: reservationId } = await params;
-
-    if (!reservationId) {
-      return validationErrorResponse("ID de reserva requerido");
+    const { id: rawId } = await params;
+    const reservationId =
+      typeof rawId === "string" ? parseInt(rawId, 10) : NaN;
+    if (isNaN(reservationId) || reservationId <= 0) {
+      return validationErrorResponse("ID de reserva inválido");
     }
 
     // Obtener el body para verificar si hay token de invitado
@@ -75,7 +76,7 @@ export async function POST(
     }
 
     const reservationRow = reservation as {
-      id: string;
+      id: number;
       user_id: string | null;
       status: string;
       date: string;
@@ -106,7 +107,7 @@ export async function POST(
       // Verificar que el email del token coincide con el email de la reserva
       const tokenEmail = (tokenResult.payload.email || "").toLowerCase().trim();
       const reservationEmail = (reservationRow.email || "").toLowerCase().trim();
-      if (tokenEmail !== reservationEmail || tokenResult.payload.reservationId !== reservationId) {
+      if (tokenEmail !== reservationEmail || tokenResult.payload.reservationId !== String(reservationId)) {
         return unauthorizedResponse(
           "No tienes permisos para cancelar esta reserva"
         );

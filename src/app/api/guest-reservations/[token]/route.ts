@@ -27,7 +27,16 @@ export async function GET(
       );
     }
 
-    const { email, reservationId } = tokenResult.payload;
+    const { email, reservationId: reservationIdStr } = tokenResult.payload;
+
+    // Parsear y validar ID numérico (reservations.id es INTEGER)
+    const reservationId =
+      typeof reservationIdStr === "string"
+        ? parseInt(reservationIdStr, 10)
+        : NaN;
+    if (isNaN(reservationId) || reservationId <= 0) {
+      return errorResponse("Token inválido: ID de reserva inválido", 400);
+    }
 
     // Obtener la reserva de la base de datos
     // El email del token ya está normalizado (lowercase), y las reservas también se almacenan normalizadas

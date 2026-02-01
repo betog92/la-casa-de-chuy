@@ -22,7 +22,7 @@ export interface SendReservationConfirmationParams {
   date: string;
   startTime: string;
   price: number;
-  reservationId: string;
+  reservationId: number;
   /** URL para gestionar la reserva (guest: /reservas/[token], user: /reservaciones/[id]) */
   manageUrl: string;
 }
@@ -72,7 +72,7 @@ export async function sendReservationConfirmation(
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Fecha</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(dateFormatted)}</td></tr>
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Horario</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(timeFormatted)}</td></tr>
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Monto pagado</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">$${escapeHtml(priceFormatted)} MXN</td></tr>
-          <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">ID de reserva</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(reservationId.slice(0, 8).toUpperCase())}</td></tr>
+          <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">ID de reserva</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(String(reservationId))}</td></tr>
         </table>
       </div>
 
@@ -111,7 +111,7 @@ export interface SendCancellationConfirmationParams {
   date: string;
   startTime: string;
   refundAmount: number;
-  reservationId: string;
+  reservationId: number;
   manageUrl: string;
 }
 
@@ -131,7 +131,7 @@ export async function sendCancellationConfirmation(
   const dateFormatted = formatDisplayDate(date);
   const timeFormatted = formatTimeRange(startTime);
   const refundFormatted = formatCurrency(refundAmount);
-  const idShort = reservationId.slice(0, 8).toUpperCase();
+  const idShort = String(reservationId);
 
   const subject = `Reserva cancelada – ${dateFormatted}`;
   const html = `
@@ -187,7 +187,7 @@ export interface SendRescheduleConfirmationParams {
   name: string;
   date: string;
   startTime: string;
-  reservationId: string;
+  reservationId: number;
   manageUrl: string;
   additionalAmount?: number | null;
 }
@@ -207,7 +207,7 @@ export async function sendRescheduleConfirmation(
     params;
   const dateFormatted = formatDisplayDate(date);
   const timeFormatted = formatTimeRange(startTime);
-  const idShort = reservationId.slice(0, 8).toUpperCase();
+  const idShort = String(reservationId);
   const hasExtra = Number(additionalAmount) > 0;
   const extraFormatted = formatCurrency(Number(additionalAmount));
 

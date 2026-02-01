@@ -40,7 +40,7 @@ export interface Database {
       };
       reservations: {
         Row: {
-          id: string;
+          id: number;
           user_id: string | null;
           email: string;
           name: string;
@@ -76,7 +76,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
-          id?: string;
+          id?: number;
           user_id?: string | null;
           email: string;
           name: string;
@@ -112,7 +112,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
-          id?: string;
+          id?: number;
           user_id?: string | null;
           email?: string;
           name?: string;
@@ -256,7 +256,7 @@ export interface Database {
           discount_code_id: string;
           user_id: string | null;
           email: string;
-          reservation_id: string | null;
+          reservation_id: number | null;
           used_at: string;
         };
         Insert: {
@@ -264,7 +264,7 @@ export interface Database {
           discount_code_id: string;
           user_id?: string | null;
           email: string;
-          reservation_id?: string | null;
+          reservation_id?: number | null;
           used_at?: string;
         };
         Update: {
@@ -272,7 +272,7 @@ export interface Database {
           discount_code_id?: string;
           user_id?: string | null;
           email?: string;
-          reservation_id?: string | null;
+          reservation_id?: number | null;
           used_at?: string;
         };
       };
@@ -285,6 +285,9 @@ export interface Database {
           expires_at: string;
           used: boolean;
           created_at: string;
+          reservation_id?: number | null;
+          revoked?: boolean;
+          revoked_at?: string | null;
         };
         Insert: {
           id?: string;
@@ -294,6 +297,9 @@ export interface Database {
           expires_at: string;
           used?: boolean;
           created_at?: string;
+          reservation_id?: number | null;
+          revoked?: boolean;
+          revoked_at?: string | null;
         };
         Update: {
           id?: string;
@@ -303,6 +309,9 @@ export interface Database {
           expires_at?: string;
           used?: boolean;
           created_at?: string;
+          reservation_id?: number | null;
+          revoked?: boolean;
+          revoked_at?: string | null;
         };
       };
       loyalty_points: {
@@ -312,6 +321,10 @@ export interface Database {
           points: number;
           expires_at: string;
           created_at: string;
+          reservation_id?: number | null;
+          used?: boolean;
+          revoked?: boolean;
+          revoked_at?: string | null;
         };
         Insert: {
           id?: string;
@@ -319,6 +332,10 @@ export interface Database {
           points: number;
           expires_at: string;
           created_at?: string;
+          reservation_id?: number | null;
+          used?: boolean;
+          revoked?: boolean;
+          revoked_at?: string | null;
         };
         Update: {
           id?: string;
@@ -326,6 +343,10 @@ export interface Database {
           points?: number;
           expires_at?: string;
           created_at?: string;
+          reservation_id?: number | null;
+          used?: boolean;
+          revoked?: boolean;
+          revoked_at?: string | null;
         };
       };
       referrals: {

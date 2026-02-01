@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS time_slots (
 -- 4. TABLA DE RESERVACIONES
 -- =====================================================
 CREATE TABLE IF NOT EXISTS reservations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id SERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   email TEXT NOT NULL,
   name TEXT NOT NULL,

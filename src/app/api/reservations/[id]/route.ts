@@ -18,10 +18,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: reservationId } = await params;
-
-    if (!reservationId) {
-      return validationErrorResponse("ID de reserva requerido");
+    const { id: rawId } = await params;
+    const reservationId =
+      typeof rawId === "string" ? parseInt(rawId, 10) : NaN;
+    if (isNaN(reservationId) || reservationId <= 0) {
+      return validationErrorResponse("ID de reserva inválido");
     }
 
     // Obtener el usuario autenticado

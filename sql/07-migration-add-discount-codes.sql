@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS discount_code_uses (
   discount_code_id UUID REFERENCES discount_codes(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- NULL si no está logueado
   email TEXT NOT NULL,  -- Email del usuario que usó el código
-  reservation_id UUID REFERENCES reservations(id) ON DELETE CASCADE,
+  reservation_id INTEGER REFERENCES reservations(id) ON DELETE CASCADE,
   used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(discount_code_id, email)  -- Un código solo una vez por email
 );

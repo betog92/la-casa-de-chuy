@@ -522,7 +522,7 @@ function FormularioReservaContent() {
       }
 
       // Paso 3: Crear reserva en Supabase (usando API route)
-      let reservationId: string;
+      let reservationId: number;
       try {
         const reservationResponse = await axios.post(
           "/api/reservations/create",
@@ -586,7 +586,7 @@ function FormularioReservaContent() {
 
         // Construir query params para la página de confirmación
         const queryParams = new URLSearchParams({
-          id: reservationId,
+          id: String(reservationId),
         });
 
         // Agregar información de cambio de nivel si está disponible

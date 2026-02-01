@@ -9,14 +9,14 @@ BEGIN;
 
 -- loyalty_points: asociar a reserva y permitir revocación
 ALTER TABLE loyalty_points
-  ADD COLUMN IF NOT EXISTS reservation_id UUID REFERENCES reservations(id),
+  ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id),
   ADD COLUMN IF NOT EXISTS used BOOLEAN DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS revoked BOOLEAN DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 
 -- credits: asociar a reserva y permitir revocación
 ALTER TABLE credits
-  ADD COLUMN IF NOT EXISTS reservation_id UUID REFERENCES reservations(id),
+  ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id),
   ADD COLUMN IF NOT EXISTS revoked BOOLEAN DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 

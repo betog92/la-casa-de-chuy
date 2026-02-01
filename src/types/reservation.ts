@@ -11,7 +11,7 @@ export interface ReservationData {
  * Reserva completa desde la base de datos
  */
 export interface Reservation {
-  id: string;
+  id: number;
   email: string;
   name: string;
   phone: string;

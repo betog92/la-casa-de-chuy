@@ -44,11 +44,11 @@ export function formatTimeRange(startTime: string): string {
 }
 
 /**
- * Formatea un ID de reserva de forma amigable (primeros 4 caracteres)
- * @example "7e6126fe-251a-4087-843e-72c8af5f3671" -> "7E61"
+ * Formatea un ID de reserva de forma amigable (número consecutivo)
+ * @example 1 -> "1", 123 -> "123"
  */
-export function formatReservationId(id: string): string {
-  return id.slice(0, 4).toUpperCase();
+export function formatReservationId(id: number): string {
+  return id.toString();
 }
 
 /**

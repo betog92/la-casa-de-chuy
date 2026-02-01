@@ -190,8 +190,8 @@ export async function POST(request: NextRequest) {
       return errorResponse(error.message || "Error al crear la reserva", 500);
     }
 
-    const reservationId = (data as { id: string } | null)?.id;
-    if (!reservationId) {
+    const reservationId = (data as { id: number } | null)?.id;
+    if (reservationId == null || typeof reservationId !== "number") {
       return errorResponse(
         "No se pudo obtener el ID de la reserva creada",
         500
@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
           try {
             const tok = await generateGuestToken(
               normalizedEmail,
-              reservationId
+              String(reservationId)
             );
             guestToken = tok;
             guestReservationUrl = generateGuestReservationUrl(tok);

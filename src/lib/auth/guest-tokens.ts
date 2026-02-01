@@ -38,7 +38,7 @@ export interface GuestTokenPayload {
  */
 export async function generateGuestToken(
   email: string,
-  reservationId: string
+  reservationId: string | number
 ): Promise<string> {
   const secret = new TextEncoder().encode(SECRET_KEY);
 
@@ -47,7 +47,7 @@ export async function generateGuestToken(
 
   const jwt = await new SignJWT({
     email: email.toLowerCase(),
-    reservationId,
+    reservationId: String(reservationId),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

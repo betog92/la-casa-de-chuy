@@ -1,45 +1,37 @@
 -- =====================================================
 -- ELIMINAR TODAS LAS TABLAS Y FUNCIONES - LA CASA DE CHUY EL RICO
 -- =====================================================
--- ⚠️ ADVERTENCIA: Este script ELIMINA TODAS las tablas y funciones
--- Solo ejecuta esto si NO tienes datos importantes en producción
--- 
--- Ejecuta este SQL en el SQL Editor de Supabase
--- Ve a: SQL Editor > New Query > Pega este código > Run
+-- ADVERTENCIA: Este script ELIMINA todas las tablas y funciones del proyecto.
+-- Solo ejecuta esto si NO tienes datos importantes (o vas a empezar desde cero).
+--
+-- Los triggers se eliminan automáticamente al borrar las tablas.
+--
+-- Ejecuta en Supabase: SQL Editor > New Query > Pegar > Run
 -- =====================================================
 
 -- =====================================================
--- 1. ELIMINAR TRIGGERS
+-- 1. ELIMINAR FUNCIONES
 -- =====================================================
 
-DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
-DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
-DROP TRIGGER IF EXISTS update_reservations_updated_at ON reservations;
-DROP TRIGGER IF EXISTS update_availability_updated_at ON availability;
-DROP TRIGGER IF EXISTS update_time_slots_updated_at ON time_slots;
-DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+DROP FUNCTION IF EXISTS update_time_slot_reservations_count() CASCADE;
+DROP FUNCTION IF EXISTS update_time_slot_occupied() CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
+DROP FUNCTION IF EXISTS generate_time_slots(DATE, DATE) CASCADE;
+DROP FUNCTION IF EXISTS ensure_time_slots_for_date(DATE) CASCADE;
+DROP FUNCTION IF EXISTS maintain_time_slots() CASCADE;
+DROP FUNCTION IF EXISTS is_slot_available(DATE, TIME) CASCADE;
+DROP FUNCTION IF EXISTS get_available_slots(DATE) CASCADE;
+DROP FUNCTION IF EXISTS get_daily_occupancy(DATE) CASCADE;
+DROP FUNCTION IF EXISTS get_reservations_stats(DATE) CASCADE;
+DROP FUNCTION IF EXISTS get_month_availability(DATE, DATE) CASCADE;
+DROP FUNCTION IF EXISTS increment_discount_code_uses(UUID) CASCADE;
 
 -- =====================================================
--- 2. ELIMINAR FUNCIONES
+-- 2. ELIMINAR TABLAS (orden por dependencias; CASCADE quita FKs)
 -- =====================================================
 
-DROP FUNCTION IF EXISTS update_time_slot_reservations_count();
-DROP FUNCTION IF EXISTS update_time_slot_occupied();
-DROP FUNCTION IF EXISTS update_updated_at_column();
-DROP FUNCTION IF EXISTS generate_time_slots(DATE, DATE);
-DROP FUNCTION IF EXISTS ensure_time_slots_for_date(DATE);
-DROP FUNCTION IF EXISTS maintain_time_slots();
-DROP FUNCTION IF EXISTS is_slot_available(DATE, TIME);
-DROP FUNCTION IF EXISTS get_available_slots(DATE);
-DROP FUNCTION IF EXISTS get_daily_occupancy(DATE);
-DROP FUNCTION IF EXISTS get_reservations_stats(DATE);
-DROP FUNCTION IF EXISTS get_month_availability(DATE, DATE);
-
--- =====================================================
--- 3. ELIMINAR TABLAS (en orden correcto por dependencias)
--- =====================================================
-
--- Eliminar tablas que tienen foreign keys primero
+DROP TABLE IF EXISTS discount_code_uses CASCADE;
+DROP TABLE IF EXISTS discount_codes CASCADE;
 DROP TABLE IF EXISTS referrals CASCADE;
 DROP TABLE IF EXISTS loyalty_points CASCADE;
 DROP TABLE IF EXISTS credits CASCADE;
@@ -49,7 +41,7 @@ DROP TABLE IF EXISTS availability CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 -- =====================================================
--- 4. ELIMINAR ÍNDICES (por si acaso quedan)
+-- 3. ELIMINAR ÍNDICES (por si quedan huérfanos)
 -- =====================================================
 
 -- Los índices se eliminan automáticamente con las tablas,
@@ -68,6 +60,12 @@ DROP INDEX IF EXISTS idx_credits_user_id;
 DROP INDEX IF EXISTS idx_loyalty_points_user_id;
 DROP INDEX IF EXISTS idx_referrals_referrer_id;
 DROP INDEX IF EXISTS idx_referrals_code;
+DROP INDEX IF EXISTS idx_discount_code_uses_email;
+DROP INDEX IF EXISTS idx_discount_code_uses_code_id;
+DROP INDEX IF EXISTS idx_discount_codes_code;
+DROP INDEX IF EXISTS idx_discount_codes_active;
+DROP INDEX IF EXISTS idx_loyalty_points_reservation_id;
+DROP INDEX IF EXISTS idx_credits_reservation_id;
 
 -- =====================================================
 -- VERIFICACIÓN
