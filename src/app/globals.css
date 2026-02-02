@@ -274,3 +274,16 @@ button.react-calendar__tile.heatmap-closed-or-unavailable.react-calendar__tile--
 }
 
 /* El día actual hereda los estilos del heatmap - sin estilos especiales */
+
+/* Hero carousel (Swiper) - paginación */
+.hero-pagination .swiper-pagination-bullet {
+  width: 10px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  opacity: 1;
+  transition: background 0.2s;
+}
+.hero-pagination .swiper-pagination-bullet-active {
+  background: white;
+  transform: scale(1.2);
+}

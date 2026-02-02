@@ -1,31 +1,11 @@
 import Link from "next/link";
+import HeroCarousel from "@/components/HeroCarousel";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-r from-zinc-900 to-zinc-800 text-white">
-        <div className="container mx-auto px-4 py-24 sm:py-32">
-          <div className="mx-auto max-w-3xl text-center">
-            <h1 className="mb-6 text-5xl font-bold tracking-tight sm:text-6xl">
-              La Casa de Chuy el Rico
-            </h1>
-            <p className="mb-8 text-xl text-zinc-300 sm:text-2xl">
-              Estudio de Locación Fotográfica
-            </p>
-            <p className="mb-10 text-lg text-zinc-400">
-              Reserva tu sesión fotográfica en nuestro estudio único. 
-              Espacios interiores y jardín disponibles para tus proyectos creativos.
-            </p>
-            <Link
-              href="/reservar"
-              className="inline-block rounded-lg bg-white px-8 py-4 text-lg font-semibold text-zinc-900 transition-all hover:bg-zinc-100 hover:shadow-lg"
-            >
-              Reservar Ahora
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Hero carrusel */}
+      <HeroCarousel />
 
       {/* Información del Estudio */}
       <section className="container mx-auto px-4 py-16 sm:py-24">

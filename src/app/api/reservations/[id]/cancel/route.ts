@@ -58,7 +58,6 @@ export async function POST(
 
     const {
       data: { user },
-      error: authError,
     } = await authClient.auth.getUser();
 
     // Obtener la reserva

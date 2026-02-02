@@ -65,7 +65,6 @@ export async function POST(
 
     const {
       data: { user },
-      error: authError,
     } = await authClient.auth.getUser();
 
     // Validar campos requeridos
