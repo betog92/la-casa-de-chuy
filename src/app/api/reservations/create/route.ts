@@ -108,40 +108,74 @@ export async function POST(request: NextRequest) {
       loyaltyPointsUsed = Number(body.loyaltyPointsUsed) || 0;
     }
 
-    // Validar disponibilidad
-    const isAvailable = await validateSlotAvailability(
-      supabase,
-      date,
-      startTime
-    );
+    // Validar disponibilidad y (si hay usuario) contar reservas confirmadas en paralelo
+    const [isAvailable, previousCountResult] = await Promise.all([
+      validateSlotAvailability(supabase, date, startTime),
+      userId
+        ? supabase
+            .from("reservations")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .eq("status", "confirmed")
+        : Promise.resolve({ count: 0 }),
+    ]);
+
     if (!isAvailable) {
       return conflictResponse(
         "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
       );
     }
 
-    // Calcular nivel de fidelización anterior (antes de insertar la nueva reserva)
+    // Una sola consulta: validar saldo y obtener filas para consumir después (si aplica)
+    type LoyaltyRowForConsumption = { id: string; points: number; expires_at: string };
+    let loyaltyRowsForConsumption: LoyaltyRowForConsumption[] = [];
+
+    if (userId && loyaltyPointsUsed > 0) {
+      const pointsToUse = Math.floor(Number(loyaltyPointsUsed));
+      if (pointsToUse <= 0) {
+        return validationErrorResponse("Cantidad de puntos de lealtad inválida");
+      }
+      const { data: pointsRows, error: pointsError } = await supabase
+        .from("loyalty_points")
+        .select("id, points, expires_at")
+        .eq("user_id", userId)
+        .eq("used", false)
+        .eq("revoked", false)
+        .order("created_at", { ascending: true });
+
+      if (pointsError) {
+        console.error("Error consultando puntos de lealtad:", pointsError);
+        return errorResponse(
+          "No se pudo verificar el saldo de puntos. Intenta de nuevo.",
+          500
+        );
+      }
+
+      const rows = (pointsRows as LoyaltyRowForConsumption[] | null) || [];
+      const availableSum = rows.reduce((sum, row) => sum + (row.points || 0), 0);
+
+      if (availableSum < pointsToUse) {
+        return validationErrorResponse(
+          "No tienes suficientes puntos de lealtad. Saldo disponible: " +
+            availableSum +
+            " puntos."
+        );
+      }
+      loyaltyRowsForConsumption = rows;
+    }
+
+    // Calcular nivel de fidelización (usamos el count ya obtenido en paralelo)
     let newLoyaltyLevel: string | null = null;
     let loyaltyLevelChanged = false;
 
     if (userId) {
       try {
-        const { count: previousCount } = await supabase
-          .from("reservations")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId)
-          .eq("status", "confirmed");
-
-        const previousCountNum = previousCount || 0;
+        const previousCountNum = previousCountResult?.count ?? 0;
         const previousLoyaltyLevel = calculateLoyaltyLevel(previousCountNum);
-
-        // El nivel nuevo será con una reserva más
         const newCount = previousCountNum + 1;
         newLoyaltyLevel = calculateLoyaltyLevel(newCount);
-
         loyaltyLevelChanged = previousLoyaltyLevel !== newLoyaltyLevel;
       } catch (levelError) {
-        // No fallar la reserva si hay error al calcular el nivel
         console.error("Error calculating loyalty level:", levelError);
       }
     }
@@ -164,7 +198,7 @@ export async function POST(request: NextRequest) {
       // Campos específicos de descuentos
       last_minute_discount: lastMinuteDiscount || 0,
       loyalty_discount: loyaltyDiscount || 0,
-      loyalty_points_used: loyaltyPointsUsed || 0,
+      loyalty_points_used: Math.floor(Number(loyaltyPointsUsed) || 0),
       credits_used: creditsUsed || 0,
       referral_discount: referralDiscount || 0,
       // Código de descuento
@@ -196,6 +230,117 @@ export async function POST(request: NextRequest) {
         "No se pudo obtener el ID de la reserva creada",
         500
       );
+    }
+
+    // Consumir puntos con las filas ya obtenidas (una sola consulta previa); UPDATE con used=false evita carreras
+    if (userId && loyaltyPointsUsed > 0 && loyaltyRowsForConsumption.length > 0) {
+      const pointsToConsume = Math.floor(Number(loyaltyPointsUsed));
+      let remaining = pointsToConsume;
+
+      const correctReservationLoyaltyPointsUsed = async (actual: number) => {
+        await supabase
+          .from("reservations")
+          .update({ loyalty_points_used: Math.max(0, actual) } as never)
+          .eq("id", reservationId);
+      };
+
+      for (const row of loyaltyRowsForConsumption) {
+        if (remaining <= 0) break;
+
+        const rowPoints = row.points || 0;
+        if (rowPoints <= 0) continue;
+
+        if (rowPoints <= remaining) {
+          const { data: updated, error: updateError } = await supabase
+            .from("loyalty_points")
+            .update({
+              used: true,
+              reservation_id: reservationId,
+            } as never)
+            .eq("id", row.id)
+            .eq("used", false)
+            .select("id")
+            .maybeSingle();
+
+          if (updateError || !updated) {
+            console.error(
+              "Error o fila ya usada al marcar puntos (id:",
+              row.id,
+              "):",
+              updateError || "0 rows"
+            );
+            await correctReservationLoyaltyPointsUsed(pointsToConsume - remaining);
+            return errorResponse(
+              "Los puntos de lealtad ya no están disponibles (otra reserva los usó). La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+              500
+            );
+          }
+          remaining -= rowPoints;
+        } else {
+          const { data: updated, error: updateError } = await supabase
+            .from("loyalty_points")
+            .update({ points: rowPoints - remaining } as never)
+            .eq("id", row.id)
+            .eq("used", false)
+            .select("id")
+            .maybeSingle();
+
+          if (updateError || !updated) {
+            console.error(
+              "Error o fila ya usada al partir puntos (id:",
+              row.id,
+              "):",
+              updateError || "0 rows"
+            );
+            await correctReservationLoyaltyPointsUsed(pointsToConsume - remaining);
+            return errorResponse(
+              "Los puntos de lealtad ya no están disponibles (otra reserva los usó). La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+              500
+            );
+          }
+
+          const { error: insertError } = await supabase
+            .from("loyalty_points")
+            .insert({
+              user_id: userId,
+              points: remaining,
+              expires_at: row.expires_at,
+              used: true,
+              reservation_id: reservationId,
+              revoked: false,
+            } as never);
+
+          if (insertError) {
+            console.error(
+              "Error al insertar fila de puntos consumidos:",
+              insertError
+            );
+            await correctReservationLoyaltyPointsUsed(pointsToConsume - remaining);
+            return errorResponse(
+              "Error al aplicar los puntos de lealtad. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+              500
+            );
+          }
+          remaining = 0;
+        }
+      }
+
+      if (remaining > 0) {
+        const actualConsumed = Math.max(0, pointsToConsume - remaining);
+        await correctReservationLoyaltyPointsUsed(actualConsumed);
+        console.error(
+          "Consumo de puntos incompleto: se intentaron consumir",
+          pointsToConsume,
+          "pero quedaron",
+          remaining,
+          "sin consumir (userId:",
+          userId,
+          "reservationId:",
+          reservationId,
+          "). Reserva actualizada a loyalty_points_used=",
+          actualConsumed
+        );
+      }
     }
 
     // Tareas post-insert independientes: ejecutar en paralelo para reducir latencia

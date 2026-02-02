@@ -433,7 +433,16 @@ export default function GuestReservationPage() {
 
                     {isValidDiscount(reservation.loyalty_discount) && (
                       <DiscountRow
-                        label="Descuento fidelización (10%)"
+                        label={
+                          reservation.original_price &&
+                          Number(reservation.original_price) > 0
+                            ? `Descuento fidelización (${Math.round(
+                                (Number(reservation.loyalty_discount!) /
+                                  Number(reservation.original_price)) *
+                                  100
+                              )}%)`
+                            : "Descuento fidelización"
+                        }
                         amount={reservation.loyalty_discount!}
                       />
                     )}

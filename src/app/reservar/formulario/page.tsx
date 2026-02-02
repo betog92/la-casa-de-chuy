@@ -106,7 +106,7 @@ function FormularioReservaContent() {
   const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(0);
   const [useCredits, setUseCredits] = useState(0);
   const [useLoyaltyDiscount, setUseLoyaltyDiscount] = useState(false);
-  const [reservationCount, setReservationCount] = useState(0); // TODO: Obtener del usuario si está logueado (temporalmente 0 para visualización)
+  const [reservationCount, setReservationCount] = useState(0);
   const [prefilledFields, setPrefilledFields] = useState<{
     email: boolean;
     name: boolean;
@@ -158,6 +158,16 @@ function FormularioReservaContent() {
           if (profile.phone) {
             setValue("phone", profile.phone);
             setPrefilledFields((prev) => ({ ...prev, phone: true }));
+          }
+          // Conectar fidelización, puntos y créditos desde el perfil
+          if (typeof profile.loyaltyPoints === "number") {
+            setAvailablePoints(profile.loyaltyPoints);
+          }
+          if (typeof profile.credits === "number") {
+            setAvailableCredits(profile.credits);
+          }
+          if (typeof profile.confirmedReservationCount === "number") {
+            setReservationCount(profile.confirmedReservationCount);
           }
         }
       } catch (error) {
@@ -288,11 +298,10 @@ function FormularioReservaContent() {
             discountsWithCode.loyalty = calculation.discounts.loyalty;
           }
 
-          // Puntos de lealtad
+          // Puntos de lealtad (1 punto = $1 MXN; no superar el precio)
           if (useLoyaltyPoints > 0) {
-            const pointsDiscount = Math.floor(useLoyaltyPoints / 100) * 100;
+            const pointsDiscount = Math.min(useLoyaltyPoints, newBasePrice);
             newBasePrice = Math.max(0, newBasePrice - pointsDiscount);
-            // Agregar a discountsWithCode para que se muestre en la UI
             discountsWithCode.loyaltyPoints = {
               amount: pointsDiscount,
               points: useLoyaltyPoints,
@@ -856,7 +865,7 @@ function FormularioReservaContent() {
                                 value="discount"
                                 checked={selectedCodeType === "discount"}
                                 onChange={() => setSelectedCodeType("discount")}
-                                className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                                className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
                               />
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
@@ -899,7 +908,7 @@ function FormularioReservaContent() {
                                 value="referral"
                                 checked={selectedCodeType === "referral"}
                                 onChange={() => setSelectedCodeType("referral")}
-                                className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                                className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
                               />
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
@@ -992,7 +1001,7 @@ function FormularioReservaContent() {
                             onChange={(e) =>
                               setUseLoyaltyDiscount(e.target.checked)
                             }
-                            className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                            className="h-5 w-5 rounded border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                           />
                         </label>
                       </div>
@@ -1024,13 +1033,13 @@ function FormularioReservaContent() {
                             <span className="text-xs text-zinc-500">
                               {availablePoints} puntos disponibles
                             </span>
-                            {availablePoints >= 100 && useLoyaltyPoints > 0 && (
+                            {useLoyaltyPoints > 0 && (
                               <span className="text-xs font-medium text-green-600">
                                 • Usando {useLoyaltyPoints} puntos
                               </span>
                             )}
                           </div>
-                          {availablePoints < 100 && (
+                          {availablePoints <= 0 && (
                             <p className="text-xs text-zinc-500 mt-0.5">
                               Gana 1 punto por cada $10 gastados
                             </p>
@@ -1040,17 +1049,15 @@ function FormularioReservaContent() {
                           <input
                             type="checkbox"
                             checked={useLoyaltyPoints > 0}
-                            disabled={availablePoints < 100}
+                            disabled={availablePoints <= 0}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                const pointsToUse =
-                                  Math.floor(availablePoints / 100) * 100;
-                                setUseLoyaltyPoints(pointsToUse);
+                                setUseLoyaltyPoints(availablePoints);
                               } else {
                                 setUseLoyaltyPoints(0);
                               }
                             }}
-                            className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                            className="h-5 w-5 rounded border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                           />
                         </label>
                       </div>
@@ -1105,7 +1112,7 @@ function FormularioReservaContent() {
                                 e.target.checked ? availableCredits : 0
                               );
                             }}
-                            className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                            className="h-5 w-5 rounded border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                           />
                         </label>
                       </div>
@@ -1229,6 +1236,34 @@ function FormularioReservaContent() {
                         ).toLocaleString("es-MX")}
                       </span>
                     </div>
+
+                    {!user && (
+                      <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-center gap-1.5 text-xs text-zinc-500">
+                        <svg
+                          className="w-3.5 h-3.5 flex-shrink-0 text-zinc-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2"
+                          stroke="currentColor"
+                          aria-hidden
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
+                          />
+                        </svg>
+                        <span>
+                          <Link
+                            href="/auth/login"
+                            className="text-[#103948] hover:underline"
+                          >
+                            Inicia sesión
+                          </Link>{" "}
+                          para disfrutar de descuentos, puntos y créditos.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1405,7 +1440,7 @@ function FormularioReservaContent() {
                     id="acceptTerms"
                     type="checkbox"
                     {...register("acceptTerms")}
-                    className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948]"
+                    className="mt-1 h-4 w-4 rounded border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948]"
                   />
                   <label
                     htmlFor="acceptTerms"
@@ -1590,7 +1625,7 @@ function FormularioReservaContent() {
                         value="discount"
                         checked={selectedCodeType === "discount"}
                         onChange={() => setSelectedCodeType("discount")}
-                        className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                        className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -1633,7 +1668,7 @@ function FormularioReservaContent() {
                         value="referral"
                         checked={selectedCodeType === "referral"}
                         onChange={() => setSelectedCodeType("referral")}
-                        className="h-5 w-5 border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
+                        className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -1724,7 +1759,7 @@ function FormularioReservaContent() {
                       checked={useLoyaltyDiscount}
                       disabled={reservationCount < 1}
                       onChange={(e) => setUseLoyaltyDiscount(e.target.checked)}
-                      className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                      className="h-5 w-5 rounded border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                     />
                   </label>
                 </div>
@@ -1756,13 +1791,13 @@ function FormularioReservaContent() {
                       <span className="text-xs text-zinc-500">
                         {availablePoints} puntos disponibles
                       </span>
-                      {availablePoints >= 100 && useLoyaltyPoints > 0 && (
+                      {useLoyaltyPoints > 0 && (
                         <span className="text-xs font-medium text-green-600">
                           • Usando {useLoyaltyPoints} puntos
                         </span>
                       )}
                     </div>
-                    {availablePoints < 100 && (
+                    {availablePoints <= 0 && (
                       <p className="text-xs text-zinc-500 mt-0.5">
                         Gana 1 punto por cada $10 gastados
                       </p>
@@ -1772,17 +1807,15 @@ function FormularioReservaContent() {
                     <input
                       type="checkbox"
                       checked={useLoyaltyPoints > 0}
-                      disabled={availablePoints < 100}
+                      disabled={availablePoints <= 0}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          const pointsToUse =
-                            Math.floor(availablePoints / 100) * 100;
-                          setUseLoyaltyPoints(pointsToUse);
+                          setUseLoyaltyPoints(availablePoints);
                         } else {
                           setUseLoyaltyPoints(0);
                         }
                       }}
-                      className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                      className="h-5 w-5 rounded border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                     />
                   </label>
                 </div>
@@ -1834,7 +1867,7 @@ function FormularioReservaContent() {
                       onChange={(e) => {
                         setUseCredits(e.target.checked ? availableCredits : 0);
                       }}
-                      className="h-5 w-5 rounded border-2 border-zinc-300 text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
+                      className="h-5 w-5 rounded border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                     />
                   </label>
                 </div>
@@ -1947,6 +1980,34 @@ function FormularioReservaContent() {
                   ).toLocaleString("es-MX")}
                 </span>
               </div>
+
+              {!user && (
+                <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-center gap-1.5 text-xs text-zinc-500">
+                  <svg
+                    className="w-3.5 h-3.5 flex-shrink-0 text-zinc-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
+                    />
+                  </svg>
+                  <span>
+                    <Link
+                      href="/auth/login"
+                      className="text-[#103948] hover:underline"
+                    >
+                      Inicia sesión
+                    </Link>{" "}
+                    para disfrutar de descuentos, puntos y créditos.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -187,16 +187,26 @@ export async function POST(
       }
     }
 
-    // Actualizar la reserva
+    // Actualizar la reserva (optimistic lock: solo si reschedule_count no cambió)
+    const currentRescheduleCount = reservationRow.reschedule_count ?? 0;
     const { data: updatedReservation, error: updateError } = await supabase
       .from("reservations")
       // @ts-expect-error - TypeScript tiene problemas con tipos de Supabase cuando se usan selects parciales
       .update(updateData)
       .eq("id", reservationId)
+      .eq("reschedule_count", currentRescheduleCount)
       .select("email, name, date, start_time, additional_payment_amount")
       .single();
 
     if (updateError) {
+      const noRows =
+        updateError.code === "PGRST116" ||
+        String(updateError.message || "").includes("0 row");
+      if (noRows) {
+        return conflictResponse(
+          "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento."
+        );
+      }
       console.error("Error completing reschedule:", updateError);
       return errorResponse("Error al completar el reagendamiento", 500);
     }

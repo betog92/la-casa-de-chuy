@@ -279,7 +279,7 @@ export interface PriceCalculationOptions {
   isLastMinute?: boolean;
   reservationCount?: number;
   isFirstReservation?: boolean;
-  useLoyaltyPoints?: number; // Puntos a usar (100 puntos = $100)
+  useLoyaltyPoints?: number; // Puntos a usar (1 punto = $1 MXN)
 }
 
 export interface PriceCalculationResult {
@@ -365,8 +365,8 @@ export async function calculateFinalPrice(
 
   // 5. Aplicar puntos de fidelización (si aplica)
   if (useLoyaltyPoints && useLoyaltyPoints > 0) {
-    // 100 puntos = $100 MXN
-    const discountFromPoints = Math.floor(useLoyaltyPoints / 100) * 100;
+    // 1 punto = $1 MXN; el descuento no puede superar el precio actual
+    const discountFromPoints = Math.min(useLoyaltyPoints, finalPrice);
     discounts.loyaltyPoints = {
       amount: discountFromPoints,
       points: useLoyaltyPoints,

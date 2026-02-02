@@ -16,13 +16,13 @@ export function isValidDiscount(
 /**
  * Calcula el descuento por puntos de fidelización
  * @param loyaltyPointsUsed - Puntos usados
- * @returns Descuento calculado (100 puntos = $100 MXN, redondeado hacia abajo)
+ * @returns Descuento en MXN (1 punto = $1 MXN)
  */
 export function calculatePointsDiscount(
   loyaltyPointsUsed: number | null | undefined
 ): number {
   if (!loyaltyPointsUsed || loyaltyPointsUsed <= 0) return 0;
-  return Math.floor(loyaltyPointsUsed / 100) * 100;
+  return loyaltyPointsUsed;
 }
 
 /**

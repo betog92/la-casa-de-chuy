@@ -103,6 +103,7 @@ export async function GET(request: NextRequest) {
       loyaltyPoints,
       credits,
       loyaltyLevelName,
+      confirmedReservationCount: confirmedCount,
     });
   } catch (error: unknown) {
     const errorMessage =

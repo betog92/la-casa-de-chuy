@@ -173,80 +173,57 @@ export async function POST(
       return errorResponse("Error al cancelar la reserva", 500);
     }
 
-    // Revocar puntos y créditos asociados a esta reserva
-    // Incluye puntos de referidos: si el referido cancela, se revocan también
-    // los puntos otorgados al que refirió (asumiendo que se almacenan con este reservation_id).
+    // Revocar puntos y créditos asociados a esta reserva (en paralelo)
     const revokeTimestamp = new Date().toISOString();
 
-    // Puntos de lealtad (revocar todos los ligados a la reserva)
-    type LoyaltyRow = {
-      id: string;
-      user_id: string | null;
-      points: number | null;
-      used: boolean;
-      expires_at: string | null;
-    };
+    const [loyaltyResult, creditsResult] = await Promise.all([
+      supabase
+        .from("loyalty_points")
+        .select("id")
+        .eq("reservation_id", reservationId)
+        .eq("revoked", false),
+      supabase
+        .from("credits")
+        .select("id")
+        .eq("reservation_id", reservationId)
+        .eq("revoked", false),
+    ]);
 
-    const { data: loyaltyData, error: fetchLoyaltyError } = await supabase
-      .from("loyalty_points")
-      .select("id, user_id, points, used, expires_at")
-      .eq("reservation_id", reservationId)
-      .eq("revoked", false);
+    const loyaltyIds =
+      !loyaltyResult.error && Array.isArray(loyaltyResult.data) && loyaltyResult.data.length > 0
+        ? (loyaltyResult.data as { id: string }[]).map((r) => r.id)
+        : [];
+    const creditIds =
+      !creditsResult.error && Array.isArray(creditsResult.data) && creditsResult.data.length > 0
+        ? (creditsResult.data as { id: string }[]).map((r) => r.id)
+        : [];
 
-    if (fetchLoyaltyError) {
-      console.error("Error consultando puntos de lealtad:", fetchLoyaltyError);
-    } else {
-      const loyaltyRows = (loyaltyData as LoyaltyRow[] | null) || [];
+    const [revokeLoyaltyOut, revokeCreditsOut] = await Promise.all([
+      loyaltyIds.length > 0
+        ? supabase
+            .from("loyalty_points")
+            .update({ revoked: true, revoked_at: revokeTimestamp } as never)
+            .in("id", loyaltyIds)
+        : Promise.resolve({ error: null }),
+      creditIds.length > 0
+        ? supabase
+            .from("credits")
+            .update({ revoked: true, revoked_at: revokeTimestamp } as never)
+            .in("id", creditIds)
+        : Promise.resolve({ error: null }),
+    ]);
 
-      if (loyaltyRows.length > 0) {
-        const loyaltyIds = loyaltyRows.map((row) => row.id);
-
-        const { error: revokeAllLoyaltyError } = await supabase
-          .from("loyalty_points")
-          .update({ revoked: true, revoked_at: revokeTimestamp } as never)
-          .in("id", loyaltyIds);
-
-        if (revokeAllLoyaltyError) {
-          console.error(
-            "Error revocando puntos de lealtad:",
-            revokeAllLoyaltyError
-          );
-        }
-      }
+    if (loyaltyResult.error) {
+      console.error("Error consultando puntos de lealtad:", loyaltyResult.error);
     }
-
-    // Créditos: revocar todos los ligados a la reserva
-    type CreditRow = {
-      id: string;
-      user_id: string | null;
-      amount: number | null;
-      used: boolean;
-      expires_at: string | null;
-    };
-
-    const { data: creditsData, error: fetchCreditsError } = await supabase
-      .from("credits")
-      .select("id, user_id, amount, used, expires_at")
-      .eq("reservation_id", reservationId)
-      .eq("revoked", false);
-
-    if (fetchCreditsError) {
-      console.error("Error consultando créditos:", fetchCreditsError);
-    } else {
-      const creditRows = (creditsData as CreditRow[] | null) || [];
-
-      if (creditRows.length > 0) {
-        const creditIds = creditRows.map((row) => row.id);
-
-        const { error: revokeAllCreditsError } = await supabase
-          .from("credits")
-          .update({ revoked: true, revoked_at: revokeTimestamp } as never)
-          .in("id", creditIds);
-
-        if (revokeAllCreditsError) {
-          console.error("Error revocando créditos:", revokeAllCreditsError);
-        }
-      }
+    if (revokeLoyaltyOut.error) {
+      console.error("Error revocando puntos de lealtad:", revokeLoyaltyOut.error);
+    }
+    if (creditsResult.error) {
+      console.error("Error consultando créditos:", creditsResult.error);
+    }
+    if (revokeCreditsOut.error) {
+      console.error("Error revocando créditos:", revokeCreditsOut.error);
     }
 
     const baseUrl =
