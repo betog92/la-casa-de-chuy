@@ -1,9 +1,14 @@
-"use client";
-
 import Link from "next/link";
 import LoginForm from "@/components/auth/LoginForm";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect?: string }>;
+}) {
+  const params = await searchParams;
+  const redirectTo = params.redirect ?? undefined;
+
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto">
@@ -20,7 +25,7 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-8">
-          <LoginForm />
+          <LoginForm redirectTo={redirectTo} />
 
           <div className="mt-6 text-center">
             <p className="text-sm text-zinc-600">

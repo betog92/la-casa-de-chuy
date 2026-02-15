@@ -46,8 +46,15 @@ export function conflictResponse(message: string) {
 }
 
 /**
- * Crea una respuesta de no autorizado (401)
+ * Crea una respuesta de no autorizado (401) - no autenticado
  */
 export function unauthorizedResponse(message = "No autorizado") {
   return errorResponse(message, 401);
+}
+
+/**
+ * Crea una respuesta de prohibido (403) - autenticado pero sin permisos
+ */
+export function forbiddenResponse(message = "Acceso prohibido") {
+  return errorResponse(message, 403);
 }

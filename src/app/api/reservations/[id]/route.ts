@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth/admin";
 import {
   successResponse,
   errorResponse,
@@ -51,7 +52,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, user_id"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, user_id"
       )
       .eq("id", reservationId)
       .single();
@@ -64,8 +65,16 @@ export async function GET(
     // Type assertion para ayudar a TypeScript
     const reservationData = data as ReservationRow;
 
-    // Si hay usuario autenticado, verificar pertenencia; si no, permitir (flujo invitado/confirmación)
-    if (user && reservationData.user_id && reservationData.user_id !== user.id) {
+    // Admins pueden ver cualquier reserva
+    const { isAdmin } = await requireAdmin();
+
+    // Si hay usuario autenticado, verificar pertenencia (o ser admin); si no, permitir (flujo invitado/confirmación)
+    if (
+      !isAdmin &&
+      user &&
+      reservationData.user_id &&
+      reservationData.user_id !== user.id
+    ) {
       return unauthorizedResponse("No tienes permisos para ver esta reserva");
     }
 

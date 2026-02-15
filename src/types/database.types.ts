@@ -16,6 +16,7 @@ export interface Database {
           name: string | null;
           phone: string | null;
           password_hash: string | null;
+          is_admin: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -25,6 +26,7 @@ export interface Database {
           name?: string | null;
           phone?: string | null;
           password_hash?: string | null;
+          is_admin?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -34,6 +36,7 @@ export interface Database {
           name?: string | null;
           phone?: string | null;
           password_hash?: string | null;
+          is_admin?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -61,6 +64,7 @@ export interface Database {
           discount_code_discount: number | null;
           status: "confirmed" | "cancelled" | "completed";
           payment_id: string | null;
+          payment_method: string | null;
           refund_amount: number | null;
           refund_status: "pending" | "processed" | "failed" | null;
           refund_id: string | null;
@@ -97,6 +101,7 @@ export interface Database {
           discount_code_discount?: number | null;
           status?: "confirmed" | "cancelled" | "completed";
           payment_id?: string | null;
+          payment_method?: string | null;
           refund_amount?: number | null;
           refund_status?: "pending" | "processed" | "failed" | null;
           refund_id?: string | null;
@@ -133,6 +138,7 @@ export interface Database {
           discount_code_discount?: number | null;
           status?: "confirmed" | "cancelled" | "completed";
           payment_id?: string | null;
+          payment_method?: string | null;
           refund_amount?: number | null;
           refund_status?: "pending" | "processed" | "failed" | null;
           refund_id?: string | null;

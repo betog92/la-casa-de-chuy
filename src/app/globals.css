@@ -37,6 +37,22 @@ html {
   overflow-x: hidden;
 }
 
+/* Ocultar fila "todo el día" vacía en react-big-calendar (vistas Semana y Día) */
+.rbc-time-view .rbc-allday-cell {
+  display: none;
+}
+
+/* Ocultar etiqueta de hora duplicada en eventos (vistas Semana y Día) - el título ya incluye la hora */
+.rbc-time-view .rbc-event-label {
+  display: none;
+}
+
+/* Botón Siguiente deshabilitado cuando se alcanza el límite de 6 meses */
+.rbc-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Estilos para react-calendar */
 .react-calendar {
   width: 100% !important;

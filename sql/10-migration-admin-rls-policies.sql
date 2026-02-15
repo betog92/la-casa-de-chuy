@@ -1,0 +1,39 @@
+-- =====================================================
+-- MIGRACIÓN: POLÍTICAS RLS PARA ADMINS
+-- =====================================================
+-- Ejecuta este SQL DESPUÉS de 09-migration-add-admin-role.sql
+-- Requiere que la columna users.is_admin exista
+--
+-- NOTA: Las políticas de admin se verifican en la aplicación
+-- (API routes con requireAdmin que usan Service Role).
+-- Este archivo documenta las restricciones a nivel de BD
+-- para cuando quieras reforzar la seguridad con RLS.
+--
+-- Por ahora, las APIs de admin usan Service Role Key y
+-- verifican is_admin en el código. Las políticas actuales
+-- de availability y time_slots permiten "Anyone" en
+-- INSERT/UPDATE/DELETE. Para mayor seguridad en producción,
+-- puedes crear un rol/función que verifique is_admin y
+-- usarla en políticas RLS. Eso requiere:
+--
+-- 1. Función: auth.is_admin() que retorne true si el
+--    usuario actual tiene is_admin = true en public.users
+-- 2. Reemplazar políticas "Anyone can insert/update/delete"
+--    por políticas que usen auth.is_admin()
+--
+-- Ejemplo (para referencia futura):
+--
+-- CREATE OR REPLACE FUNCTION auth.is_admin()
+-- RETURNS BOOLEAN AS $$
+--   SELECT EXISTS (
+--     SELECT 1 FROM public.users
+--     WHERE id = auth.uid() AND is_admin = TRUE
+--   );
+-- $$ LANGUAGE sql SECURITY DEFINER;
+--
+-- Luego modificar las políticas de availability y time_slots
+-- para usar: USING (auth.is_admin()) en lugar de USING (true)
+--
+-- Por ahora se deja el sistema funcionando con verificación
+-- en la capa de aplicación (API routes).
+-- =====================================================

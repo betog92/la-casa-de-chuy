@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   phone TEXT,
+  is_admin BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   referral_discount DECIMAL(10, 2) DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed')),
   payment_id TEXT,
+  payment_method TEXT,  -- 'conekta' (en línea), 'efectivo', 'transferencia' (reservas manuales)
   refund_amount DECIMAL(10, 2),  -- Monto del reembolso (80% del price)
   refund_status TEXT CHECK (refund_status IN ('pending', 'processed', 'failed')),  -- Estado del reembolso
   refund_id TEXT,  -- ID del reembolso en Conekta
@@ -134,6 +136,7 @@ CREATE TABLE IF NOT EXISTS referrals (
 -- =====================================================
 -- ÍNDICES BÁSICOS PARA MEJORAR PERFORMANCE
 -- =====================================================
+CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin) WHERE is_admin = TRUE;
 CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date);
 CREATE INDEX IF NOT EXISTS idx_reservations_user_id ON reservations(user_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_email ON reservations(email);

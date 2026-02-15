@@ -138,6 +138,14 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                       </svg>
                       <span>Mi cuenta</span>
                     </Link>
+                    <Link
+                      href="/admin"
+                      onClick={onClose}
+                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                      style={{ fontFamily: "var(--font-cormorant), serif" }}
+                    >
+                      <span>Panel admin</span>
+                    </Link>
                     <button
                       type="button"
                       onClick={async () => {

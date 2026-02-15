@@ -130,6 +130,13 @@ export default function Header() {
                     >
                       Mi cuenta
                     </Link>
+                    <Link
+                      href="/admin"
+                      className="block px-4 py-2 text-sm text-[#103948BF] hover:bg-zinc-50 hover:text-[#103948] transition-colors"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      Panel admin
+                    </Link>
                     <button
                       type="button"
                       onClick={async () => {
