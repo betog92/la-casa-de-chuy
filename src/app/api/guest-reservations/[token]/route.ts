@@ -42,18 +42,70 @@ export async function GET(
     // El email del token ya está normalizado (lowercase), y las reservas también se almacenan normalizadas
     // Usamos .ilike() para comparación case-insensitive como medida adicional de seguridad
     const supabase = createServiceRoleClient();
-    const { data: reservation, error } = await supabase
+    const { data: reservationData, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_amount, additional_payment_id, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_amount, additional_payment_id, additional_payment_method, rescheduled_by_user_id, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at"
       )
       .eq("id", reservationId)
       .ilike("email", email)
       .single();
 
-    if (error || !reservation) {
+    if (error || !reservationData) {
       return notFoundResponse("Reserva");
     }
+
+    // Historial de reagendamientos (todos, orden cronológico)
+    type HistoryRow = {
+      id: number;
+      rescheduled_at: string;
+      rescheduled_by_user_id: string | null;
+      previous_date: string;
+      previous_start_time: string;
+      new_date: string;
+      new_start_time: string;
+      additional_payment_amount: number | null;
+      additional_payment_method: string | null;
+    };
+    const { data: historyRows } = await supabase
+      .from("reservation_reschedule_history")
+      .select("id, rescheduled_at, rescheduled_by_user_id, previous_date, previous_start_time, new_date, new_start_time, additional_payment_amount, additional_payment_method")
+      .eq("reservation_id", reservationId)
+      .order("rescheduled_at", { ascending: true });
+    const historyList = (historyRows ?? []) as HistoryRow[];
+
+    // Una sola query de users para rescheduled_by e historial
+    const rescheduledByUserId = (reservationData as { rescheduled_by_user_id?: string | null }).rescheduled_by_user_id;
+    const historyUserIds = historyList.map((h) => h.rescheduled_by_user_id).filter(Boolean) as string[];
+    const allUserIds = [...new Set([rescheduledByUserId, ...historyUserIds].filter(Boolean))] as string[];
+    let usersMap: Record<string, { id: string; name: string | null; email: string }> = {};
+    if (allUserIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from("users")
+        .select("id, name, email")
+        .in("id", allUserIds);
+      const users = (usersData ?? []) as { id: string; name: string | null; email: string }[];
+      for (const u of users) {
+        usersMap[u.id] = { id: u.id, name: u.name ?? null, email: u.email };
+      }
+    }
+    const rescheduled_by = rescheduledByUserId ? usersMap[rescheduledByUserId] ?? null : null;
+    const reschedule_history = historyList.map((h) => ({
+      rescheduled_at: h.rescheduled_at,
+      rescheduled_by: h.rescheduled_by_user_id ? usersMap[h.rescheduled_by_user_id] ?? null : null,
+      previous_date: h.previous_date,
+      previous_start_time: h.previous_start_time,
+      new_date: h.new_date,
+      new_start_time: h.new_start_time,
+      additional_payment_amount: h.additional_payment_amount,
+      additional_payment_method: h.additional_payment_method,
+    }));
+
+    const reservation = {
+      ...(reservationData as Record<string, unknown>),
+      rescheduled_by,
+      reschedule_history,
+    };
 
     return successResponse({
       reservation,

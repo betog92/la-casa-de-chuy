@@ -19,7 +19,8 @@ import {
   conflictResponse,
 } from "@/utils/api-response";
 import { sendRescheduleConfirmation } from "@/lib/email";
-import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
+import { verifyGuestToken, generateGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
+import { requireAdmin } from "@/lib/auth/admin";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -38,13 +39,25 @@ export async function POST(
     }
 
     // Obtener el cuerpo de la solicitud
-    let body: { date?: string; startTime?: string; token?: string } = {};
+    let body: {
+      date?: string;
+      startTime?: string;
+      token?: string;
+      adminReschedule?: boolean;
+      additionalPaymentMethod?: "efectivo" | "transferencia" | "pendiente";
+    } = {};
     try {
       body = await request.json();
     } catch {
       // Si no hay body o es inválido, body queda como objeto vacío
     }
-    const { date, startTime, token: guestToken } = body;
+    const {
+      date,
+      startTime,
+      token: guestToken,
+      adminReschedule,
+      additionalPaymentMethod,
+    } = body;
 
     // Obtener el usuario autenticado
     const cookieStore = await cookies();
@@ -66,6 +79,12 @@ export async function POST(
     const {
       data: { user },
     } = await authClient.auth.getUser();
+
+    let isAdmin = false;
+    if (user) {
+      const adminCheck = await requireAdmin();
+      isAdmin = adminCheck.isAdmin;
+    }
 
     // Validar campos requeridos
     if (!date || !startTime) {
@@ -105,10 +124,9 @@ export async function POST(
       "id" | "user_id" | "status" | "date" | "start_time" | "reschedule_count" | "price" | "payment_id" | "email"
     >;
 
-    // Validar autorización: usuario autenticado O token de invitado válido
+    // Validar autorización: usuario autenticado O token de invitado válido (admin puede reagendar cualquier reserva)
     if (user) {
-      // Usuario autenticado: verificar que la reserva pertenece al usuario
-      if (reservationRow.user_id !== user.id) {
+      if (reservationRow.user_id !== user.id && !isAdmin) {
         return unauthorizedResponse("No tienes permisos para reagendar esta reserva");
       }
     } else if (guestToken) {
@@ -141,24 +159,134 @@ export async function POST(
       );
     }
 
-    // Verificar límite de reagendamientos (solo 1 intento permitido)
-    if ((reservationRow.reschedule_count || 0) >= 1) {
+    // Flujo admin: completar reagendo con método de cobro (sin Conekta)
+    const validPaymentMethods = ["efectivo", "transferencia", "pendiente"] as const;
+    if (
+      isAdmin &&
+      adminReschedule === true &&
+      additionalPaymentMethod &&
+      validPaymentMethods.includes(additionalPaymentMethod)
+    ) {
+      const isAvailable = await validateSlotAvailability(supabase, date, startTime);
+      if (!isAvailable) {
+        return conflictResponse(
+          "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
+        );
+      }
+      const newPrice = await calculatePriceWithCustom(supabase, newDate);
+      const currentPrice = reservationRow.price;
+      const additionalAmount = newPrice - currentPrice;
+      const endTime = calculateEndTime(startTime);
+
+      const updateData: ReservationUpdate = {
+        date,
+        start_time: formatTimeToSeconds(startTime),
+        end_time: endTime,
+        price: newPrice,
+        reschedule_count: (reservationRow.reschedule_count || 0) + 1,
+        additional_payment_amount: additionalAmount > 0 ? additionalAmount : null,
+        additional_payment_method: additionalAmount > 0 ? additionalPaymentMethod : null,
+      };
+      if (isAdmin && user) updateData.rescheduled_by_user_id = user.id;
+      if ((reservationRow.reschedule_count || 0) === 0) {
+        updateData.original_date = reservationRow.date;
+        updateData.original_start_time = reservationRow.start_time;
+        if (reservationRow.payment_id) {
+          updateData.original_payment_id = reservationRow.payment_id;
+        }
+      }
+      const currentRescheduleCount = reservationRow.reschedule_count ?? 0;
+      const { data: updatedReservation, error: updateError } = await supabase
+        .from("reservations")
+        // @ts-expect-error - TypeScript tiene problemas con tipos de Supabase
+        .update(updateData)
+        .eq("id", reservationId)
+        .eq("reschedule_count", currentRescheduleCount)
+        .select("email, name, date, start_time, additional_payment_amount")
+        .single();
+
+      if (updateError) {
+        const noRows =
+          updateError.code === "PGRST116" ||
+          String(updateError.message || "").includes("0 row");
+        if (noRows) {
+          return conflictResponse(
+            "La reserva pudo haber cambiado. Intenta de nuevo."
+          );
+        }
+        console.error("Error rescheduling reservation (admin):", updateError);
+        return errorResponse("Error al reagendar la reserva", 500);
+      }
+
+      // Registrar en historial de reagendamientos
+      const prevTime = String(reservationRow.start_time ?? "00:00").trim() || "00:00";
+      await supabase.from("reservation_reschedule_history").insert({
+        reservation_id: reservationId,
+        rescheduled_by_user_id: isAdmin && user ? user.id : null,
+        previous_date: reservationRow.date,
+        previous_start_time: formatTimeToSeconds(prevTime),
+        new_date: date,
+        new_start_time: formatTimeToSeconds(startTime),
+        additional_payment_amount: additionalAmount > 0 ? additionalAmount : null,
+        additional_payment_method: additionalAmount > 0 ? additionalPaymentMethod : null,
+      } as never);
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const row = updatedReservation as {
+        email?: string | null;
+        name?: string | null;
+        date?: string;
+        start_time?: string | null;
+        additional_payment_amount?: number | null;
+      };
+      const to = (row.email || "").trim();
+      const name = (row.name || "Cliente").trim();
+      let manageUrl: string;
+      if (reservationRow.user_id) {
+        manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+      } else {
+        const token = await generateGuestToken(to.toLowerCase(), reservationId);
+        manageUrl = generateGuestReservationUrl(token);
+      }
+      if (to) {
+        sendRescheduleConfirmation({
+          to,
+          name,
+          date: row.date || "",
+          startTime: row.start_time || "00:00",
+          reservationId,
+          manageUrl,
+          additionalAmount: row.additional_payment_amount ?? null,
+        })
+          .then((r) => {
+            if (!r.ok) console.error("Error email reagendamiento:", r.error);
+          })
+          .catch((e) =>
+            console.error("Error inesperado enviando email reagendamiento:", e)
+          );
+      }
+      return successResponse({
+        message: "Reserva reagendada exitosamente",
+        requiresPayment: false,
+        reservation: updatedReservation,
+      });
+    }
+
+    // Verificar límite de reagendamientos (admin no aplica)
+    if (!isAdmin && (reservationRow.reschedule_count || 0) >= 1) {
       return errorResponse(
         "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento.",
         400
       );
     }
 
-    // Calcular días hábiles desde mañana hasta la fecha actual de la reserva
+    // Días hábiles (admin no aplica)
     const tomorrow = addDays(today, 1);
     const currentReservationDate = startOfDay(
       parse(reservationRow.date, "yyyy-MM-dd", new Date())
     );
-
     const businessDays = calculateBusinessDays(tomorrow, currentReservationDate);
-
-    // Si < 5 días hábiles, rechazar reagendamiento completamente
-    if (businessDays < 5) {
+    if (!isAdmin && businessDays < 5) {
       return errorResponse(
         `El reagendamiento solo está disponible con al menos 5 días hábiles de anticipación. Faltan ${businessDays} día${businessDays !== 1 ? "s" : ""} hábil${businessDays !== 1 ? "es" : ""}.`,
         400
@@ -179,7 +307,6 @@ export async function POST(
 
     // Comparar precios para determinar si se requiere pago adicional
     if (newPrice > currentPrice) {
-      // Requiere pago adicional - NO actualizar la reserva todavía
       const additionalAmount = newPrice - currentPrice;
       return successResponse({
         message: "Reagendamiento requiere pago adicional",
@@ -187,6 +314,7 @@ export async function POST(
         additionalAmount,
         newPrice,
         currentPrice,
+        ...(isAdmin && { adminCanConfirmPaymentMethod: true }),
       });
     }
 
@@ -201,6 +329,7 @@ export async function POST(
       end_time: endTime,
       reschedule_count: (reservationRow.reschedule_count || 0) + 1,
     };
+    if (isAdmin && user) updateData.rescheduled_by_user_id = user.id;
 
     // Si es la primera vez que se reagenda, guardar valores originales
     if ((reservationRow.reschedule_count || 0) === 0) {
@@ -228,19 +357,29 @@ export async function POST(
         String(updateError.message || "").includes("0 row");
       if (noRows) {
         return conflictResponse(
-          "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento."
+          "La reserva pudo haber cambiado. Intenta de nuevo."
         );
       }
       console.error("Error rescheduling reservation:", updateError);
       return errorResponse("Error al reagendar la reserva", 500);
     }
 
+    // Registrar en historial de reagendamientos
+    const prevTime = String(reservationRow.start_time ?? "00:00").trim() || "00:00";
+    await supabase.from("reservation_reschedule_history").insert({
+      reservation_id: reservationId,
+      rescheduled_by_user_id: isAdmin && user ? user.id : null,
+      previous_date: reservationRow.date,
+      previous_start_time: formatTimeToSeconds(prevTime),
+      new_date: date,
+      new_start_time: formatTimeToSeconds(startTime),
+      additional_payment_amount: null,
+      additional_payment_method: null,
+    } as never);
+
     // Enviar email de confirmación (no hay pago adicional)
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const manageUrl = guestToken
-      ? generateGuestReservationUrl(guestToken)
-      : `${baseUrl}/reservaciones/${reservationId}`;
     const row = updatedReservation as {
       email?: string | null;
       name?: string | null;
@@ -248,6 +387,14 @@ export async function POST(
       start_time?: string | null;
       additional_payment_amount?: number | null;
     };
+    let manageUrl: string;
+    if (reservationRow.user_id) {
+      manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+    } else {
+      const token = guestToken
+        ?? await generateGuestToken((row.email ?? "").trim().toLowerCase(), reservationId);
+      manageUrl = generateGuestReservationUrl(token);
+    }
     const to = (row.email || "").trim();
     const name = (row.name || "Cliente").trim();
 

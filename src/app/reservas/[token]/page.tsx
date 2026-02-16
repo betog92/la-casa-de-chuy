@@ -235,8 +235,22 @@ export default function GuestReservationPage() {
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
   const hasAdditionalPayment =
-    (reservation?.additional_payment_amount ?? 0) > 0;
+    (reservation?.additional_payment_amount ?? 0) > 0 ||
+    (reservation?.reschedule_history?.some(
+      (h) => (h.additional_payment_amount ?? 0) > 0
+    ) ?? false);
   const showPriceBreakdown = hasDiscounts || hasAdditionalPayment;
+  const additionalFromHistory = (reservation?.reschedule_history ?? []).reduce(
+    (sum, h) => sum + (h.additional_payment_amount ?? 0),
+    0
+  );
+  const originalPriceForBreakdown = Math.max(
+    0,
+    (reservation?.price ?? 0) - additionalFromHistory
+  );
+  const rescheduleHistoryWithPayment = (reservation?.reschedule_history ?? []).filter(
+    (h) => (h.additional_payment_amount ?? 0) > 0
+  );
 
   if (loading) {
     return (
@@ -487,32 +501,37 @@ export default function GuestReservationPage() {
                 )}
 
                 {!hasDiscounts && hasAdditionalPayment && (
-                  <div className="flex justify-between text-zinc-700">
-                    <span>Precio de la reserva:</span>
-                    <span>${formatCurrency(reservation.price)}</span>
-                  </div>
-                )}
-
-                {hasAdditionalPayment && (
-                  <div className="flex justify-between text-zinc-700">
-                    <span>Pago adicional por reagendamiento:</span>
-                    <span className="font-semibold">
-                      +${formatCurrency(reservation.additional_payment_amount ?? 0)}
-                    </span>
-                  </div>
+                  <>
+                    <div className="flex justify-between text-zinc-700">
+                      <span>Precio de la reserva:</span>
+                      <span>${formatCurrency(originalPriceForBreakdown)}</span>
+                    </div>
+                    {rescheduleHistoryWithPayment.map((h, idx) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between text-sm text-zinc-700"
+                      >
+                        <span>
+                          Pago adicional por reagendamiento
+                          {rescheduleHistoryWithPayment.length > 1
+                            ? ` (${idx + 1})`
+                            : ""}
+                          :
+                        </span>
+                        <span className="font-semibold text-[#103948]">
+                          +
+                          ${formatCurrency(h.additional_payment_amount ?? 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </>
                 )}
 
                 <div className="pt-2 border-t border-zinc-200">
                   <div className="flex justify-between font-semibold text-lg">
                     <span>Total pagado:</span>
                     <span className="text-[#103948]">
-                      $
-                      {formatCurrency(
-                        calculateTotalPaid(
-                          reservation.price,
-                          reservation.additional_payment_amount
-                        )
-                      )}
+                      ${formatCurrency(reservation.price)}
                     </span>
                   </div>
                   {(reservation.payment_id || reservation.additional_payment_id) && (
@@ -544,32 +563,114 @@ export default function GuestReservationPage() {
             </div>
           )}
 
-          {/* Información de reagendamiento */}
-          {(reservation.reschedule_count ?? 0) > 0 && (
-            <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
-              <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
-                <h3 className="text-lg font-semibold text-orange-900 mb-3">
-                  Información de Reagendamiento
-                </h3>
-                <div className="space-y-3 text-sm">
-                  {reservation.original_date &&
-                    reservation.original_start_time && (
+          {/* Un bloque completo por cada reagendamiento */}
+          {(reservation.reschedule_history?.length ?? 0) > 0 &&
+            (reservation.reschedule_history ?? []).map((h, idx) => (
+              <div
+                key={idx}
+                className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8"
+              >
+                <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3">
+                    Información de Reagendamiento
+                  </h3>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <p className="text-orange-700 font-medium mb-1">
+                        {(reservation.reschedule_history?.length ?? 0) === 1
+                          ? "Fecha y horario original:"
+                          : "Fecha y horario anterior:"}
+                      </p>
+                      <p className="text-orange-900">
+                        {formatDisplayDate(h.previous_date)} -{" "}
+                        {formatTimeRange(h.previous_start_time)}
+                      </p>
+                    </div>
+                    {(reservation.reschedule_history?.length ?? 0) > 1 && (
                       <div>
                         <p className="text-orange-700 font-medium mb-1">
-                          Fecha y horario original:
+                          Nueva fecha y horario:
                         </p>
                         <p className="text-orange-900">
-                          {formatDisplayDate(reservation.original_date)} -{" "}
-                          {formatTimeRange(reservation.original_start_time)}
+                          {formatDisplayDate(h.new_date)} -{" "}
+                          {formatTimeRange(h.new_start_time)}
                         </p>
                       </div>
                     )}
-                  {reservation.additional_payment_id && (
-                    <div>
-                      <p className="text-orange-700 font-medium mb-1">
-                        Pago adicional por reagendamiento:
+                    {(h.additional_payment_amount ?? 0) > 0 && (
+                      <div>
+                        <p className="text-orange-700 font-medium mb-1">
+                          Pago adicional por reagendamiento:
+                        </p>
+                        <p className="text-orange-900 font-semibold mb-1">
+                          $
+                          {formatCurrency(h.additional_payment_amount ?? 0)}{" "}
+                          MXN
+                        </p>
+                        {h.rescheduled_by && h.additional_payment_method && (
+                          <p className="text-orange-900 mb-1">
+                            Método:{" "}
+                            {h.additional_payment_method === "conekta"
+                              ? "En línea"
+                              : h.additional_payment_method === "pendiente"
+                                ? "Pendiente de cobro"
+                                : h.additional_payment_method.charAt(0).toUpperCase() +
+                                  h.additional_payment_method.slice(1)}
+                          </p>
+                        )}
+                        {!h.rescheduled_by &&
+                          reservation.additional_payment_id &&
+                          idx === (reservation.reschedule_history ?? []).length - 1 && (
+                            <p className="text-orange-900 font-mono text-xs mt-1">
+                              ID de pago: {reservation.additional_payment_id}
+                            </p>
+                          )}
+                      </div>
+                    )}
+                    {h.rescheduled_by && (
+                      <p className="text-orange-900 font-semibold pt-1">
+                        Realizado por:{" "}
+                        {h.rescheduled_by.name?.trim() ||
+                          h.rescheduled_by.email}{" "}
+                        ·{" "}
+                        {format(
+                          new Date(h.rescheduled_at),
+                          "d 'de' MMMM 'a las' h:mm a",
+                          { locale: es }
+                        )}
                       </p>
-                      {(reservation.additional_payment_amount ?? 0) > 0 && (
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+          {/* Fallback: sin historial (reservas reagendadas antes de migración 15) */}
+          {(reservation.reschedule_count ?? 0) > 0 &&
+            (reservation.reschedule_history?.length ?? 0) === 0 && (
+              <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
+                <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3">
+                    Información de Reagendamiento
+                  </h3>
+                  <div className="space-y-3 text-sm">
+                    {reservation.original_date &&
+                      reservation.original_start_time && (
+                        <div>
+                          <p className="text-orange-700 font-medium mb-1">
+                            Fecha y horario original:
+                          </p>
+                          <p className="text-orange-900">
+                            {formatDisplayDate(reservation.original_date)} -{" "}
+                            {formatTimeRange(reservation.original_start_time)}
+                          </p>
+                        </div>
+                      )}
+                    {(reservation.additional_payment_amount ?? 0) > 0 && (
+                      <div>
+                        <p className="text-orange-700 font-medium mb-1">
+                          Pago adicional por reagendamiento:
+                        </p>
                         <p className="text-orange-900 font-semibold mb-1">
                           $
                           {formatCurrency(
@@ -577,16 +678,28 @@ export default function GuestReservationPage() {
                           )}{" "}
                           MXN
                         </p>
-                      )}
-                      <p className="text-orange-900 font-mono text-xs">
-                        ID de pago: {reservation.additional_payment_id}
-                      </p>
-                    </div>
-                  )}
+                        {reservation.additional_payment_method && (
+                          <p className="text-orange-900 mb-1">
+                            Método:{" "}
+                            {reservation.additional_payment_method === "conekta"
+                              ? "En línea"
+                              : reservation.additional_payment_method === "pendiente"
+                                ? "Pendiente de cobro"
+                                : reservation.additional_payment_method.charAt(0).toUpperCase() +
+                                  reservation.additional_payment_method.slice(1)}
+                          </p>
+                        )}
+                        {reservation.additional_payment_id && (
+                          <p className="text-orange-900 font-mono text-xs">
+                            ID de pago: {reservation.additional_payment_id}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Estado de cancelación */}
           {reservation.status === "cancelled" && (

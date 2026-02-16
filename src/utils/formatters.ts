@@ -2,7 +2,7 @@ import { format, parse, addHours } from "date-fns";
 import { es } from "date-fns/locale";
 
 /**
- * Formatea una fecha en formato legible en español
+ * Formatea una fecha en formato legible en español (con día de la semana).
  * @example "2025-12-27" -> "Sábado, 27 de diciembre de 2025"
  */
 export function formatDisplayDate(dateString: string): string {
@@ -12,6 +12,19 @@ export function formatDisplayDate(dateString: string): string {
       locale: es,
     });
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  } catch {
+    return dateString;
+  }
+}
+
+/**
+ * Formatea una fecha en formato corto (sin día de la semana). Para listados.
+ * @example "2025-12-27" -> "27 de diciembre de 2025"
+ */
+export function formatDisplayDateShort(dateString: string): string {
+  try {
+    const date = parse(dateString, "yyyy-MM-dd", new Date());
+    return format(date, "d 'de' MMMM 'de' yyyy", { locale: es });
   } catch {
     return dateString;
   }

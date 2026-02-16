@@ -43,4 +43,24 @@ export interface Reservation {
   original_payment_id?: string | null;
   additional_payment_id?: string | null;
   additional_payment_amount?: number | null;
+  additional_payment_method?: string | null;
+  created_by_user_id?: string | null;
+  /** Resuelto por la API cuando hay created_by_user_id (solo para vista admin) */
+  created_by?: { id: string; name: string | null; email: string } | null;
+  rescheduled_by_user_id?: string | null;
+  /** Resuelto por la API cuando hay rescheduled_by_user_id (último reagendador admin) */
+  rescheduled_by?: { id: string; name: string | null; email: string } | null;
+  /** Historial de todos los reagendamientos (orden cronológico) */
+  reschedule_history?: RescheduleHistoryEntry[];
+}
+
+export interface RescheduleHistoryEntry {
+  rescheduled_at: string;
+  rescheduled_by: { id: string; name: string | null; email: string } | null;
+  previous_date: string;
+  previous_start_time: string;
+  new_date: string;
+  new_start_time: string;
+  additional_payment_amount: number | null;
+  additional_payment_method: string | null;
 }

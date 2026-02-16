@@ -18,7 +18,8 @@ import {
 import {
   sendRescheduleConfirmation,
 } from "@/lib/email";
-import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
+import { verifyGuestToken, generateGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
+import { requireAdmin } from "@/lib/auth/admin";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -72,6 +73,12 @@ export async function POST(
       data: { user },
     } = await authClient.auth.getUser();
 
+    let isAdmin = false;
+    if (user) {
+      const adminCheck = await requireAdmin();
+      isAdmin = adminCheck.isAdmin;
+    }
+
     // Validar campos requeridos
     if (!date || !startTime || !paymentId) {
       return validationErrorResponse("Fecha, hora y ID de pago son requeridos");
@@ -82,7 +89,7 @@ export async function POST(
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
       .select(
-        "id, user_id, status, reschedule_count, date, start_time, payment_id, email"
+        "id, user_id, status, reschedule_count, date, start_time, payment_id, email, price"
       )
       .eq("id", reservationId)
       .single();
@@ -94,13 +101,12 @@ export async function POST(
     // Type assertion para ayudar a TypeScript
     const reservationRow = reservation as Pick<
       ReservationRow,
-      "id" | "user_id" | "status" | "reschedule_count" | "date" | "start_time" | "payment_id" | "email"
+      "id" | "user_id" | "status" | "reschedule_count" | "date" | "start_time" | "payment_id" | "email" | "price"
     >;
 
-    // Validar autorización: usuario autenticado O token de invitado válido
+    // Validar autorización: usuario autenticado O token de invitado (admin puede completar cualquier reserva)
     if (user) {
-      // Usuario autenticado: verificar que la reserva pertenece al usuario
-      if (reservationRow.user_id !== user.id) {
+      if (reservationRow.user_id !== user.id && !isAdmin) {
         return unauthorizedResponse(
           "No tienes permisos para completar el reagendamiento de esta reserva"
         );
@@ -137,8 +143,8 @@ export async function POST(
       );
     }
 
-    // Verificar límite de reagendamientos (solo 1 intento permitido)
-    if ((reservationRow.reschedule_count || 0) >= 1) {
+    // Verificar límite de reagendamientos (admin no aplica)
+    if (!isAdmin && (reservationRow.reschedule_count || 0) >= 1) {
       return errorResponse(
         "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento.",
         400
@@ -169,13 +175,15 @@ export async function POST(
       reschedule_count: (reservationRow.reschedule_count || 0) + 1,
     };
 
-    // Si hay monto adicional, guardarlo
+    // Si hay monto adicional, guardarlo y actualizar el precio total acumulado (pago en línea = conekta)
     if (
       additionalAmount &&
       typeof additionalAmount === "number" &&
       additionalAmount > 0
     ) {
       updateData.additional_payment_amount = additionalAmount;
+      updateData.additional_payment_method = "conekta";
+      updateData.price = (reservationRow.price ?? 0) + additionalAmount;
     }
 
     // Si es la primera vez que se reagenda, guardar valores originales
@@ -204,18 +212,32 @@ export async function POST(
         String(updateError.message || "").includes("0 row");
       if (noRows) {
         return conflictResponse(
-          "Solo se permite un reagendamiento por reserva. Ya has utilizado tu intento."
+          "La reserva pudo haber cambiado. Intenta de nuevo."
         );
       }
       console.error("Error completing reschedule:", updateError);
       return errorResponse("Error al completar el reagendamiento", 500);
     }
 
+    // Registrar en historial de reagendamientos (cliente, pago en línea)
+    const hasAdditional =
+      additionalAmount &&
+      typeof additionalAmount === "number" &&
+      additionalAmount > 0;
+    const prevTime = String(reservationRow.start_time ?? "00:00").trim() || "00:00";
+    await supabase.from("reservation_reschedule_history").insert({
+      reservation_id: reservationId,
+      rescheduled_by_user_id: null,
+      previous_date: reservationRow.date,
+      previous_start_time: formatTimeToSeconds(prevTime),
+      new_date: date,
+      new_start_time: formatTimeToSeconds(startTime),
+      additional_payment_amount: hasAdditional ? additionalAmount : null,
+      additional_payment_method: hasAdditional ? "conekta" : null,
+    } as never);
+
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const manageUrl = guestToken
-      ? generateGuestReservationUrl(guestToken)
-      : `${baseUrl}/reservaciones/${reservationId}`;
     const row = updatedReservation as {
       email?: string | null;
       name?: string | null;
@@ -223,6 +245,14 @@ export async function POST(
       start_time?: string | null;
       additional_payment_amount?: number | null;
     };
+    let manageUrl: string;
+    if (reservationRow.user_id) {
+      manageUrl = `${baseUrl}/reservaciones/${reservationId}`;
+    } else {
+      const token = guestToken
+        ?? await generateGuestToken((row.email ?? "").trim().toLowerCase(), reservationId);
+      manageUrl = generateGuestReservationUrl(token);
+    }
     const to = (row.email || "").trim();
     const name = (row.name || "Cliente").trim();
 

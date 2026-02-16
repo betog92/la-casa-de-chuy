@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS time_slots (
 CREATE TABLE IF NOT EXISTS reservations (
   id SERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que creó la reserva (solo manuales)
   email TEXT NOT NULL,
   name TEXT NOT NULL,
   phone TEXT NOT NULL,
@@ -91,9 +92,30 @@ CREATE TABLE IF NOT EXISTS reservations (
   original_payment_id TEXT,  -- ID del pago original de la reserva antes del reagendamiento
   additional_payment_id TEXT,  -- ID del pago adicional realizado para el reagendamiento (si aplica)
   additional_payment_amount DECIMAL(10, 2),  -- Monto del pago adicional realizado para el reagendamiento (si aplica)
+  additional_payment_method TEXT,  -- conekta | efectivo | transferencia | pendiente (reportes)
+  rescheduled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que reagendó (si aplica)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- =====================================================
+-- 4b. HISTORIAL DE REAGENDAMIENTOS (migration 15)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS reservation_reschedule_history (
+  id SERIAL PRIMARY KEY,
+  reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+  rescheduled_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  rescheduled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  previous_date DATE NOT NULL,
+  previous_start_time TIME NOT NULL,
+  new_date DATE NOT NULL,
+  new_start_time TIME NOT NULL,
+  additional_payment_amount DECIMAL(10, 2),
+  additional_payment_method TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_reservation_reschedule_history_reservation_id
+  ON reservation_reschedule_history(reservation_id);
 
 -- =====================================================
 -- 5. TABLA DE CRÉDITOS (FASE 2)

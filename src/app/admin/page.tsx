@@ -146,12 +146,12 @@ export default function AdminDashboardPage() {
               No hay reservas próximas
             </div>
           ) : (
-            s.upcoming.map((r) => (
+            s.upcoming.map((r, index) => (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => router.push(`/reservaciones/${r.id}`)}
-                className="flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left hover:bg-zinc-50"
+                className={`flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition-colors ${index % 2 === 1 ? "bg-zinc-100" : "bg-white"} hover:bg-zinc-200`}
               >
                 <div>
                   <p className="font-medium text-zinc-900">

@@ -15,7 +15,7 @@ import {
 import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import {
-  formatDisplayDate,
+  formatDisplayDateShort,
   formatTimeRange,
   formatCurrency,
 } from "@/utils/formatters";
@@ -469,11 +469,15 @@ export default function AdminReservacionesPage() {
                     <td colSpan={5} className="px-4 py-12 text-center text-zinc-500">No hay reservaciones con los filtros aplicados</td>
                   </tr>
                 ) : (
-                  reservations.map((r) => (
-                    <tr key={r.id} onClick={() => router.push(`/reservaciones/${r.id}`)} className="cursor-pointer hover:bg-zinc-50">
+                  reservations.map((r, index) => (
+                    <tr
+                      key={r.id}
+                      onClick={() => router.push(`/reservaciones/${r.id}`)}
+                      className={`cursor-pointer transition-colors ${index % 2 === 1 ? "bg-zinc-100" : "bg-white"} hover:bg-zinc-200`}
+                    >
                       <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900">{r.id}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-900">
-                        {formatDisplayDate(r.date)}
+                        {formatDisplayDateShort(r.date)}
                         <br />
                         <span className="text-zinc-500">{formatTimeRange(r.start_time)}</span>
                       </td>

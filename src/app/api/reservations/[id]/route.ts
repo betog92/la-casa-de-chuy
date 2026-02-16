@@ -52,7 +52,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, user_id"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id"
       )
       .eq("id", reservationId)
       .single();
@@ -65,8 +65,8 @@ export async function GET(
     // Type assertion para ayudar a TypeScript
     const reservationData = data as ReservationRow;
 
-    // Admins pueden ver cualquier reserva
-    const { isAdmin } = await requireAdmin();
+    // Admins pueden ver cualquier reserva (solo consultar si hay sesión para evitar llamada innecesaria)
+    const isAdmin = user ? (await requireAdmin()).isAdmin : false;
 
     // Si hay usuario autenticado, verificar pertenencia (o ser admin); si no, permitir (flujo invitado/confirmación)
     if (
@@ -91,8 +91,63 @@ export async function GET(
       hasAccount = !!userRow;
     }
 
+    // Historial de reagendamientos (todos, orden cronológico)
+    type HistoryRow = {
+      id: number;
+      rescheduled_at: string;
+      rescheduled_by_user_id: string | null;
+      previous_date: string;
+      previous_start_time: string;
+      new_date: string;
+      new_start_time: string;
+      additional_payment_amount: number | null;
+      additional_payment_method: string | null;
+    };
+    const { data: historyRows } = await supabase
+      .from("reservation_reschedule_history")
+      .select("id, rescheduled_at, rescheduled_by_user_id, previous_date, previous_start_time, new_date, new_start_time, additional_payment_amount, additional_payment_method")
+      .eq("reservation_id", reservationId)
+      .order("rescheduled_at", { ascending: true });
+    const historyList = (historyRows ?? []) as HistoryRow[];
+
+    // Una sola query de users para created_by, rescheduled_by y historial
+    const createdByUserId = (reservationData as { created_by_user_id?: string | null }).created_by_user_id;
+    const rescheduledByUserId = (reservationData as { rescheduled_by_user_id?: string | null }).rescheduled_by_user_id;
+    const historyUserIds = historyList.map((h) => h.rescheduled_by_user_id).filter(Boolean) as string[];
+    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, ...historyUserIds].filter(Boolean))] as string[];
+    let usersMap: Record<string, { id: string; name: string | null; email: string }> = {};
+    if (allUserIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from("users")
+        .select("id, name, email")
+        .in("id", allUserIds);
+      const users = (usersData ?? []) as { id: string; name: string | null; email: string }[];
+      for (const u of users) {
+        usersMap[u.id] = { id: u.id, name: u.name ?? null, email: u.email };
+      }
+    }
+    const created_by = createdByUserId ? usersMap[createdByUserId] ?? null : null;
+    const rescheduled_by = rescheduledByUserId ? usersMap[rescheduledByUserId] ?? null : null;
+    const reschedule_history = historyList.map((h) => ({
+      rescheduled_at: h.rescheduled_at,
+      rescheduled_by: h.rescheduled_by_user_id ? usersMap[h.rescheduled_by_user_id] ?? null : null,
+      previous_date: h.previous_date,
+      previous_start_time: h.previous_start_time,
+      new_date: h.new_date,
+      new_start_time: h.new_start_time,
+      additional_payment_amount: h.additional_payment_amount,
+      additional_payment_method: h.additional_payment_method,
+    }));
+
+    const reservation = {
+      ...reservationData,
+      created_by,
+      rescheduled_by,
+      reschedule_history,
+    };
+
     return successResponse({
-      reservation: reservationData,
+      reservation,
       ...(hasAccount !== undefined && { hasAccount }),
     });
   } catch (error: unknown) {

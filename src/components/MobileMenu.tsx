@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { navigation } from "@/constants/navigation";
 import { useAuth } from "@/hooks/useAuth";
+
+const adminNavItems = [
+  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/calendario", label: "Calendario" },
+  { href: "/admin/reservaciones", label: "Reservaciones" },
+  { href: "/admin/disponibilidad", label: "Disponibilidad" },
+  { href: "/admin/codigos", label: "Códigos de descuento" },
+];
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -15,6 +23,19 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Saber si el usuario es admin para mostrar enlaces del panel en el mismo menú
+  useEffect(() => {
+    if (!isOpen || !user?.id) {
+      setIsAdmin(false);
+      return;
+    }
+    fetch("/api/admin/me")
+      .then((res) => res.json())
+      .then((data) => setIsAdmin(data.success === true && data.isAdmin === true))
+      .catch(() => setIsAdmin(false));
+  }, [isOpen, user?.id]);
 
   // Cerrar menú al presionar Escape
   useEffect(() => {
@@ -111,11 +132,6 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                   </div>
                 ) : user ? (
                   <>
-                    <div className="px-4 pt-3 pb-4 border-b border-zinc-200">
-                      <p className="text-sm font-medium text-[#103948] truncate leading-relaxed">
-                        {user.email}
-                      </p>
-                    </div>
                     <Link
                       href="/account"
                       onClick={onClose}
@@ -138,14 +154,39 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                       </svg>
                       <span>Mi cuenta</span>
                     </Link>
-                    <Link
-                      href="/admin"
-                      onClick={onClose}
-                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
-                      style={{ fontFamily: "var(--font-cormorant), serif" }}
-                    >
-                      <span>Panel admin</span>
-                    </Link>
+                    {isAdmin ? (
+                      <>
+                        <div className="border-t border-zinc-200 mt-2 pt-2" aria-hidden="true" />
+                        {adminNavItems.map((item) => {
+                          const isActive =
+                            pathname === item.href ||
+                            (item.href !== "/admin" && pathname.startsWith(item.href));
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={onClose}
+                              className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                isActive
+                                  ? "bg-[#103948] text-white"
+                                  : "text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                              }`}
+                            >
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <Link
+                        href="/admin"
+                        onClick={onClose}
+                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                        style={{ fontFamily: "var(--font-cormorant), serif" }}
+                      >
+                        <span>Panel admin</span>
+                      </Link>
+                    )}
                     <button
                       type="button"
                       onClick={async () => {

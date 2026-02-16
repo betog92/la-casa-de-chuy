@@ -18,14 +18,17 @@ import { formatTimeRange } from "@/utils/formatters";
 import type { TimeSlot } from "@/utils/availability";
 import "react-calendar/dist/Calendar.css";
 
-interface RescheduleModalProps {
+export interface RescheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (date: string, startTime: string) => void;
-  currentDate: string; // Fecha actual de la reserva en formato "yyyy-MM-dd"
-  currentStartTime?: string; // Hora actual de la reserva en formato "HH:MM" o "HH:MM:SS"
-  isRescheduling?: boolean; // Indica si se está procesando el reagendamiento
-  externalError?: string | null; // Error externo (por ejemplo, de la API de reagendamiento)
+  currentDate: string;
+  currentStartTime?: string;
+  isRescheduling?: boolean;
+  externalError?: string | null;
+  /** Paso admin: elegir cómo se cobra la diferencia (efectivo/transferencia/pendiente) */
+  adminPaymentStep?: { date: string; startTime: string; additionalAmount: number } | null;
+  onConfirmAdminPayment?: (method: "efectivo" | "transferencia" | "pendiente") => void;
 }
 
 // Horarios disponibles según día de la semana
@@ -77,6 +80,8 @@ export default function RescheduleModal({
   currentStartTime,
   isRescheduling = false,
   externalError = null,
+  adminPaymentStep = null,
+  onConfirmAdminPayment,
 }: RescheduleModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
@@ -425,6 +430,41 @@ export default function RescheduleModal({
             </button>
           </div>
 
+          {adminPaymentStep ? (
+            <div className="space-y-4">
+              <p className="text-zinc-700">
+                La nueva fecha tiene un costo adicional de{" "}
+                <span className="font-semibold text-[#103948]">
+                  ${adminPaymentStep.additionalAmount.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </span>
+                . ¿Cómo se cobrará la diferencia?
+              </p>
+              {externalError && (
+                <p className="text-sm text-red-600">{externalError}</p>
+              )}
+              <div className="flex flex-wrap gap-3">
+                {(["efectivo", "transferencia", "pendiente"] as const).map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    disabled={isRescheduling}
+                    onClick={() => onConfirmAdminPayment?.(method)}
+                    className="rounded-lg border-2 border-[#103948] bg-white px-4 py-2.5 text-sm font-medium text-[#103948] transition-colors hover:bg-[#103948] hover:text-white disabled:opacity-50"
+                  >
+                    {method === "pendiente" ? "Pendiente de cobro" : method.charAt(0).toUpperCase() + method.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-sm text-zinc-500 hover:text-zinc-700"
+              >
+                ← Volver
+              </button>
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Calendario */}
             <div>
@@ -571,6 +611,8 @@ export default function RescheduleModal({
               </button>
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

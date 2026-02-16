@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
  * Solo accesible por admins.
  */
 export async function POST(request: NextRequest) {
-  const { isAdmin } = await requireAdmin();
+  const { user: adminUser, isAdmin } = await requireAdmin();
   if (!isAdmin) {
     return unauthorizedResponse("No tienes permisos de administrador");
   }
@@ -134,6 +134,17 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceRoleClient();
     const normalizedEmail = String(email).toLowerCase().trim();
 
+    // Si existe un usuario registrado con ese email, vincular la reserva para que aparezca en "Mis Reservas"
+    let userId: string | null = null;
+    const { data: existingUserRow } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", normalizedEmail)
+      .limit(1)
+      .maybeSingle();
+    const existingUser = existingUserRow as { id: string } | null;
+    if (existingUser?.id) userId = existingUser.id;
+
     const isAvailable = await validateSlotAvailability(
       supabase,
       date,
@@ -158,7 +169,8 @@ export async function POST(request: NextRequest) {
       payment_id: null,
       payment_method: payment_method as "efectivo" | "transferencia",
       status: "confirmed" as const,
-      user_id: null,
+      user_id: userId,
+      created_by_user_id: adminUser?.id ?? null,
       discount_amount: 0,
       last_minute_discount: 0,
       loyalty_discount: 0,

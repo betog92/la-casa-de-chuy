@@ -39,9 +39,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Obtener las reservas del usuario
-    // Como el usuario debe verificar su email antes de poder hacer login (configuración de Supabase),
-    // todas sus reservas de invitado ya están vinculadas con user_id cuando accede a esta ruta.
-    // Por lo tanto, solo necesitamos buscar por user_id.
     const { data: reservations, error } = await supabase
       .from("reservations")
       .select(

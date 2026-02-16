@@ -29,9 +29,12 @@ export async function validateSlotAvailability(
   startTime: string
 ): Promise<boolean> {
   try {
+    const normalizedTime = startTime.includes(":") && startTime.split(":").length === 2
+      ? `${startTime}:00`
+      : startTime;
     const { data, error } = await supabase.rpc("is_slot_available", {
       p_date: date,
-      p_start_time: startTime + ":00",
+      p_start_time: normalizedTime,
     } as never);
 
     if (error) {

@@ -76,8 +76,11 @@ export interface Database {
           original_payment_id: string | null;
           additional_payment_id: string | null;
           additional_payment_amount: number | null;
+          additional_payment_method: string | null;
           created_at: string;
           updated_at: string;
+          created_by_user_id: string | null;
+          rescheduled_by_user_id: string | null;
         };
         Insert: {
           id?: number;
@@ -113,12 +116,17 @@ export interface Database {
           original_payment_id?: string | null;
           additional_payment_id?: string | null;
           additional_payment_amount?: number | null;
+          additional_payment_method?: string | null;
           created_at?: string;
           updated_at?: string;
+          created_by_user_id?: string | null;
+          rescheduled_by_user_id?: string | null;
         };
         Update: {
           id?: number;
           user_id?: string | null;
+          created_by_user_id?: string | null;
+          rescheduled_by_user_id?: string | null;
           email?: string;
           name?: string;
           phone?: string;
@@ -150,8 +158,47 @@ export interface Database {
           original_payment_id?: string | null;
           additional_payment_id?: string | null;
           additional_payment_amount?: number | null;
+          additional_payment_method?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      reservation_reschedule_history: {
+        Row: {
+          id: number;
+          reservation_id: number;
+          rescheduled_at: string;
+          rescheduled_by_user_id: string | null;
+          previous_date: string;
+          previous_start_time: string;
+          new_date: string;
+          new_start_time: string;
+          additional_payment_amount: number | null;
+          additional_payment_method: string | null;
+        };
+        Insert: {
+          id?: number;
+          reservation_id: number;
+          rescheduled_at?: string;
+          rescheduled_by_user_id?: string | null;
+          previous_date: string;
+          previous_start_time: string;
+          new_date: string;
+          new_start_time: string;
+          additional_payment_amount?: number | null;
+          additional_payment_method?: string | null;
+        };
+        Update: {
+          id?: number;
+          reservation_id?: number;
+          rescheduled_at?: string;
+          rescheduled_by_user_id?: string | null;
+          previous_date?: string;
+          previous_start_time?: string;
+          new_date?: string;
+          new_start_time?: string;
+          additional_payment_amount?: number | null;
+          additional_payment_method?: string | null;
         };
       };
       availability: {

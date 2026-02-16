@@ -23,8 +23,8 @@ export default function AdminLayout({
     <AdminGuard>
       <div className="min-h-screen bg-zinc-50">
         <div className="flex">
-          {/* Sidebar - dentro del contenido, alineado arriba */}
-          <aside className="w-56 shrink-0 border-r border-zinc-200 bg-white">
+          {/* Sidebar: solo en desktop; en móvil se usa el menú principal del Header */}
+          <aside className="hidden md:block w-56 shrink-0 border-r border-zinc-200 bg-white">
             <nav className="space-y-0.5 p-4">
               {navItems.map((item) => {
                 const isActive =
@@ -55,8 +55,7 @@ export default function AdminLayout({
             </div>
           </aside>
 
-          {/* Main content */}
-          <main className="min-w-0 flex-1 p-6">{children}</main>
+          <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
         </div>
       </div>
     </AdminGuard>

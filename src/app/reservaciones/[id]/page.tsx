@@ -41,8 +41,26 @@ export default function ReservationDetailsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingAdminPayment, setPendingAdminPayment] = useState<{
+    date: string;
+    startTime: string;
+    additionalAmount: number;
+  } | null>(null);
   const hasLoadedRef = useRef(false);
   const previousReservationIdRef = useRef<string | null>(null);
+
+  // Verificar si el usuario es admin (para mostrar datos de contacto completos)
+  useEffect(() => {
+    if (!user?.id) {
+      setIsAdmin(false);
+      return;
+    }
+    fetch("/api/admin/me")
+      .then((res) => res.json())
+      .then((data) => setIsAdmin(data.success === true && data.isAdmin === true))
+      .catch(() => setIsAdmin(false));
+  }, [user?.id]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -206,7 +224,14 @@ export default function ReservationDetailsPage() {
 
       // Verificar si requiere pago adicional
       if (result.requiresPayment === true && result.additionalAmount) {
-        // Requiere pago adicional - redirigir a la página de pago
+        if (isAdmin && result.adminCanConfirmPaymentMethod) {
+          setPendingAdminPayment({
+            date,
+            startTime,
+            additionalAmount: result.additionalAmount,
+          });
+          return;
+        }
         setShowRescheduleModal(false);
         router.push(
           `/reservar/reagendar/pago?reservationId=${reservationId}&newDate=${date}&newStartTime=${startTime}&additionalAmount=${result.additionalAmount}`
@@ -216,6 +241,7 @@ export default function ReservationDetailsPage() {
 
       // No requiere pago - reagendamiento exitoso, redirigir a confirmación
       setShowRescheduleModal(false);
+      setPendingAdminPayment(null);
       router.push(
         `/reservar/confirmacion?id=${reservationId}&rescheduled=true`
       );
@@ -232,21 +258,75 @@ export default function ReservationDetailsPage() {
   const handleCloseRescheduleModal = () => {
     setShowRescheduleModal(false);
     setRescheduleError(null);
+    setPendingAdminPayment(null);
+  };
+
+  const handleConfirmAdminPaymentMethod = async (
+    method: "efectivo" | "transferencia" | "pendiente"
+  ) => {
+    if (!pendingAdminPayment) return;
+    setRescheduling(true);
+    setRescheduleError(null);
+    try {
+      const response = await fetch(
+        `/api/reservations/${reservationId}/reschedule`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: pendingAdminPayment.date,
+            startTime: pendingAdminPayment.startTime,
+            adminReschedule: true,
+            additionalPaymentMethod: method,
+          }),
+        }
+      );
+      const result = await response.json();
+      if (!result.success) {
+        setRescheduleError(result.error || "Error al reagendar la reserva");
+        return;
+      }
+      setShowRescheduleModal(false);
+      setPendingAdminPayment(null);
+      router.push(
+        `/reservar/confirmacion?id=${reservationId}&rescheduled=true`
+      );
+    } catch (err) {
+      console.error("Error rescheduling (admin):", err);
+      setRescheduleError("Error inesperado al reagendar la reserva");
+    } finally {
+      setRescheduling(false);
+    }
   };
 
   const businessDays = getBusinessDaysUntilReservation();
   const hasReachedRescheduleLimit = (reservation?.reschedule_count || 0) >= 1;
   const canCancel = businessDays !== null && businessDays >= 5;
-  const canReschedule =
-    businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
+  const canReschedule = isAdmin
+    ? true
+    : businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
 
   // Determinar si el texto debe ser rojo (menos de 5 días hábiles)
   const isPastDeadline = businessDays !== null && businessDays < 5;
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
   const hasAdditionalPayment =
-    (reservation?.additional_payment_amount ?? 0) > 0;
+    (reservation?.additional_payment_amount ?? 0) > 0 ||
+    (reservation?.reschedule_history?.some(
+      (h) => (h.additional_payment_amount ?? 0) > 0
+    ) ?? false);
   const showPriceBreakdown = hasDiscounts || hasAdditionalPayment;
+  const additionalFromHistory = (reservation?.reschedule_history ?? []).reduce(
+    (sum, h) => sum + (h.additional_payment_amount ?? 0),
+    0
+  );
+  const originalPriceForBreakdown = Math.max(
+    0,
+    (reservation?.price ?? 0) - additionalFromHistory
+  );
+  const rescheduleHistoryWithPayment = (reservation?.reschedule_history ?? []).filter(
+    (h) => (h.additional_payment_amount ?? 0) > 0
+  );
 
   if (loading || authLoading) {
     return (
@@ -394,6 +474,49 @@ export default function ReservationDetailsPage() {
                 {formatTimeRange(reservation.start_time)}
               </p>
             </div>
+
+            {/* Datos de contacto (solo visible para admin) */}
+            {isAdmin && (
+              <div className="pt-4 border-t border-zinc-200 space-y-3">
+                <div>
+                  <p className="text-sm text-zinc-600 mb-1">Nombre</p>
+                  <p className="text-lg font-medium text-[#103948]">
+                    {reservation.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-zinc-600 mb-1">Email</p>
+                  <p className="text-lg font-medium text-[#103948]">
+                    {reservation.email}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
+                  <p className="text-lg font-medium text-[#103948]">
+                    {reservation.phone || "No proporcionado"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-zinc-600 mb-1">Creada el</p>
+                  <p className="text-lg font-medium text-[#103948]">
+                    {format(
+                      new Date(reservation.created_at),
+                      "d 'de' MMMM yyyy, h:mm a",
+                      { locale: es }
+                    )}
+                  </p>
+                </div>
+                {reservation.created_by && (
+                  <div>
+                    <p className="text-sm text-zinc-600 mb-1">Creada por</p>
+                    <p className="text-lg font-medium text-[#103948]">
+                      {reservation.created_by.name?.trim() ||
+                        reservation.created_by.email}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Desglose de precios (descuentos y/o pago adicional por reagendamiento) */}
@@ -477,36 +600,38 @@ export default function ReservationDetailsPage() {
                 )}
 
                 {!hasDiscounts && hasAdditionalPayment && (
-                  <div className="flex justify-between text-zinc-700">
-                    <span>Precio de la reserva:</span>
-                    <span>
-                      ${formatCurrency(reservation.price)}
-                    </span>
-                  </div>
-                )}
-
-                {hasAdditionalPayment && (
-                  <div className="flex justify-between text-sm text-zinc-700">
-                    <span>Pago adicional por reagendamiento:</span>
-                    <span className="text-[#103948]">
-                      +$
-                      {formatCurrency(
-                        reservation.additional_payment_amount ?? 0
-                      )}
-                    </span>
-                  </div>
+                  <>
+                    <div className="flex justify-between text-zinc-700">
+                      <span>Precio de la reserva:</span>
+                      <span>
+                        ${formatCurrency(originalPriceForBreakdown)}
+                      </span>
+                    </div>
+                    {rescheduleHistoryWithPayment.map((h, idx) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between text-sm text-zinc-700"
+                      >
+                        <span>
+                          Pago adicional por reagendamiento
+                          {rescheduleHistoryWithPayment.length > 1
+                            ? ` (${idx + 1})`
+                            : ""}
+                          :
+                        </span>
+                        <span className="text-[#103948]">
+                          +
+                          ${formatCurrency(h.additional_payment_amount ?? 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </>
                 )}
 
                 <div className="pt-5 border-t border-zinc-200 flex justify-between font-semibold text-lg">
                   <span>Total pagado:</span>
                   <span className="text-[#103948]">
-                    $
-                    {formatCurrency(
-                      calculateTotalPaid(
-                        reservation.price,
-                        reservation.additional_payment_amount
-                      )
-                    )}
+                    ${formatCurrency(reservation.price)}
                   </span>
                 </div>
                 {reservation.payment_id && (
@@ -535,32 +660,114 @@ export default function ReservationDetailsPage() {
             </div>
           )}
 
-          {/* Información de reagendamiento */}
-          {(reservation.reschedule_count ?? 0) > 0 && (
-            <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
-              <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
-                <h3 className="text-lg font-semibold text-orange-900 mb-3">
-                  Información de Reagendamiento
-                </h3>
-                <div className="space-y-3 text-sm">
-                  {reservation.original_date &&
-                    reservation.original_start_time && (
+          {/* Un bloque completo por cada reagendamiento */}
+          {(reservation.reschedule_history?.length ?? 0) > 0 &&
+            (reservation.reschedule_history ?? []).map((h, idx) => (
+              <div
+                key={idx}
+                className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8"
+              >
+                <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3">
+                    Información de Reagendamiento
+                  </h3>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <p className="text-orange-700 font-medium mb-1">
+                        {(reservation.reschedule_history?.length ?? 0) === 1
+                          ? "Fecha y horario original:"
+                          : "Fecha y horario anterior:"}
+                      </p>
+                      <p className="text-orange-900">
+                        {formatDisplayDate(h.previous_date)} -{" "}
+                        {formatTimeRange(h.previous_start_time)}
+                      </p>
+                    </div>
+                    {(reservation.reschedule_history?.length ?? 0) > 1 && (
                       <div>
                         <p className="text-orange-700 font-medium mb-1">
-                          Fecha y horario original:
+                          Nueva fecha y horario:
                         </p>
                         <p className="text-orange-900">
-                          {formatDisplayDate(reservation.original_date)} -{" "}
-                          {formatTimeRange(reservation.original_start_time)}
+                          {formatDisplayDate(h.new_date)} -{" "}
+                          {formatTimeRange(h.new_start_time)}
                         </p>
                       </div>
                     )}
-                  {reservation.additional_payment_id && (
-                    <div>
-                      <p className="text-orange-700 font-medium mb-1">
-                        Pago adicional por reagendamiento:
+                    {(h.additional_payment_amount ?? 0) > 0 && (
+                      <div>
+                        <p className="text-orange-700 font-medium mb-1">
+                          Pago adicional por reagendamiento:
+                        </p>
+                        <p className="text-orange-900 font-semibold mb-1">
+                          $
+                          {formatCurrency(h.additional_payment_amount ?? 0)}{" "}
+                          MXN
+                        </p>
+                        {h.rescheduled_by && h.additional_payment_method && (
+                          <p className="text-orange-900 mb-1">
+                            Método:{" "}
+                            {h.additional_payment_method === "conekta"
+                              ? "En línea"
+                              : h.additional_payment_method === "pendiente"
+                                ? "Pendiente de cobro"
+                                : h.additional_payment_method.charAt(0).toUpperCase() +
+                                  h.additional_payment_method.slice(1)}
+                          </p>
+                        )}
+                        {!h.rescheduled_by &&
+                          reservation.additional_payment_id &&
+                          idx === (reservation.reschedule_history ?? []).length - 1 && (
+                            <p className="text-orange-900 font-mono text-xs mt-1">
+                              ID de pago: {reservation.additional_payment_id}
+                            </p>
+                          )}
+                      </div>
+                    )}
+                    {h.rescheduled_by && (
+                      <p className="text-orange-900 font-semibold pt-1">
+                        Realizado por:{" "}
+                        {h.rescheduled_by.name?.trim() ||
+                          h.rescheduled_by.email}{" "}
+                        ·{" "}
+                        {format(
+                          new Date(h.rescheduled_at),
+                          "d 'de' MMMM 'a las' h:mm a",
+                          { locale: es }
+                        )}
                       </p>
-                      {(reservation.additional_payment_amount ?? 0) > 0 && (
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+          {/* Fallback: sin historial (reservas reagendadas antes de migración 15) */}
+          {(reservation.reschedule_count ?? 0) > 0 &&
+            (reservation.reschedule_history?.length ?? 0) === 0 && (
+              <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
+                <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3">
+                    Información de Reagendamiento
+                  </h3>
+                  <div className="space-y-3 text-sm">
+                    {reservation.original_date &&
+                      reservation.original_start_time && (
+                        <div>
+                          <p className="text-orange-700 font-medium mb-1">
+                            Fecha y horario original:
+                          </p>
+                          <p className="text-orange-900">
+                            {formatDisplayDate(reservation.original_date)} -{" "}
+                            {formatTimeRange(reservation.original_start_time)}
+                          </p>
+                        </div>
+                      )}
+                    {(reservation.additional_payment_amount ?? 0) > 0 && (
+                      <div>
+                        <p className="text-orange-700 font-medium mb-1">
+                          Pago adicional por reagendamiento:
+                        </p>
                         <p className="text-orange-900 font-semibold mb-1">
                           $
                           {formatCurrency(
@@ -568,16 +775,28 @@ export default function ReservationDetailsPage() {
                           )}{" "}
                           MXN
                         </p>
-                      )}
-                      <p className="text-orange-900 font-mono text-xs">
-                        ID de pago: {reservation.additional_payment_id}
-                      </p>
-                    </div>
-                  )}
+                        {reservation.additional_payment_method && (
+                          <p className="text-orange-900 mb-1">
+                            Método:{" "}
+                            {reservation.additional_payment_method === "conekta"
+                              ? "En línea"
+                              : reservation.additional_payment_method === "pendiente"
+                                ? "Pendiente de cobro"
+                                : reservation.additional_payment_method.charAt(0).toUpperCase() +
+                                  reservation.additional_payment_method.slice(1)}
+                          </p>
+                        )}
+                        {reservation.additional_payment_id && (
+                          <p className="text-orange-900 font-mono text-xs">
+                            ID de pago: {reservation.additional_payment_id}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Estado de cancelación */}
           {reservation.status === "cancelled" && (
@@ -679,29 +898,37 @@ export default function ReservationDetailsPage() {
                 >
                   {rescheduling ? "Reagendando..." : "Reagendar"}
                 </button>
-                <p className="mt-2 text-xs text-zinc-600">
-                  {hasReachedRescheduleLimit ? (
-                    "Ya has utilizado tu único intento de reagendamiento permitido para esta reserva."
-                  ) : (
-                    <>
-                      El reagendamiento solo está disponible con al menos 5 días
-                      hábiles de anticipación.
-                      {businessDays !== null && (
-                        <>
-                          {" "}
-                          <span
-                            className={
-                              isPastDeadline ? "text-red-600" : "text-zinc-600"
-                            }
-                          >
-                            {formatBusinessDaysMessage(businessDays)}
-                          </span>
-                          .
-                        </>
-                      )}
-                    </>
-                  )}
-                </p>
+                {isAdmin ? (
+                  <p className="mt-2 text-xs text-zinc-600">
+                    Como administrador puedes reagendar en cualquier momento y sin
+                    límite de intentos. Si la nueva fecha tiene mayor costo, podrás
+                    indicar el método de cobro (efectivo, transferencia o pendiente).
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-zinc-600">
+                    {hasReachedRescheduleLimit ? (
+                      "Ya has utilizado tu único intento de reagendamiento permitido para esta reserva."
+                    ) : (
+                      <>
+                        El reagendamiento solo está disponible con al menos 5 días
+                        hábiles de anticipación.
+                        {businessDays !== null && (
+                          <>
+                            {" "}
+                            <span
+                              className={
+                                isPastDeadline ? "text-red-600" : "text-zinc-600"
+                              }
+                            >
+                              {formatBusinessDaysMessage(businessDays)}
+                            </span>
+                            .
+                          </>
+                        )}
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
               <div>
                 <button
@@ -735,10 +962,10 @@ export default function ReservationDetailsPage() {
           {/* Navegación */}
           <div className="pt-6 border-t border-zinc-200">
             <Link
-              href="/account"
+              href={isAdmin ? "/admin/reservaciones" : "/account"}
               className="block w-full text-center rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
             >
-              Volver a mis reservas
+              {isAdmin ? "Volver a reservaciones" : "Volver a mis reservas"}
             </Link>
           </div>
         </div>
@@ -805,6 +1032,8 @@ export default function ReservationDetailsPage() {
         <RescheduleModal
           isOpen={showRescheduleModal}
           onClose={handleCloseRescheduleModal}
+          adminPaymentStep={pendingAdminPayment}
+          onConfirmAdminPayment={handleConfirmAdminPaymentMethod}
           onConfirm={handleReschedule}
           currentDate={reservation.date}
           currentStartTime={reservation.start_time}
