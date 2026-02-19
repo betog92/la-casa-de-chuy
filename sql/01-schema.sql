@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   additional_payment_amount DECIMAL(10, 2),  -- Monto del pago adicional realizado para el reagendamiento (si aplica)
   additional_payment_method TEXT,  -- conekta | efectivo | transferencia | pendiente (reportes)
   rescheduled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que reagendó (si aplica)
+  cancelled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que canceló (si aplica)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

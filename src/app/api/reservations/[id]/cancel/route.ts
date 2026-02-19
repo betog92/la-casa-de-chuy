@@ -21,6 +21,7 @@ import {
 } from "@/utils/api-response";
 import { sendCancellationConfirmation } from "@/lib/email";
 import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
+import { requireAdmin } from "@/lib/auth/admin";
 import type { Database } from "@/types/database.types";
 
 export async function POST(
@@ -60,6 +61,12 @@ export async function POST(
       data: { user },
     } = await authClient.auth.getUser();
 
+    let isAdmin = false;
+    if (user) {
+      const adminCheck = await requireAdmin();
+      isAdmin = adminCheck.isAdmin;
+    }
+
     // Obtener la reserva
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
@@ -86,10 +93,9 @@ export async function POST(
       name: string | null;
     };
 
-    // Validar autorización: usuario autenticado O token de invitado válido
+    // Validar autorización: usuario autenticado O token de invitado válido (admin puede cancelar cualquier reserva)
     if (user) {
-      // Usuario autenticado: verificar que la reserva pertenece al usuario
-      if (reservationRow.user_id !== user.id) {
+      if (reservationRow.user_id !== user.id && !isAdmin) {
         return unauthorizedResponse(
           "No tienes permisos para cancelar esta reserva"
         );
@@ -132,8 +138,8 @@ export async function POST(
 
     const businessDays = calculateBusinessDays(tomorrow, reservationDate);
 
-    // Si < 5 días hábiles, rechazar cancelación completamente
-    if (businessDays < 5) {
+    // Si < 5 días hábiles, rechazar cancelación (admin puede cancelar en cualquier momento)
+    if (!isAdmin && businessDays < 5) {
       return errorResponse(
         `La cancelación solo está disponible con al menos 5 días hábiles de anticipación. Faltan ${businessDays} día${
           businessDays !== 1 ? "s" : ""
@@ -155,7 +161,7 @@ export async function POST(
     // Por ahora, generar un refund_id dummy
     const dummyRefundId = generateDummyRefundId();
 
-    // Actualizar la reserva
+    // Actualizar la reserva (guardar quién canceló si fue admin)
     const { error: updateError } = await supabase
       .from("reservations")
       .update({
@@ -164,6 +170,7 @@ export async function POST(
         refund_status: "pending",
         refund_id: dummyRefundId,
         cancelled_at: new Date().toISOString(),
+        ...(isAdmin && user && { cancelled_by_user_id: user.id }),
       } as never)
       .eq("id", reservationId);
 
@@ -252,11 +259,26 @@ export async function POST(
         );
     }
 
+    // Si canceló un admin, devolver cancelled_by para que el front no tenga que hacer refetch
+    let cancelled_by: { id: string; name: string | null; email: string } | null = null;
+    if (isAdmin && user) {
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id, name, email")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (userRow) {
+        const row = userRow as { id: string; name: string | null; email: string };
+        cancelled_by = { id: row.id, name: row.name ?? null, email: row.email };
+      }
+    }
+
     return successResponse({
       message: "Reserva cancelada exitosamente",
       refund_amount: refundAmount,
       refund_id: dummyRefundId,
       refund_status: "pending",
+      cancelled_by,
     });
   } catch (error: unknown) {
     const errorMessage =

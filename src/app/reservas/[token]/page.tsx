@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { format, parse, addDays, startOfDay } from "date-fns";
+import { format, parse, addDays, startOfDay, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
 import {
@@ -790,6 +790,21 @@ export default function GuestReservationPage() {
                       </ul>
                     </div>
                   </div>
+                )}
+                {reservation.cancelled_by && (
+                  <p className="mt-3 text-sm text-red-800 font-semibold pt-2 border-t border-red-200">
+                    Cancelado por:{" "}
+                    {reservation.cancelled_by.name?.trim() ||
+                      reservation.cancelled_by.email}
+                    {reservation.cancelled_at &&
+                    isValid(new Date(reservation.cancelled_at))
+                      ? ` · ${format(
+                          new Date(reservation.cancelled_at),
+                          "d 'de' MMMM 'a las' h:mm a",
+                          { locale: es }
+                        )}`
+                      : ""}
+                  </p>
                 )}
               </div>
             </div>

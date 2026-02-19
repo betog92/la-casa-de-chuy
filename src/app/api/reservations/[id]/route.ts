@@ -52,7 +52,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id"
       )
       .eq("id", reservationId)
       .single();
@@ -110,11 +110,12 @@ export async function GET(
       .order("rescheduled_at", { ascending: true });
     const historyList = (historyRows ?? []) as HistoryRow[];
 
-    // Una sola query de users para created_by, rescheduled_by y historial
+    // Una sola query de users para created_by, rescheduled_by, cancelled_by y historial
     const createdByUserId = (reservationData as { created_by_user_id?: string | null }).created_by_user_id;
     const rescheduledByUserId = (reservationData as { rescheduled_by_user_id?: string | null }).rescheduled_by_user_id;
+    const cancelledByUserId = (reservationData as { cancelled_by_user_id?: string | null }).cancelled_by_user_id;
     const historyUserIds = historyList.map((h) => h.rescheduled_by_user_id).filter(Boolean) as string[];
-    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, ...historyUserIds].filter(Boolean))] as string[];
+    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, cancelledByUserId, ...historyUserIds].filter(Boolean))] as string[];
     let usersMap: Record<string, { id: string; name: string | null; email: string }> = {};
     if (allUserIds.length > 0) {
       const { data: usersData } = await supabase
@@ -128,6 +129,7 @@ export async function GET(
     }
     const created_by = createdByUserId ? usersMap[createdByUserId] ?? null : null;
     const rescheduled_by = rescheduledByUserId ? usersMap[rescheduledByUserId] ?? null : null;
+    const cancelled_by = cancelledByUserId ? usersMap[cancelledByUserId] ?? null : null;
     const reschedule_history = historyList.map((h) => ({
       rescheduled_at: h.rescheduled_at,
       rescheduled_by: h.rescheduled_by_user_id ? usersMap[h.rescheduled_by_user_id] ?? null : null,
@@ -143,6 +145,7 @@ export async function GET(
       ...reservationData,
       created_by,
       rescheduled_by,
+      cancelled_by,
       reschedule_history,
     };
 

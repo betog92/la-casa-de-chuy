@@ -50,6 +50,9 @@ export interface Reservation {
   rescheduled_by_user_id?: string | null;
   /** Resuelto por la API cuando hay rescheduled_by_user_id (último reagendador admin) */
   rescheduled_by?: { id: string; name: string | null; email: string } | null;
+  cancelled_by_user_id?: string | null;
+  /** Resuelto por la API cuando hay cancelled_by_user_id (admin que canceló) */
+  cancelled_by?: { id: string; name: string | null; email: string } | null;
   /** Historial de todos los reagendamientos (orden cronológico) */
   reschedule_history?: RescheduleHistoryEntry[];
 }

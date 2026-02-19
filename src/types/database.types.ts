@@ -81,6 +81,7 @@ export interface Database {
           updated_at: string;
           created_by_user_id: string | null;
           rescheduled_by_user_id: string | null;
+          cancelled_by_user_id: string | null;
         };
         Insert: {
           id?: number;
@@ -121,12 +122,14 @@ export interface Database {
           updated_at?: string;
           created_by_user_id?: string | null;
           rescheduled_by_user_id?: string | null;
+          cancelled_by_user_id?: string | null;
         };
         Update: {
           id?: number;
           user_id?: string | null;
           created_by_user_id?: string | null;
           rescheduled_by_user_id?: string | null;
+          cancelled_by_user_id?: string | null;
           email?: string;
           name?: string;
           phone?: string;

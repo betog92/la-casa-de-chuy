@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { format, parse, addDays, startOfDay } from "date-fns";
+import { format, parse, addDays, startOfDay, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
@@ -178,16 +178,39 @@ export default function ReservationDetailsPage() {
         return;
       }
 
-      // Actualizar la reserva con los datos de cancelación
-      setReservation({
-        ...reservation,
-        status: "cancelled",
-        refund_amount: result.refund_amount,
-        refund_id: result.refund_id || null,
-        refund_status: result.refund_status || "pending",
-        cancelled_at: new Date().toISOString(),
-      });
       setShowCancelModal(false);
+      // Usar cancelled_by de la respuesta si vino (admin canceló); si no, refetch por compatibilidad
+      const cancelledAt = new Date().toISOString();
+      if (result.cancelled_by !== undefined) {
+        setReservation({
+          ...reservation,
+          status: "cancelled",
+          refund_amount: result.refund_amount,
+          refund_id: result.refund_id ?? null,
+          refund_status: result.refund_status ?? "pending",
+          cancelled_at: cancelledAt,
+          cancelled_by: result.cancelled_by ?? undefined,
+        });
+      } else {
+        try {
+          const res = await fetch(`/api/reservations/${reservationId}`);
+          const data = await res.json();
+          if (data.success && data.reservation) {
+            setReservation(data.reservation as Reservation);
+            return;
+          }
+        } catch {
+          // Refetch falló; la cancelación sí fue exitosa
+        }
+        setReservation({
+          ...reservation,
+          status: "cancelled",
+          refund_amount: result.refund_amount,
+          refund_id: result.refund_id ?? null,
+          refund_status: result.refund_status ?? "pending",
+          cancelled_at: cancelledAt,
+        });
+      }
     } catch (err) {
       console.error("Error cancelling reservation:", err);
       setActionError("Error inesperado al cancelar la reserva");
@@ -301,7 +324,9 @@ export default function ReservationDetailsPage() {
 
   const businessDays = getBusinessDaysUntilReservation();
   const hasReachedRescheduleLimit = (reservation?.reschedule_count || 0) >= 1;
-  const canCancel = businessDays !== null && businessDays >= 5;
+  const canCancel = isAdmin
+    ? true
+    : businessDays !== null && businessDays >= 5;
   const canReschedule = isAdmin
     ? true
     : businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
@@ -888,6 +913,21 @@ export default function ReservationDetailsPage() {
                     </div>
                   </div>
                 )}
+                {reservation.cancelled_by && (
+                  <p className="mt-3 text-sm text-red-800 font-semibold pt-2 border-t border-red-200">
+                    Cancelado por:{" "}
+                    {reservation.cancelled_by.name?.trim() ||
+                      reservation.cancelled_by.email}
+                    {reservation.cancelled_at &&
+                    isValid(new Date(reservation.cancelled_at))
+                      ? ` · ${format(
+                          new Date(reservation.cancelled_at),
+                          "d 'de' MMMM 'a las' h:mm a",
+                          { locale: es }
+                        )}`
+                      : ""}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -943,23 +983,29 @@ export default function ReservationDetailsPage() {
                 >
                   Cancelar Reserva
                 </button>
-                <p className="mt-2 text-xs text-zinc-600">
-                  La cancelación solo está disponible con al menos 5 días
-                  hábiles de anticipación.
-                  {businessDays !== null && (
-                    <>
-                      {" "}
-                      <span
-                        className={
-                          isPastDeadline ? "text-red-600" : "text-zinc-600"
-                        }
-                      >
-                        {formatBusinessDaysMessage(businessDays)}
-                      </span>
-                      .
-                    </>
-                  )}
-                </p>
+                {isAdmin ? (
+                  <p className="mt-2 text-xs text-zinc-600">
+                    Como administrador puedes cancelar en cualquier momento.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-zinc-600">
+                    La cancelación solo está disponible con al menos 5 días
+                    hábiles de anticipación.
+                    {businessDays !== null && (
+                      <>
+                        {" "}
+                        <span
+                          className={
+                            isPastDeadline ? "text-red-600" : "text-zinc-600"
+                          }
+                        >
+                          {formatBusinessDaysMessage(businessDays)}
+                        </span>
+                        .
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
           )}
