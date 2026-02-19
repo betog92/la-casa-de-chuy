@@ -42,16 +42,12 @@ export default function Home() {
               </h3>
               <div className="space-y-3 text-zinc-700">
                 <div>
-                  <p className="font-semibold">Días Normales</p>
-                  <p className="text-zinc-600">$1,500 MXN por sesión</p>
+                  <p className="font-semibold">Horario regular</p>
+                  <p className="text-zinc-600">Lunes a sábado: $1,500 MXN por hora</p>
                 </div>
                 <div>
-                  <p className="font-semibold">Viernes, Sábado, Domingo</p>
-                  <p className="text-zinc-600">$1,800 MXN por sesión</p>
-                </div>
-                <div>
-                  <p className="font-semibold">Días Festivos</p>
-                  <p className="text-zinc-600">$2,000 MXN por sesión</p>
+                  <p className="font-semibold">Domingos y días festivos</p>
+                  <p className="text-zinc-600">$1,500 MXN por hora + $500 MXN por hora adicional ($2,000 MXN por hora)</p>
                 </div>
               </div>
             </div>

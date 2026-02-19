@@ -8,7 +8,6 @@ import {
   getMonterreyToday,
 } from "@/utils/business-days";
 import {
-  calculateTotalPaid,
   calculateRefundAmount,
   generateDummyRefundId,
 } from "@/utils/refunds";
@@ -148,11 +147,8 @@ export async function POST(
       );
     }
 
-    // Calcular el total pagado (precio + pago adicional si existe)
-    const totalPaid = calculateTotalPaid(
-      reservationRow.price,
-      reservationRow.additional_payment_amount
-    );
+    // Total cobrado: reservation.price es siempre el monto que tenemos (no se actualiza si additional es "pendiente")
+    const totalPaid = reservationRow.price;
 
     // Calcular reembolso del 80% del total pagado
     const refundAmount = calculateRefundAmount(totalPaid);

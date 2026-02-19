@@ -21,7 +21,7 @@ import {
   calculatePointsDiscount,
   isValidDiscountCode,
 } from "@/utils/discounts";
-import { calculateTotalPaid, calculateRefundAmount } from "@/utils/refunds";
+import { calculateRefundAmount } from "@/utils/refunds";
 import { DiscountRow } from "@/components/DiscountRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import type { Reservation } from "@/types/reservation";
@@ -903,12 +903,8 @@ export default function GuestReservationPage() {
             </p>
             {reservation &&
               (() => {
-                // Calcular el total pagado (precio + pago adicional si existe)
-                const totalPaid = calculateTotalPaid(
-                  reservation.price,
-                  reservation.additional_payment_amount
-                );
-                // Calcular reembolso del 80%
+                // Reembolso = 80% de lo cobrado (reservation.price; no incluir adicional pendiente)
+                const totalPaid = reservation.price;
                 const refundAmount = calculateRefundAmount(totalPaid);
 
                 return (

@@ -8,10 +8,10 @@ import { getMonterreyToday } from "./business-days";
 // =====================================================
 
 export const PRICES = {
-  normal: 1500, // Precio por reserva en día normal
-  weekend: 1800, // Precio por reserva en viernes/sábado
-  sunday: 2000, // Precio por reserva en domingo
-  holiday: 2000, // Precio por reserva en día festivo
+  normal: 1500, // Lunes a sábado: $1,500 MXN por hora
+  weekend: 1500, // Viernes/sábado: misma tarifa que horario regular
+  sunday: 2000, // Domingos: $1,500 + $500 adicional = $2,000 MXN por hora
+  holiday: 2000, // Días festivos: $1,500 + $500 adicional = $2,000 MXN por hora
 } as const;
 
 // =====================================================
