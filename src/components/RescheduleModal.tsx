@@ -26,9 +26,9 @@ export interface RescheduleModalProps {
   currentStartTime?: string;
   isRescheduling?: boolean;
   externalError?: string | null;
-  /** Paso admin: elegir cómo se cobra la diferencia (efectivo/transferencia/pendiente) */
+  /** Paso admin: aviso de pago pendiente y confirmar */
   adminPaymentStep?: { date: string; startTime: string; additionalAmount: number } | null;
-  onConfirmAdminPayment?: (method: "efectivo" | "transferencia" | "pendiente") => void;
+  onConfirmAdminPayment?: () => void;
 }
 
 // Horarios disponibles según día de la semana
@@ -433,35 +433,32 @@ export default function RescheduleModal({
           {adminPaymentStep ? (
             <div className="space-y-4">
               <p className="text-zinc-700">
-                La nueva fecha tiene un costo adicional de{" "}
+                Esta acción requiere{" "}
                 <span className="font-semibold text-[#103948]">
                   ${adminPaymentStep.additionalAmount.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                </span>
-                . ¿Cómo se cobrará la diferencia?
+                </span>{" "}
+                adicionales. Se asignará como pago pendiente. ¿Estás seguro?
               </p>
               {externalError && (
                 <p className="text-sm text-red-600">{externalError}</p>
               )}
               <div className="flex flex-wrap gap-3">
-                {(["efectivo", "transferencia", "pendiente"] as const).map((method) => (
-                  <button
-                    key={method}
-                    type="button"
-                    disabled={isRescheduling}
-                    onClick={() => onConfirmAdminPayment?.(method)}
-                    className="rounded-lg border-2 border-[#103948] bg-white px-4 py-2.5 text-sm font-medium text-[#103948] transition-colors hover:bg-[#103948] hover:text-white disabled:opacity-50"
-                  >
-                    {method === "pendiente" ? "Pendiente de cobro" : method.charAt(0).toUpperCase() + method.slice(1)}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  disabled={isRescheduling}
+                  onClick={() => onConfirmAdminPayment?.()}
+                  className="rounded-lg border-2 border-[#103948] bg-[#103948] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#0d2d38] disabled:opacity-50"
+                >
+                  {isRescheduling ? "Confirmando..." : "Sí, asignar como pendiente"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Cancelar
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-sm text-zinc-500 hover:text-zinc-700"
-              >
-                ← Volver
-              </button>
             </div>
           ) : (
           <>

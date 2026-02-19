@@ -44,20 +44,13 @@ export async function POST(
       startTime?: string;
       token?: string;
       adminReschedule?: boolean;
-      additionalPaymentMethod?: "efectivo" | "transferencia" | "pendiente";
     } = {};
     try {
       body = await request.json();
     } catch {
       // Si no hay body o es inválido, body queda como objeto vacío
     }
-    const {
-      date,
-      startTime,
-      token: guestToken,
-      adminReschedule,
-      additionalPaymentMethod,
-    } = body;
+    const { date, startTime, token: guestToken, adminReschedule } = body;
 
     // Obtener el usuario autenticado
     const cookieStore = await cookies();
@@ -159,14 +152,8 @@ export async function POST(
       );
     }
 
-    // Flujo admin: completar reagendo con método de cobro (sin Conekta)
-    const validPaymentMethods = ["efectivo", "transferencia", "pendiente"] as const;
-    if (
-      isAdmin &&
-      adminReschedule === true &&
-      additionalPaymentMethod &&
-      validPaymentMethods.includes(additionalPaymentMethod)
-    ) {
+    // Flujo admin: completar reagendo con pago adicional siempre como "pendiente" (no se suma a price hasta que se cobre)
+    if (isAdmin && adminReschedule === true) {
       const isAvailable = await validateSlotAvailability(supabase, date, startTime);
       if (!isAvailable) {
         return conflictResponse(
@@ -178,14 +165,14 @@ export async function POST(
       const additionalAmount = newPrice - currentPrice;
       const endTime = calculateEndTime(startTime);
 
+      // Siempre "pendiente": no actualizamos price para evitar reembolsar dinero no cobrado
       const updateData: ReservationUpdate = {
         date,
         start_time: formatTimeToSeconds(startTime),
         end_time: endTime,
-        price: newPrice,
         reschedule_count: (reservationRow.reschedule_count || 0) + 1,
         additional_payment_amount: additionalAmount > 0 ? additionalAmount : null,
-        additional_payment_method: additionalAmount > 0 ? additionalPaymentMethod : null,
+        additional_payment_method: additionalAmount > 0 ? "pendiente" : null,
       };
       if (isAdmin && user) updateData.rescheduled_by_user_id = user.id;
       if ((reservationRow.reschedule_count || 0) === 0) {
@@ -228,7 +215,7 @@ export async function POST(
         new_date: date,
         new_start_time: formatTimeToSeconds(startTime),
         additional_payment_amount: additionalAmount > 0 ? additionalAmount : null,
-        additional_payment_method: additionalAmount > 0 ? additionalPaymentMethod : null,
+        additional_payment_method: additionalAmount > 0 ? "pendiente" : null,
       } as never);
 
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

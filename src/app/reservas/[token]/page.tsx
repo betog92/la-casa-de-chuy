@@ -240,8 +240,13 @@ export default function GuestReservationPage() {
       (h) => (h.additional_payment_amount ?? 0) > 0
     ) ?? false);
   const showPriceBreakdown = hasDiscounts || hasAdditionalPayment;
+  const paidMethods = ["conekta", "efectivo", "transferencia"] as const;
+  const isPaidAdditional = (h: { additional_payment_amount?: number | null; additional_payment_method?: string | null }) =>
+    (h.additional_payment_amount ?? 0) > 0 &&
+    h.additional_payment_method != null &&
+    paidMethods.includes(h.additional_payment_method as (typeof paidMethods)[number]);
   const additionalFromHistory = (reservation?.reschedule_history ?? []).reduce(
-    (sum, h) => sum + (h.additional_payment_amount ?? 0),
+    (sum, h) => sum + (isPaidAdditional(h) ? (h.additional_payment_amount ?? 0) : 0),
     0
   );
   const originalPriceForBreakdown = Math.max(
@@ -249,7 +254,7 @@ export default function GuestReservationPage() {
     (reservation?.price ?? 0) - additionalFromHistory
   );
   const rescheduleHistoryWithPayment = (reservation?.reschedule_history ?? []).filter(
-    (h) => (h.additional_payment_amount ?? 0) > 0
+    (h) => isPaidAdditional(h)
   );
 
   if (loading) {

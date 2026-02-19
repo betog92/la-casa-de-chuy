@@ -127,19 +127,33 @@ function ConfirmacionContent() {
   // Usar el nivel de los query params si está disponible, sino usar el cargado desde la API
   const displayLoyaltyLevel = newLoyaltyLevelFromParams || loyaltyLevelName;
 
-  // Calcular monto adicional (usado en múltiples lugares)
-  const additionalAmountFromParam = additionalAmountParam
+  // Monto adicional de ESTE reagendo (solo desde URL); si viene en URL, este reagendo generó pago/pendiente
+  const rawFromParam = additionalAmountParam
     ? parseFloat(additionalAmountParam)
     : NaN;
-  const additionalAmount = !isNaN(additionalAmountFromParam)
-    ? additionalAmountFromParam
-    : Number(
-        (
-          reservation as Reservation & {
-            additional_payment_amount?: number | null;
-          }
-        )?.additional_payment_amount ?? 0
-      );
+  const additionalAmountThisReschedule =
+    Number.isFinite(rawFromParam) &&
+    rawFromParam > 0 &&
+    rawFromParam <= 1_000_000
+      ? rawFromParam
+      : 0;
+  // Deuda pendiente anterior (reserva tiene additional_payment_amount pero este reagendo no añadió pago)
+  const reservationAdditional = Number(
+    (
+      reservation as Reservation & {
+        additional_payment_amount?: number | null;
+        additional_payment_method?: string | null;
+      }
+    )?.additional_payment_amount ?? 0
+  );
+  const additionalPaymentMethod = (
+    reservation as Reservation & { additional_payment_method?: string | null }
+  )?.additional_payment_method;
+  const hasPendingFromBefore =
+    rescheduled === "true" &&
+    additionalAmountThisReschedule === 0 &&
+    reservationAdditional > 0 &&
+    additionalPaymentMethod === "pendiente";
   const additionalPaymentId = (
     reservation as Reservation & {
       additional_payment_id?: string | null;
@@ -282,19 +296,22 @@ function ConfirmacionContent() {
                 <span>{formatTimeRange(reservation.start_time)}</span>
               </div>
               {(() => {
-                // Mostrar pago adicional solo si es reagendado y hay monto > 0
-                if (rescheduled === "true" && additionalAmount > 0) {
+                // Este reagendo generó pago/pendiente: mostrar "Pago adicional"
+                if (rescheduled === "true" && additionalAmountThisReschedule > 0) {
                   return (
                     <div className="flex justify-between border-t border-zinc-200 pt-3">
                       <span className="font-semibold text-lg">
                         Pago Adicional:
                       </span>
                       <span className="font-semibold text-lg">
-                        ${formatCurrency(additionalAmount)} MXN
+                        ${formatCurrency(additionalAmountThisReschedule)} MXN
                       </span>
                     </div>
                   );
                 }
+
+                // Este reagendo no generó pago pero hay deuda anterior: no mostrar aquí (va en callout abajo)
+                if (hasPendingFromBefore) return null;
 
                 // Si no es reagendado, mostrar total pagado
                 if (rescheduled !== "true") {
@@ -310,15 +327,15 @@ function ConfirmacionContent() {
                   );
                 }
 
-                // Reagendado sin pago adicional: no mostrar bloque de pago
+                // Reagendado sin pago adicional ni pendiente anterior: no mostrar bloque de pago
                 return null;
               })()}
             </div>
             {(() => {
-              // Reagendado con pago adicional: mostrar ID de pago adicional si existe
+              // Reagendado con pago adicional (de este movimiento): mostrar ID de pago adicional si existe
               if (
                 rescheduled === "true" &&
-                additionalAmount > 0 &&
+                additionalAmountThisReschedule > 0 &&
                 additionalPaymentId
               ) {
                 return (
@@ -354,6 +371,42 @@ function ConfirmacionContent() {
             })()}
           </div>
         </div>
+
+        {/* Recordatorio: pago pendiente por reagendamiento anterior (fuera de detalles, solo informativo) */}
+        {hasPendingFromBefore && (
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <svg
+                  className="h-4 w-4 text-amber-700"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-amber-900">
+                  Recordatorio
+                </h3>
+                <p className="mt-1 text-sm text-amber-800">
+                  Tienes un pago pendiente de{" "}
+                  <span className="font-medium">
+                    ${formatCurrency(reservationAdditional)} MXN
+                  </span>{" "}
+                  por un reagendamiento anterior. No corresponde a este cambio de
+                  fecha.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Magic Link para Invitados - Solo en nueva reserva (no en reagendamiento; ahí ya tienen el enlace del correo) */}
         {isGuest && !guestTokenFromParams && (

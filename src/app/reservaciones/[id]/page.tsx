@@ -261,9 +261,7 @@ export default function ReservationDetailsPage() {
     setPendingAdminPayment(null);
   };
 
-  const handleConfirmAdminPaymentMethod = async (
-    method: "efectivo" | "transferencia" | "pendiente"
-  ) => {
+  const handleConfirmAdminPayment = async () => {
     if (!pendingAdminPayment) return;
     setRescheduling(true);
     setRescheduleError(null);
@@ -277,7 +275,6 @@ export default function ReservationDetailsPage() {
             date: pendingAdminPayment.date,
             startTime: pendingAdminPayment.startTime,
             adminReschedule: true,
-            additionalPaymentMethod: method,
           }),
         }
       );
@@ -287,10 +284,13 @@ export default function ReservationDetailsPage() {
         return;
       }
       setShowRescheduleModal(false);
+      const amountAdded = pendingAdminPayment.additionalAmount;
       setPendingAdminPayment(null);
-      router.push(
-        `/reservar/confirmacion?id=${reservationId}&rescheduled=true`
-      );
+      const confirmUrl =
+        amountAdded > 0
+          ? `/reservar/confirmacion?id=${reservationId}&rescheduled=true&additionalAmount=${amountAdded}`
+          : `/reservar/confirmacion?id=${reservationId}&rescheduled=true`;
+      router.push(confirmUrl);
     } catch (err) {
       console.error("Error rescheduling (admin):", err);
       setRescheduleError("Error inesperado al reagendar la reserva");
@@ -316,8 +316,13 @@ export default function ReservationDetailsPage() {
       (h) => (h.additional_payment_amount ?? 0) > 0
     ) ?? false);
   const showPriceBreakdown = hasDiscounts || hasAdditionalPayment;
+  const paidMethods = ["conekta", "efectivo", "transferencia"] as const;
+  const isPaidAdditional = (h: { additional_payment_amount?: number | null; additional_payment_method?: string | null }) =>
+    (h.additional_payment_amount ?? 0) > 0 &&
+    h.additional_payment_method != null &&
+    paidMethods.includes(h.additional_payment_method as (typeof paidMethods)[number]);
   const additionalFromHistory = (reservation?.reschedule_history ?? []).reduce(
-    (sum, h) => sum + (h.additional_payment_amount ?? 0),
+    (sum, h) => sum + (isPaidAdditional(h) ? (h.additional_payment_amount ?? 0) : 0),
     0
   );
   const originalPriceForBreakdown = Math.max(
@@ -325,7 +330,7 @@ export default function ReservationDetailsPage() {
     (reservation?.price ?? 0) - additionalFromHistory
   );
   const rescheduleHistoryWithPayment = (reservation?.reschedule_history ?? []).filter(
-    (h) => (h.additional_payment_amount ?? 0) > 0
+    (h) => isPaidAdditional(h)
   );
 
   if (loading || authLoading) {
@@ -901,8 +906,8 @@ export default function ReservationDetailsPage() {
                 {isAdmin ? (
                   <p className="mt-2 text-xs text-zinc-600">
                     Como administrador puedes reagendar en cualquier momento y sin
-                    límite de intentos. Si la nueva fecha tiene mayor costo, podrás
-                    indicar el método de cobro (efectivo, transferencia o pendiente).
+                    límite de intentos. Si la nueva fecha tiene mayor costo, se
+                    asignará como pago pendiente.
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-zinc-600">
@@ -1033,7 +1038,7 @@ export default function ReservationDetailsPage() {
           isOpen={showRescheduleModal}
           onClose={handleCloseRescheduleModal}
           adminPaymentStep={pendingAdminPayment}
-          onConfirmAdminPayment={handleConfirmAdminPaymentMethod}
+          onConfirmAdminPayment={handleConfirmAdminPayment}
           onConfirm={handleReschedule}
           currentDate={reservation.date}
           currentStartTime={reservation.start_time}
