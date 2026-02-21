@@ -389,7 +389,7 @@ export default function RescheduleModal({
 
         if (percentage >= 80) return "heatmap-high";
         if (percentage >= 50) return "heatmap-medium";
-        if (percentage >= 20) return "heatmap-low";
+        if (percentage >= 25) return "heatmap-low";
         if (percentage > 0) return "heatmap-minimal";
       }
 

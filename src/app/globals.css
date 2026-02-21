@@ -235,44 +235,41 @@ button.react-calendar__tile.heatmap-closed-or-unavailable.react-calendar__tile--
    ===================================================== */
 
 /* Heatmap - Alta disponibilidad (80%+ del máximo) */
+/* Alta disponibilidad (≥80%) - verde oscuro */
 .react-calendar__tile.heatmap-high {
-  background-color: rgba(34, 197, 94, 0.25) !important; /* green-500 más visible */
+  background-color: rgba(22, 163, 74, 0.38) !important;
 }
 
-/* Heatmap - Disponibilidad moderada (50-79% del máximo) */
+/* Disponibilidad moderada (50-79%) - verde lima */
 .react-calendar__tile.heatmap-medium {
-  background-color: rgba(74, 222, 128, 0.22) !important; /* green-400 más visible */
+  background-color: rgba(132, 204, 22, 0.45) !important;
 }
 
-/* Heatmap - Baja disponibilidad (20-49% del máximo) */
+/* Poca disponibilidad (25-49%) - amarillo suave */
 .react-calendar__tile.heatmap-low {
-  background-color: rgba(187, 247, 208, 0.2) !important; /* green-200 más visible */
+  background-color: rgba(234, 179, 8, 0.35) !important;
 }
 
-/* Heatmap - Muy poca disponibilidad (1-19% del máximo) */
+/* Muy poca disponibilidad (1-24%) - naranja suave */
 .react-calendar__tile.heatmap-minimal {
-  background-color: rgba(253, 224, 71, 0.3) !important; /* yellow-300 más intenso */
+  background-color: rgba(249, 115, 22, 0.35) !important;
 }
 
-/* Bordes sutiles para heatmap - Aplicados en todas las pantallas (incluyendo día actual) */
-/* Alta disponibilidad - borde verde oscuro sutil */
+/* Bordes para heatmap */
 .react-calendar__tile.heatmap-high:not(.react-calendar__tile--active) {
-  border: 1px solid rgba(34, 197, 94, 0.4) !important;
+  border: 1px solid rgba(22, 163, 74, 0.50) !important;
 }
 
-/* Disponibilidad moderada - borde verde medio sutil */
 .react-calendar__tile.heatmap-medium:not(.react-calendar__tile--active) {
-  border: 1px solid rgba(74, 222, 128, 0.35) !important;
+  border: 1px solid rgba(132, 204, 22, 0.60) !important;
 }
 
-/* Baja disponibilidad - borde verde claro sutil */
 .react-calendar__tile.heatmap-low:not(.react-calendar__tile--active) {
-  border: 1px solid rgba(187, 247, 208, 0.3) !important;
+  border: 1px solid rgba(234, 179, 8, 0.50) !important;
 }
 
-/* Muy poca disponibilidad - borde amarillo sutil */
 .react-calendar__tile.heatmap-minimal:not(.react-calendar__tile--active) {
-  border: 1px solid rgba(253, 224, 71, 0.4) !important;
+  border: 1px solid rgba(249, 115, 22, 0.50) !important;
 }
 
 /* Días cerrados o sin disponibilidad - borde rojo sutil */

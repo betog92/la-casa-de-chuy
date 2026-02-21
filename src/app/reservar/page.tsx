@@ -339,7 +339,7 @@ export default function ReservarPage() {
 
         if (percentage >= 80) return "heatmap-high";
         if (percentage >= 50) return "heatmap-medium";
-        if (percentage >= 20) return "heatmap-low";
+        if (percentage >= 25) return "heatmap-low";
         if (percentage > 0) return "heatmap-minimal";
       }
 
@@ -438,9 +438,7 @@ export default function ReservarPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className="h-4 w-4 rounded border border-zinc-300"
-                        style={{
-                          backgroundColor: "rgba(34, 197, 94, 0.25)",
-                        }}
+                        style={{ backgroundColor: "rgba(22, 163, 74, 0.38)" }}
                       />
                       <span className="text-xs text-zinc-600 sm:text-sm">
                         Alta
@@ -449,9 +447,7 @@ export default function ReservarPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className="h-4 w-4 rounded border border-zinc-300"
-                        style={{
-                          backgroundColor: "rgba(74, 222, 128, 0.22)",
-                        }}
+                        style={{ backgroundColor: "rgba(132, 204, 22, 0.45)" }}
                       />
                       <span className="text-xs text-zinc-600 sm:text-sm">
                         Moderada
@@ -460,20 +456,16 @@ export default function ReservarPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className="h-4 w-4 rounded border border-zinc-300"
-                        style={{
-                          backgroundColor: "rgba(187, 247, 208, 0.2)",
-                        }}
+                        style={{ backgroundColor: "rgba(234, 179, 8, 0.35)" }}
                       />
                       <span className="text-xs text-zinc-600 sm:text-sm">
-                        Baja
+                        Poca
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div
                         className="h-4 w-4 rounded border border-zinc-300"
-                        style={{
-                          backgroundColor: "rgba(253, 224, 71, 0.3)",
-                        }}
+                        style={{ backgroundColor: "rgba(249, 115, 22, 0.35)" }}
                       />
                       <span className="text-xs text-zinc-600 sm:text-sm">
                         Muy poca
