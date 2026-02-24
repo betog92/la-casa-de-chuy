@@ -211,7 +211,8 @@ export async function syncAppointlyEvents(): Promise<SyncResult> {
         continue;
       }
 
-      const { error } = await supabase.from("reservations").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("reservations") as any).insert({
         id: nextId,
         email: "importado@google.local",
         name,
