@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     const { data, error } = await supabase
       .from("reservations")
-      .select("id, date, start_time, end_time, name, email, price, status")
+      .select("id, date, start_time, end_time, name, email, price, status, source, import_type")
       .gte("date", start)
       .lte("date", end)
       .eq("status", "confirmed")
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       const ampm = h < 12 ? "am" : "pm";
       return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
     };
-    type Row = { id: number; date: string; start_time: string; end_time: string; name: string };
+    type Row = { id: number; date: string; start_time: string; end_time: string; name: string; source: string; import_type: string | null };
     const MONTERREY_TZ = "America/Monterrey";
     const toTimePart = (t: string) => {
       const s = String(t || "0").trim();
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
         title,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
-        resource: { reservationId: r.id },
+        resource: { reservationId: r.id, source: r.source, import_type: r.import_type },
       };
     });
 

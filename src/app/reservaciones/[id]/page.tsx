@@ -440,6 +440,14 @@ export default function ReservationDetailsPage() {
             Detalles de la Reserva
           </h1>
           <p className="text-zinc-600">Gestiona tu reserva desde aquí</p>
+          {reservation.source === "google_import" && (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm text-blue-700">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+              </svg>
+              Cita importada de Google Calendar (web anterior)
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 sm:p-8 space-y-6">
@@ -501,7 +509,7 @@ export default function ReservationDetailsPage() {
                   : "Horario"}
               </p>
               <p className="text-lg font-medium text-[#103948]">
-                {formatTimeRange(reservation.start_time)}
+                {formatTimeRange(reservation.start_time, reservation.end_time)}
               </p>
             </div>
 
@@ -526,16 +534,26 @@ export default function ReservationDetailsPage() {
                     {reservation.phone || "No proporcionado"}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm text-zinc-600 mb-1">Creada el</p>
-                  <p className="text-lg font-medium text-[#103948]">
-                    {format(
-                      new Date(reservation.created_at),
-                      "d 'de' MMMM yyyy, h:mm a",
-                      { locale: es }
-                    )}
-                  </p>
-                </div>
+                {reservation.source === "google_import" && reservation.google_event_id && (
+                  <div>
+                    <p className="text-sm text-zinc-600 mb-1">Orden (web anterior)</p>
+                    <p className="text-lg font-medium text-[#103948]">
+                      {reservation.google_event_id}
+                    </p>
+                  </div>
+                )}
+                {reservation.source !== "google_import" && (
+                  <div>
+                    <p className="text-sm text-zinc-600 mb-1">Creada el</p>
+                    <p className="text-lg font-medium text-[#103948]">
+                      {format(
+                        new Date(reservation.created_at),
+                        "d 'de' MMMM yyyy, h:mm a",
+                        { locale: es }
+                      )}
+                    </p>
+                  </div>
+                )}
                 {reservation.created_by && (
                   <div>
                     <p className="text-sm text-zinc-600 mb-1">Creada por</p>
@@ -935,10 +953,15 @@ export default function ReservationDetailsPage() {
           {/* Botones de acción */}
           {reservation.status === "confirmed" && (
             <div className="pt-6 border-t border-zinc-200 space-y-4">
+              {reservation.source === "google_import" && !isAdmin && (
+                <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                  Esta cita fue importada de la web anterior y no puede reagendarse ni cancelarse desde aquí.
+                </p>
+              )}
               <div>
                 <button
                   onClick={() => setShowRescheduleModal(true)}
-                  disabled={!canReschedule || rescheduling}
+                  disabled={!canReschedule || rescheduling || (!isAdmin && reservation.source === "google_import")}
                   className="w-full bg-[#103948] text-white py-3 px-4 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {rescheduling ? "Reagendando..." : "Reagendar"}
@@ -978,7 +1001,7 @@ export default function ReservationDetailsPage() {
               <div>
                 <button
                   onClick={() => setShowCancelModal(true)}
-                  disabled={!canCancel}
+                  disabled={!canCancel || (!isAdmin && reservation.source === "google_import")}
                   className="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   Cancelar Reserva

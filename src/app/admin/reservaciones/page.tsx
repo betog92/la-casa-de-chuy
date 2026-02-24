@@ -110,7 +110,7 @@ export default function AdminReservacionesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "" });
+  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "", search: "" });
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [newForm, setNewForm] = useState({
@@ -153,6 +153,7 @@ export default function AdminReservacionesPage() {
       if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
       if (filters.dateTo) params.set("dateTo", filters.dateTo);
       if (filters.status) params.set("status", filters.status);
+      if (filters.search) params.set("search", filters.search);
       const res = await axios.get(`/api/admin/reservations?${params}`);
       if (res.data.success) {
         setReservations(res.data.reservations ?? []);
@@ -165,7 +166,7 @@ export default function AdminReservacionesPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.status]);
+  }, [filters.dateFrom, filters.dateTo, filters.status, filters.search]);
 
   useEffect(() => {
     fetchReservations();
@@ -423,6 +424,16 @@ export default function AdminReservacionesPage() {
       </div>
 
       <div className="flex flex-wrap gap-4 rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="flex-1 min-w-[200px]">
+          <label className="mb-1 block text-xs font-medium text-zinc-500">Buscar (nombre, email, teléfono, orden #)</label>
+          <input
+            type="text"
+            placeholder="Nombre, email, teléfono o #6521..."
+            value={filters.search}
+            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Desde</label>
           <input type="date" value={filters.dateFrom} onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm" />

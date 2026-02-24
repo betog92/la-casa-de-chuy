@@ -400,7 +400,7 @@ export default function GuestReservationPage() {
                   : "Horario"}
               </p>
               <p className="text-lg font-medium text-[#103948]">
-                {formatTimeRange(reservation.start_time)}
+                {formatTimeRange(reservation.start_time, reservation.end_time)}
               </p>
             </div>
 

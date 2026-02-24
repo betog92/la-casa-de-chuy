@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
     const status = searchParams.get("status");
+    const search = searchParams.get("search")?.trim() || "";
     const limit = Math.min(
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50),
       200
@@ -41,14 +42,32 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10) || 0);
 
     const supabase = createServiceRoleClient();
+
+    // Si la búsqueda parece un número de orden de Appointly (#XXXX o XXXX),
+    // buscar también en google_event_id e incluir importadas
+    const isOrderSearch = search && /^#?\d+(-[a-z])?$/i.test(search);
+    const normalizedOrder = search.startsWith("#") ? search : search ? `#${search}` : "";
+
     let query = supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, discount_code",
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, discount_code, source, google_event_id",
         { count: "exact" }
       )
       .order("id", { ascending: false })
       .range(offset, offset + limit - 1);
+
+    if (isOrderSearch) {
+      // Buscar por número de orden de Appointly (incluye importadas)
+      // Usa like para cubrir sufijos como #6521-b
+      query = query.like("google_event_id", `${normalizedOrder}%`);
+    } else {
+      // Búsqueda normal: excluir importadas
+      query = query.neq("source", "google_import");
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+    }
 
     if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
       query = query.gte("date", dateFrom);

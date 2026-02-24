@@ -95,6 +95,10 @@ CREATE TABLE IF NOT EXISTS reservations (
   additional_payment_method TEXT,  -- conekta | efectivo | transferencia | pendiente (reportes)
   rescheduled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que reagendó (si aplica)
   cancelled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que canceló (si aplica)
+  -- Campos de importación desde web anterior
+  source TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web', 'google_import')),
+  google_event_id TEXT,  -- Número de orden Appointly (#6521) o ID de Google Calendar; garantiza idempotencia
+  import_type TEXT,      -- 'appointly' | 'manual_client' | 'manual_available' (solo cuando source='google_import')
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -189,6 +193,16 @@ WHERE available = true;
 CREATE INDEX IF NOT EXISTS idx_reservations_date_time_status 
 ON reservations(date, start_time, status) 
 WHERE status = 'confirmed';
+
+-- Índice único parcial para google_event_id (evita importar el mismo evento dos veces)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_google_event_id
+  ON reservations (google_event_id)
+  WHERE google_event_id IS NOT NULL;
+
+-- Índice para filtrar rápidamente por source (importadas vs reales)
+CREATE INDEX IF NOT EXISTS idx_reservations_source
+  ON reservations (source)
+  WHERE source = 'google_import';
 
 -- Índice compuesto para optimizar consultas de slots disponibles por fecha y hora
 -- Útil especialmente cuando se consulta la fecha actual y se filtra por hora
@@ -353,6 +367,30 @@ DROP TRIGGER IF EXISTS update_time_slot_occupied_on_reservation ON reservations;
 CREATE TRIGGER update_time_slot_occupied_on_reservation
 AFTER INSERT OR UPDATE OR DELETE ON reservations
 FOR EACH ROW EXECUTE FUNCTION update_time_slot_occupied();
+
+-- =====================================================
+-- SECUENCIA PARA IDs DE CITAS IMPORTADAS
+-- =====================================================
+-- Las citas importadas de la web anterior usan IDs desde 10001,
+-- separándolas de las reservas reales (1-9999).
+-- =====================================================
+CREATE SEQUENCE IF NOT EXISTS reservations_google_import_id_seq
+  START WITH 10001
+  INCREMENT BY 1
+  MINVALUE 10001
+  NO MAXVALUE;
+
+-- Función RPC para obtener el siguiente ID de importación
+CREATE OR REPLACE FUNCTION next_google_import_id() RETURNS INTEGER AS $$
+  SELECT nextval('reservations_google_import_id_seq')::INTEGER;
+$$ LANGUAGE SQL SECURITY DEFINER;
+
+-- Función RPC para resetear la secuencia (usada al reimportar desde cero)
+CREATE OR REPLACE FUNCTION reset_google_import_seq() RETURNS VOID AS $$
+BEGIN
+  ALTER SEQUENCE reservations_google_import_id_seq MINVALUE 10001 RESTART WITH 10001;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
 -- COMENTARIOS EN TABLAS

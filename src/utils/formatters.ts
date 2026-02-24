@@ -31,17 +31,25 @@ export function formatDisplayDateShort(dateString: string): string {
 }
 
 /**
- * Formatea un rango de hora (1 hora desde start_time)
- * @example "18:30" -> "6:30 pm - 7:30 pm"
- * NOTA: Aunque los slots técnicos en la BD son de 45 minutos, mostramos 1 hora al usuario
- * porque la sesión real de fotografía es de 1 hora completa.
+ * Formatea un rango de hora.
+ * Si se pasa endTime, lo usa directamente. Si no, suma 1 hora al start_time.
+ * @example ("18:30") -> "6:30 pm - 7:30 pm"
+ * @example ("17:45", "19:15") -> "5:45 pm - 7:15 pm"
  */
-export function formatTimeRange(startTime: string): string {
+export function formatTimeRange(startTime: string, endTime?: string | null): string {
   try {
     const [hours, minutes] = startTime.split(":").slice(0, 2).map(Number);
     const startDate = new Date();
     startDate.setHours(hours, minutes, 0, 0);
-    const endDate = addHours(startDate, 1);
+
+    let endDate: Date;
+    if (endTime) {
+      const [endHours, endMinutes] = endTime.split(":").slice(0, 2).map(Number);
+      endDate = new Date();
+      endDate.setHours(endHours, endMinutes, 0, 0);
+    } else {
+      endDate = addHours(startDate, 1);
+    }
 
     const startFormatted = format(startDate, "h:mm a", {
       locale: es,

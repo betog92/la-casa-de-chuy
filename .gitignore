@@ -42,3 +42,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# CSVs de importación (contienen datos de clientes)
+bookings.csv
+orders_export_1.csv
