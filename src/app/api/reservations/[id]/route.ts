@@ -210,8 +210,8 @@ export async function PATCH(
     }
 
     const supabase = createServiceRoleClient();
-    const { data, error } = await supabase
-      .from("reservations")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tipos generados de Supabase no incluyen order_number/import_notes en Update
+    const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)
       .eq("id", reservationId)
       .select("id, name, email, phone, order_number, import_notes")
