@@ -107,18 +107,20 @@ Errores:    0
 
 ## Paso 5 — Verificar
 
-1. Entra al **Calendario Admin** y confirma que se ven los 3 colores:
+1. Entra al **Calendario Admin** y confirma que se ven los 4 colores de importadas:
    - 🔵 **Cian** → Citas de Appointly (clientes reales web anterior)
    - 🟣 **Morado** → Sesiones de Alberto con cliente confirmado
    - 🟠 **Naranja** → Espacios disponibles para Alberto (slots de Nancy)
+   - 🔴 **Rojo** → Otras citas manuales (45 min, no Appointly ni Alberto)
    - 🟦 **Azul oscuro** → Reservas reales de la nueva web
 
 2. Busca una cita en la lista de reservaciones admin por número de orden (ej. `6521` o `#6521`) para confirmar que aparece.
 
 3. Entra al detalle de una cita importada y confirma:
    - Muestra el badge **"Cita importada de Google Calendar (web anterior)"**
-   - Muestra el número de **Orden (web anterior)**
+   - Muestra el número de **Orden (web anterior)** (en citas de Alberto)
    - Las sesiones de 90 min muestran el horario correcto (ej. `1:15 pm - 2:45 pm`)
+   - En citas de Alberto, un admin puede editar **Detalles de la cita** y guardar.
 
 ---
 

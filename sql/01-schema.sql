@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS reservations (
   source TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web', 'google_import')),
   google_event_id TEXT,  -- Número de orden Appointly (#6521) o ID de Google Calendar; garantiza idempotencia
   import_type TEXT,      -- 'appointly' | 'manual_client' | 'manual_available' (solo cuando source='google_import')
+  order_number TEXT,     -- número de orden/folio (ej. 3972) en citas Alberto
+  import_notes TEXT,     -- notas tras el teléfono (vestido, sesión, ampliaciones, etc.)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

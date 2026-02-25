@@ -54,6 +54,8 @@ export interface Reservation {
   source?: string | null;
   google_event_id?: string | null;
   import_type?: string | null;
+  order_number?: string | null;
+  import_notes?: string | null;
   /** Resuelto por la API cuando hay cancelled_by_user_id (admin que canceló) */
   cancelled_by?: { id: string; name: string | null; email: string } | null;
   /** Historial de todos los reagendamientos (orden cronológico) */

@@ -42,6 +42,15 @@ export default function ReservationDetailsPage() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    order_number: "",
+    import_notes: "",
+  });
+  const [savingDetail, setSavingDetail] = useState(false);
+  const [editDetailError, setEditDetailError] = useState<string | null>(null);
   const [pendingAdminPayment, setPendingAdminPayment] = useState<{
     date: string;
     startTime: string;
@@ -61,6 +70,18 @@ export default function ReservationDetailsPage() {
       .then((data) => setIsAdmin(data.success === true && data.isAdmin === true))
       .catch(() => setIsAdmin(false));
   }, [user?.id]);
+
+  // Sincronizar formulario de edición con la reserva cargada
+  useEffect(() => {
+    if (!reservation) return;
+    setEditForm({
+      name: reservation.name ?? "",
+      email: reservation.email ?? "",
+      phone: reservation.phone ?? "",
+      order_number: reservation.order_number ?? "",
+      import_notes: reservation.import_notes ?? "",
+    });
+  }, [reservation?.id, reservation?.name, reservation?.email, reservation?.phone, reservation?.order_number, reservation?.import_notes]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -513,55 +534,132 @@ export default function ReservationDetailsPage() {
               </p>
             </div>
 
-            {/* Datos de contacto (solo visible para admin) */}
+            {/* Datos de contacto: editable solo para admin en citas de Alberto */}
             {isAdmin && (
               <div className="pt-4 border-t border-zinc-200 space-y-3">
-                <div>
-                  <p className="text-sm text-zinc-600 mb-1">Nombre</p>
-                  <p className="text-lg font-medium text-[#103948]">
-                    {reservation.name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-zinc-600 mb-1">Email</p>
-                  <p className="text-lg font-medium text-[#103948]">
-                    {reservation.email}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
-                  <p className="text-lg font-medium text-[#103948]">
-                    {reservation.phone || "No proporcionado"}
-                  </p>
-                </div>
-                {reservation.source === "google_import" && reservation.google_event_id && (
-                  <div>
-                    <p className="text-sm text-zinc-600 mb-1">Orden (web anterior)</p>
-                    <p className="text-lg font-medium text-[#103948]">
-                      {reservation.google_event_id}
-                    </p>
-                  </div>
-                )}
-                {reservation.source !== "google_import" && (
-                  <div>
-                    <p className="text-sm text-zinc-600 mb-1">Creada el</p>
-                    <p className="text-lg font-medium text-[#103948]">
-                      {format(
-                        new Date(reservation.created_at),
-                        "d 'de' MMMM yyyy, h:mm a",
-                        { locale: es }
-                      )}
-                    </p>
-                  </div>
-                )}
-                {reservation.created_by && (
-                  <div>
-                    <p className="text-sm text-zinc-600 mb-1">Creada por</p>
-                    <p className="text-lg font-medium text-[#103948]">
-                      {reservation.created_by.name?.trim() ||
-                        reservation.created_by.email}
-                    </p>
-                  </div>
+                {reservation.source === "google_import" &&
+                reservation.import_type === "manual_client" ? (
+                  <>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Nombre</p>
+                      <p className="text-lg font-medium text-[#103948]">{reservation.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Email</p>
+                      <p className="text-lg font-medium text-[#103948]">{reservation.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
+                      <p className="text-lg font-medium text-[#103948]">
+                        {reservation.phone || "No proporcionado"}
+                      </p>
+                    </div>
+                    {(reservation.order_number || reservation.google_event_id) && (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">Orden (web anterior)</p>
+                        <p className="text-lg font-medium text-[#103948]">
+                          {reservation.order_number ? `#${reservation.order_number}` : reservation.google_event_id}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <label htmlFor="edit-notes" className="text-sm text-zinc-600 mb-1 block">Detalles de la cita (editable, máx. 10 000 caracteres)</label>
+                      <textarea
+                        id="edit-notes"
+                        value={editForm.import_notes}
+                        onChange={(e) => setEditForm((f) => ({ ...f, import_notes: e.target.value }))}
+                        rows={4}
+                        maxLength={10000}
+                        className="w-full rounded border border-zinc-300 px-3 py-2 text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                      />
+                    </div>
+                    {editDetailError && (
+                      <p className="text-sm text-red-600">{editDetailError}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setEditDetailError(null);
+                        setSavingDetail(true);
+                        try {
+                          const res = await fetch(`/api/reservations/${reservation.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ import_notes: editForm.import_notes || null }),
+                          });
+                          const data = await res.json();
+                          if (!data.success) {
+                            setEditDetailError(data.error || "Error al guardar");
+                            return;
+                          }
+                          setReservation((prev) =>
+                            prev ? { ...prev, import_notes: editForm.import_notes || null } : null
+                          );
+                        } catch {
+                          setEditDetailError("Error de conexión");
+                        } finally {
+                          setSavingDetail(false);
+                        }
+                      }}
+                      disabled={savingDetail}
+                      className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
+                    >
+                      {savingDetail ? "Guardando…" : "Guardar detalles de la cita"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Nombre</p>
+                      <p className="text-lg font-medium text-[#103948]">{reservation.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Email</p>
+                      <p className="text-lg font-medium text-[#103948]">{reservation.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
+                      <p className="text-lg font-medium text-[#103948]">
+                        {reservation.phone || "No proporcionado"}
+                      </p>
+                    </div>
+                    {reservation.source === "google_import" && (reservation.order_number || reservation.google_event_id) && (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">Orden (web anterior)</p>
+                        <p className="text-lg font-medium text-[#103948]">
+                          {reservation.order_number ? `#${reservation.order_number}` : reservation.google_event_id}
+                        </p>
+                      </div>
+                    )}
+                    {reservation.source === "google_import" && reservation.import_notes && (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">Detalles de la cita</p>
+                        <p className="text-base font-medium text-[#103948] whitespace-pre-line">
+                          {reservation.import_notes}
+                        </p>
+                      </div>
+                    )}
+                    {reservation.source !== "google_import" && (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">Creada el</p>
+                        <p className="text-lg font-medium text-[#103948]">
+                          {format(
+                            new Date(reservation.created_at),
+                            "d 'de' MMMM yyyy, h:mm a",
+                            { locale: es }
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {reservation.created_by && (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">Creada por</p>
+                        <p className="text-lg font-medium text-[#103948]">
+                          {reservation.created_by.name?.trim() || reservation.created_by.email}
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

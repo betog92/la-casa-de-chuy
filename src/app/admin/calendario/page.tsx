@@ -504,6 +504,7 @@ export default function AdminCalendarioPage() {
                 if (importType === "appointly") bgColor = "#0e7490";          // cian
                 else if (importType === "manual_client") bgColor = "#6d28d9"; // morado
                 else if (importType === "manual_available") bgColor = "#b45309"; // naranja
+                else if (importType === "manual_other") bgColor = "#b91c1c"; // rojo
                 else bgColor = "#0e7490"; // fallback cian
               }
               return {

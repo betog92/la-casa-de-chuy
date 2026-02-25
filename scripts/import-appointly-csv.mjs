@@ -10,7 +10,7 @@
  *   node scripts/import-appointly-csv.mjs --commit    (borra las viejas e inserta las nuevas)
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
@@ -19,7 +19,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 
 // ── Cargar .env.local ────────────────────────────────────────────────────────
-const envLines = readFileSync(resolve(ROOT, ".env.local"), "utf-8").split("\n");
+const envPath = resolve(ROOT, ".env.local");
+if (!existsSync(envPath)) {
+  console.error("No se encontró .env.local en la raíz del proyecto.");
+  process.exit(1);
+}
+const envLines = readFileSync(envPath, "utf-8").split("\n");
 for (const line of envLines) {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith("#")) continue;

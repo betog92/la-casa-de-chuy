@@ -14,7 +14,7 @@
  *   node scripts/import-manual-events.mjs --commit   (borra viejas e inserta nuevas)
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { google } from "googleapis";
@@ -24,7 +24,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 
 // ── Cargar .env.local ────────────────────────────────────────────────────────
-const envLines = readFileSync(resolve(ROOT, ".env.local"), "utf-8").split("\n");
+const envPath = resolve(ROOT, ".env.local");
+if (!existsSync(envPath)) {
+  console.error("No se encontró .env.local en la raíz del proyecto.");
+  process.exit(1);
+}
+const envLines = readFileSync(envPath, "utf-8").split("\n");
 for (const line of envLines) {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith("#")) continue;
@@ -107,6 +112,29 @@ function parsePhone(desc) {
   const looseMatch = desc.match(/(?:^|\|)\s*([2-9]\d{9})\s*(?:\||$)/);
   if (looseMatch) return looseMatch[1];
   return null;
+}
+
+/**
+ * Extrae número de orden del summary para eventos Alberto.
+ * Ej: "3972 ALBERTO / ...", "3917 / ALBERTO / ..." → "3972", "3917"
+ */
+function parseOrderNumberFromSummary(summary) {
+  if (!summary || !summary.toUpperCase().includes("ALBERTO")) return null;
+  const m = summary.match(/^\s*(\d+)\s*(?:\/\s*)?ALBERTO/i);
+  return m ? m[1] : null;
+}
+
+/**
+ * Extrae los datos después del celular en la description (vestido, sesión, ampliaciones, etc.).
+ * La description se divide por | o \n; toma todos los segmentos después del que contiene "cel. NNNN".
+ */
+function parseNotesAfterPhone(desc) {
+  if (!desc) return null;
+  const segments = desc.split(/\|\n?|\n/).map((s) => s.trim()).filter(Boolean);
+  const celIndex = segments.findIndex((seg) => /cel\.?\s*[2-9]\d{9}/i.test(seg));
+  if (celIndex === -1) return null;
+  const after = segments.slice(celIndex + 1).filter((s) => s.length > 0);
+  return after.length ? after.join(" · ") : null;
 }
 
 /**
@@ -264,6 +292,10 @@ async function main() {
     const { name, phone, email } = extractData(e);
     const startDate = new Date(e.start.dateTime);
     const endDate = new Date(e.end.dateTime);
+    const summary = (e.summary ?? "").trim();
+    const isAlberto = summary.toUpperCase().includes("ALBERTO") && summary.toLowerCase() !== "nancy";
+    const order_number = isAlberto ? parseOrderNumberFromSummary(summary) : null;
+    const import_notes = isAlberto ? parseNotesAfterPhone(e.description ?? "") : null;
     return {
       google_event_id: e.id,
       name,
@@ -273,6 +305,9 @@ async function main() {
       start_time: toTimeStr(startDate),
       end_time: toTimeStr(endDate),
       merged: e._merged,
+      order_number: order_number ?? undefined,
+      import_notes: import_notes ?? undefined,
+      isAlberto,
     };
   });
 
@@ -281,11 +316,17 @@ async function main() {
   const nancyCount = records.filter((r) => r.name === "Nancy").length;
   const mergedSlots = records.filter((r) => r.merged).length;
 
+  const withOrder = records.filter((r) => r.order_number).length;
+  const withNotes = records.filter((r) => r.import_notes).length;
   console.log(`Registros a insertar: ${records.length}`);
   console.log(`  Con teléfono:         ${conPhone}`);
   console.log(`  Sin teléfono (N/A):   ${records.length - conPhone}`);
   console.log(`  Slots de Nancy:       ${nancyCount}`);
-  console.log(`  Sesiones fusionadas (90 min): ${mergedSlots}\n`);
+  console.log(`  Sesiones fusionadas (90 min): ${mergedSlots}`);
+  console.log(`  Alberto con orden:    ${withOrder}`);
+  console.log(`  Alberto con notas:    ${withNotes}`);
+  const otherCount = records.filter((r) => r.name !== "Nancy" && !r.isAlberto).length;
+  console.log(`  Otras manuales (rojo): ${otherCount}\n`);
 
   // Preview — buscar casos con nombres sospechosos
   const sospechosos = records.filter(r =>
@@ -309,6 +350,8 @@ async function main() {
     console.log(`  Nombre: ${r.name}`);
     console.log(`  Tel:    ${r.phone}`);
     console.log(`  Email:  ${r.email}`);
+    if (r.order_number) console.log(`  Orden:  #${r.order_number}`);
+    if (r.import_notes) console.log(`  Notas:  ${r.import_notes.slice(0, 70)}${r.import_notes.length > 70 ? "…" : ""}`);
     console.log(`  Fecha:  ${r.date}  ${r.start_time} → ${r.end_time}${r.merged ? " (90 min)" : ""}`);
     console.log("-".repeat(60));
   }
@@ -378,7 +421,14 @@ async function main() {
       payment_method: "google_import",
       source: "google_import",
       google_event_id: r.google_event_id,
-      import_type: r.name === "Nancy" ? "manual_available" : "manual_client",
+      import_type:
+        r.name === "Nancy"
+          ? "manual_available"
+          : r.isAlberto
+            ? "manual_client"
+            : "manual_other",
+      order_number: r.order_number ?? null,
+      import_notes: r.import_notes ?? null,
     });
 
     if (insertError) {

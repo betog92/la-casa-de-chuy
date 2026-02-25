@@ -52,7 +52,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes"
       )
       .eq("id", reservationId)
       .single();
@@ -156,6 +156,79 @@ export async function GET(
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Error al cargar la reserva";
+    console.error("Error inesperado:", error);
+    return errorResponse(errorMessage, 500);
+  }
+}
+
+/** PATCH: Actualizar detalle de la reserva (solo admin) */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { isAdmin } = await requireAdmin();
+  if (!isAdmin) {
+    return unauthorizedResponse("Solo un administrador puede editar la reserva");
+  }
+
+  try {
+    const { id: rawId } = await params;
+    const reservationId =
+      typeof rawId === "string" ? parseInt(rawId, 10) : NaN;
+    if (isNaN(reservationId) || reservationId <= 0) {
+      return validationErrorResponse("ID de reserva inválido");
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await request.json();
+    } catch {
+      return validationErrorResponse("Cuerpo de la petición no es JSON válido");
+    }
+    const updatePayload: Record<string, unknown> = {};
+
+    if (typeof body.name === "string") {
+      updatePayload.name = body.name.trim() || body.name;
+    }
+    if (typeof body.email === "string") {
+      updatePayload.email = body.email.trim() || body.email;
+    }
+    if (typeof body.phone === "string") {
+      updatePayload.phone = body.phone.trim();
+    }
+    if (body.order_number !== undefined) {
+      updatePayload.order_number = body.order_number === "" || body.order_number == null ? null : String(body.order_number).trim();
+    }
+    if (body.import_notes !== undefined) {
+      const raw = body.import_notes === "" || body.import_notes == null ? null : String(body.import_notes).trim();
+      const maxNotesLength = 10000;
+      updatePayload.import_notes = raw === null ? null : raw.slice(0, maxNotesLength);
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return validationErrorResponse("No hay campos válidos para actualizar");
+    }
+
+    const supabase = createServiceRoleClient();
+    const { data, error } = await supabase
+      .from("reservations")
+      .update(updatePayload)
+      .eq("id", reservationId)
+      .select("id, name, email, phone, order_number, import_notes")
+      .single();
+
+    if (error) {
+      console.error("Error updating reservation:", error);
+      return errorResponse("Error al actualizar la reserva", 500);
+    }
+    if (!data) {
+      return notFoundResponse("Reserva");
+    }
+
+    return successResponse({ reservation: data });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Error al actualizar la reserva";
     console.error("Error inesperado:", error);
     return errorResponse(errorMessage, 500);
   }
