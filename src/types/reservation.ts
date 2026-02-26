@@ -57,6 +57,10 @@ export interface Reservation {
   import_type?: string | null;
   order_number?: string | null;
   import_notes?: string | null;
+  import_notes_edited_at?: string | null;
+  import_notes_edited_by_user_id?: string | null;
+  /** Resuelto por la API cuando hay import_notes_edited_by_user_id */
+  import_notes_edited_by?: { id: string; name: string | null; email: string } | null;
   /** Resuelto por la API cuando hay cancelled_by_user_id (admin que canceló) */
   cancelled_by?: { id: string; name: string | null; email: string } | null;
   /** Historial de todos los reagendamientos (orden cronológico) */

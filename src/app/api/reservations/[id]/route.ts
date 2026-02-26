@@ -52,7 +52,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id"
       )
       .eq("id", reservationId)
       .single();
@@ -114,8 +114,9 @@ export async function GET(
     const createdByUserId = (reservationData as { created_by_user_id?: string | null }).created_by_user_id;
     const rescheduledByUserId = (reservationData as { rescheduled_by_user_id?: string | null }).rescheduled_by_user_id;
     const cancelledByUserId = (reservationData as { cancelled_by_user_id?: string | null }).cancelled_by_user_id;
+    const importNotesEditedByUserId = (reservationData as { import_notes_edited_by_user_id?: string | null }).import_notes_edited_by_user_id;
     const historyUserIds = historyList.map((h) => h.rescheduled_by_user_id).filter(Boolean) as string[];
-    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, cancelledByUserId, ...historyUserIds].filter(Boolean))] as string[];
+    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, cancelledByUserId, importNotesEditedByUserId, ...historyUserIds].filter(Boolean))] as string[];
     let usersMap: Record<string, { id: string; name: string | null; email: string }> = {};
     if (allUserIds.length > 0) {
       const { data: usersData } = await supabase
@@ -130,6 +131,7 @@ export async function GET(
     const created_by = createdByUserId ? usersMap[createdByUserId] ?? null : null;
     const rescheduled_by = rescheduledByUserId ? usersMap[rescheduledByUserId] ?? null : null;
     const cancelled_by = cancelledByUserId ? usersMap[cancelledByUserId] ?? null : null;
+    const import_notes_edited_by = importNotesEditedByUserId ? usersMap[importNotesEditedByUserId] ?? null : null;
     const reschedule_history = historyList.map((h) => ({
       rescheduled_at: h.rescheduled_at,
       rescheduled_by: h.rescheduled_by_user_id ? usersMap[h.rescheduled_by_user_id] ?? null : null,
@@ -146,6 +148,7 @@ export async function GET(
       created_by,
       rescheduled_by,
       cancelled_by,
+      import_notes_edited_by,
       reschedule_history,
     };
 
@@ -170,6 +173,22 @@ export async function PATCH(
   if (!isAdmin) {
     return unauthorizedResponse("Solo un administrador puede editar la reserva");
   }
+
+  // Obtener usuario actual para "editado por" al guardar detalles de la cita
+  const cookieStore = await cookies();
+  const authClient = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll() {},
+      },
+    }
+  );
+  const { data: { user } } = await authClient.auth.getUser();
 
   try {
     const { id: rawId } = await params;
@@ -203,6 +222,8 @@ export async function PATCH(
       const raw = body.import_notes === "" || body.import_notes == null ? null : String(body.import_notes).trim();
       const maxNotesLength = 10000;
       updatePayload.import_notes = raw === null ? null : raw.slice(0, maxNotesLength);
+      updatePayload.import_notes_edited_at = new Date().toISOString();
+      updatePayload.import_notes_edited_by_user_id = user?.id ?? null;
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -210,11 +231,11 @@ export async function PATCH(
     }
 
     const supabase = createServiceRoleClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tipos generados de Supabase no incluyen order_number/import_notes en Update
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tipos generados de Supabase no incluyen todos los campos en Update
     const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)
       .eq("id", reservationId)
-      .select("id, name, email, phone, order_number, import_notes")
+      .select("id, name, email, phone, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id")
       .single();
 
     if (error) {
@@ -225,7 +246,32 @@ export async function PATCH(
       return notFoundResponse("Reserva");
     }
 
-    return successResponse({ reservation: data });
+    // Resolver nombre del editor solo cuando se actualizaron los detalles de la cita
+    let import_notes_edited_by: { id: string; name: string | null; email: string } | null = null;
+    if (body.import_notes !== undefined) {
+      const editedByUserId = data.import_notes_edited_by_user_id;
+      if (editedByUserId) {
+        const { data: userRow } = await supabase
+          .from("users")
+          .select("id, name, email")
+          .eq("id", editedByUserId)
+          .maybeSingle();
+        if (userRow) {
+          import_notes_edited_by = {
+            id: (userRow as { id: string }).id,
+            name: (userRow as { name: string | null }).name ?? null,
+            email: (userRow as { email: string }).email,
+          };
+        }
+      }
+    }
+
+    return successResponse({
+      reservation: {
+        ...data,
+        import_notes_edited_by,
+      },
+    });
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Error al actualizar la reserva";

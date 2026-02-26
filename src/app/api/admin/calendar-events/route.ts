@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     const { data, error } = await supabase
       .from("reservations")
-      .select("id, date, start_time, end_time, name, email, price, status, source, import_type")
+      .select("id, date, start_time, end_time, name, email, price, status, source, import_type, order_number")
       .gte("date", start)
       .lte("date", end)
       .eq("status", "confirmed")
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       const ampm = h < 12 ? "am" : "pm";
       return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
     };
-    type Row = { id: number; date: string; start_time: string; end_time: string; name: string; source: string; import_type: string | null };
+    type Row = { id: number; date: string; start_time: string; end_time: string; name: string; source: string; import_type: string | null; order_number: string | null };
     const MONTERREY_TZ = "America/Monterrey";
     const toTimePart = (t: string) => {
       const s = String(t || "0").trim();
@@ -83,7 +83,9 @@ export async function GET(request: NextRequest) {
       const startDate = fromZonedTime(startStr, MONTERREY_TZ);
       const endDate = fromZonedTime(endStr, MONTERREY_TZ);
       const name = (r.name || "").trim() || "Sin nombre";
-      const title = `${formatTime(r.start_time)} - #${r.id} ${name}`;
+      // Citas de Alberto (manual_client): mostrar número de orden; resto: ID de reserva
+      const displayId = r.import_type === "manual_client" && r.order_number ? r.order_number : String(r.id);
+      const title = `${formatTime(r.start_time)} - #${displayId} ${name}`;
       return {
         id: r.id,
         title,

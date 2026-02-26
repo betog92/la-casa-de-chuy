@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS reservations (
   import_type TEXT,      -- 'appointly' | 'manual_client' | 'manual_available' (solo cuando source='google_import')
   order_number TEXT,     -- número de orden/folio (ej. 3972) en citas Alberto
   import_notes TEXT,     -- notas tras el teléfono (vestido, sesión, ampliaciones, etc.)
+  import_notes_edited_at TIMESTAMP WITH TIME ZONE,
+  import_notes_edited_by_user_id UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

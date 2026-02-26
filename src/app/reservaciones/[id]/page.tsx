@@ -54,6 +54,7 @@ export default function ReservationDetailsPage() {
   });
   const [savingDetail, setSavingDetail] = useState(false);
   const [editDetailError, setEditDetailError] = useState<string | null>(null);
+  const [saveDetailSuccess, setSaveDetailSuccess] = useState(false);
   const [pendingAdminPayment, setPendingAdminPayment] = useState<{
     date: string;
     startTime: string;
@@ -85,6 +86,13 @@ export default function ReservationDetailsPage() {
       import_notes: reservation.import_notes ?? "",
     });
   }, [reservation?.id, reservation?.name, reservation?.email, reservation?.phone, reservation?.order_number, reservation?.import_notes]);
+
+  // Ocultar mensaje "Detalles guardados" tras unos segundos
+  useEffect(() => {
+    if (!saveDetailSuccess) return;
+    const t = setTimeout(() => setSaveDetailSuccess(false), 4000);
+    return () => clearTimeout(t);
+  }, [saveDetailSuccess]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -566,7 +574,7 @@ export default function ReservationDetailsPage() {
                       </div>
                     )}
                     <div>
-                      <label htmlFor="edit-notes" className="text-sm text-zinc-600 mb-1 block">Detalles de la cita (editable, máx. 10 000 caracteres)</label>
+                      <label htmlFor="edit-notes" className="text-sm text-zinc-600 mb-1 block">Detalles de la cita</label>
                       <textarea
                         id="edit-notes"
                         value={editForm.import_notes}
@@ -579,10 +587,14 @@ export default function ReservationDetailsPage() {
                     {editDetailError && (
                       <p className="text-sm text-red-600">{editDetailError}</p>
                     )}
+                    {saveDetailSuccess && (
+                      <p className="text-sm text-green-600 font-medium">Detalles guardados correctamente.</p>
+                    )}
                     <button
                       type="button"
                       onClick={async () => {
                         setEditDetailError(null);
+                        setSaveDetailSuccess(false);
                         setSavingDetail(true);
                         try {
                           const res = await fetch(`/api/reservations/${reservation.id}`, {
@@ -595,9 +607,18 @@ export default function ReservationDetailsPage() {
                             setEditDetailError(data.error || "Error al guardar");
                             return;
                           }
+                          const updated = data.reservation;
                           setReservation((prev) =>
-                            prev ? { ...prev, import_notes: editForm.import_notes || null } : null
+                            prev
+                              ? {
+                                  ...prev,
+                                  import_notes: updated.import_notes ?? prev.import_notes ?? null,
+                                  import_notes_edited_at: updated.import_notes_edited_at ?? prev.import_notes_edited_at ?? null,
+                                  import_notes_edited_by: updated.import_notes_edited_by ?? prev.import_notes_edited_by ?? null,
+                                }
+                              : null
                           );
+                          setSaveDetailSuccess(true);
                         } catch {
                           setEditDetailError("Error de conexión");
                         } finally {
@@ -609,6 +630,17 @@ export default function ReservationDetailsPage() {
                     >
                       {savingDetail ? "Guardando…" : "Guardar detalles de la cita"}
                     </button>
+                    {reservation.import_notes_edited_at && (() => {
+                      const editedAt = new Date(reservation.import_notes_edited_at);
+                      const isValid = !Number.isNaN(editedAt.getTime());
+                      return isValid ? (
+                        <p className="text-xs text-zinc-500 mt-2">
+                          Editado por última vez por{" "}
+                          {reservation.import_notes_edited_by?.name ?? "—"}{" "}
+                          el {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
+                        </p>
+                      ) : null;
+                    })()}
                   </>
                 ) : (
                   <>
