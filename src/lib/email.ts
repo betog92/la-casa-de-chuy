@@ -151,7 +151,10 @@ export async function sendCancellationConfirmation(
 
       <div style="background:#fef3f2; border-radius:8px; border-left:4px solid #dc2626; padding:16px 20px; margin:0 0 28px;">
         <p style="margin:0 0 8px; font-size:0.875rem; color:#991b1b; font-weight:600;">Reembolso</p>
-        <p style="margin:0; font-size:0.9375rem; color:#27272a;">Recibirás <strong>$${escapeHtml(refundFormatted)} MXN</strong> en la tarjeta con la que pagaste, en un plazo de 5-7 días hábiles.</p>
+        ${refundAmount > 0
+          ? `<p style="margin:0; font-size:0.9375rem; color:#27272a;">Recibirás <strong>$${escapeHtml(refundFormatted)} MXN</strong> en la tarjeta con la que pagaste, en un plazo de 5-7 días hábiles.</p>`
+          : `<p style="margin:0; font-size:0.9375rem; color:#27272a;">No aplica reembolso por tarjeta (el pago fue por otro método).</p>`
+        }
       </div>
 
       <p style="margin:0 0 16px; font-size:0.9375rem; line-height:1.5;">Puedes ver el detalle de esta reserva cancelada en:</p>

@@ -28,6 +28,33 @@ export function calculateTotalPaid(
 }
 
 /**
+ * Total pagado solo por Conekta (reservación inicial + pagos adicionales por Conekta).
+ * Se usa para calcular el reembolso: solo se reembolsa lo pagado con tarjeta.
+ * Acepta originalPrice null/undefined (reservas antiguas) y normaliza payment_method a minúsculas.
+ */
+export function getTotalConektaPaid(
+  paymentMethod: string | null | undefined,
+  originalPrice: number | null | undefined,
+  rescheduleHistory: {
+    additional_payment_amount: number | null;
+    additional_payment_method: string | null;
+  }[]
+): number {
+  const method = (paymentMethod ?? "").toLowerCase();
+  const initial =
+    method === "conekta" ? (originalPrice ?? 0) : 0;
+  const fromHistory = (rescheduleHistory ?? []).reduce(
+    (sum, h) =>
+      sum +
+      ((h.additional_payment_method ?? "").toLowerCase() === "conekta"
+        ? (h.additional_payment_amount ?? 0)
+        : 0),
+    0
+  );
+  return initial + fromHistory;
+}
+
+/**
  * Genera un ID dummy para reembolsos (temporal hasta integrar con Conekta)
  * Formato: refund_dummy_[timestamp]_[random]
  * @returns ID dummy único

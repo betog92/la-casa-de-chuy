@@ -9,6 +9,7 @@ import {
 } from "@/utils/business-days";
 import {
   calculateRefundAmount,
+  getTotalConektaPaid,
   generateDummyRefundId,
 } from "@/utils/refunds";
 import {
@@ -66,12 +67,12 @@ export async function POST(
       isAdmin = adminCheck.isAdmin;
     }
 
-    // Obtener la reserva
+    // Obtener la reserva (payment_method y original_price para calcular reembolso solo Conekta)
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
       .select(
-        "id, user_id, status, date, start_time, price, additional_payment_amount, email, name"
+        "id, user_id, status, date, start_time, price, original_price, payment_method, additional_payment_amount, email, name"
       )
       .eq("id", reservationId)
       .single();
@@ -87,10 +88,23 @@ export async function POST(
       date: string;
       start_time: string | null;
       price: number;
+      original_price: number;
+      payment_method: string | null;
       additional_payment_amount: number | null;
       email: string | null;
       name: string | null;
     };
+
+    // Historial de reagendos para sumar pagos adicionales por Conekta
+    const { data: historyRows } = await supabase
+      .from("reservation_reschedule_history")
+      .select("additional_payment_amount, additional_payment_method")
+      .eq("reservation_id", reservationId)
+      .order("rescheduled_at", { ascending: true });
+    const historyList = (historyRows ?? []) as {
+      additional_payment_amount: number | null;
+      additional_payment_method: string | null;
+    }[];
 
     // Validar autorización: usuario autenticado O token de invitado válido (admin puede cancelar cualquier reserva)
     if (user) {
@@ -147,11 +161,15 @@ export async function POST(
       );
     }
 
-    // Total cobrado: reservation.price es siempre el monto que tenemos (no se actualiza si additional es "pendiente")
-    const totalPaid = reservationRow.price;
-
-    // Calcular reembolso del 80% del total pagado
-    const refundAmount = calculateRefundAmount(totalPaid);
+    // Reembolso solo por lo pagado con Conekta (reservación inicial + adicionales por tarjeta)
+    const originalPrice =
+      reservationRow.original_price ?? reservationRow.price ?? 0;
+    const totalConektaPaid = getTotalConektaPaid(
+      reservationRow.payment_method,
+      originalPrice,
+      historyList
+    );
+    const refundAmount = calculateRefundAmount(totalConektaPaid);
 
     // TODO: Integrar con Conekta API para procesar el reembolso real
     // Por ahora, generar un refund_id dummy

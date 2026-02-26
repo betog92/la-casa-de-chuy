@@ -22,7 +22,10 @@ import {
   calculatePointsDiscount,
   isValidDiscountCode,
 } from "@/utils/discounts";
-import { calculateRefundAmount } from "@/utils/refunds";
+import {
+  calculateRefundAmount,
+  getTotalConektaPaid,
+} from "@/utils/refunds";
 import { DiscountRow } from "@/components/DiscountRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import type { Reservation } from "@/types/reservation";
@@ -1155,23 +1158,37 @@ export default function ReservationDetailsPage() {
             </p>
             {reservation &&
               (() => {
-                // Reembolso = 80% de lo cobrado (reservation.price; no incluir adicional pendiente)
-                const totalPaid = reservation.price;
-                const refundAmount = calculateRefundAmount(totalPaid);
+                // Reembolso solo por lo pagado con Conekta (tarjeta)
+                const totalConektaPaid = getTotalConektaPaid(
+                  reservation.payment_method ?? null,
+                  reservation.original_price ?? 0,
+                  reservation.reschedule_history ?? []
+                );
+                const refundAmount = calculateRefundAmount(totalConektaPaid);
 
                 return (
                   <div className="mb-4 p-4 bg-zinc-50 rounded-lg">
-                    <p className="text-sm text-zinc-600 mb-2">
-                      <strong>Reembolso:</strong> Recibirás el 80% del monto
-                      pagado.
-                    </p>
-                    <p className="text-lg font-semibold text-[#103948]">
-                      Monto a reembolsar: ${formatCurrency(refundAmount)} MXN
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-2">
-                      El reembolso se procesará en un plazo de 5-7 días hábiles
-                      al método de pago original.
-                    </p>
+                    {totalConektaPaid > 0 ? (
+                      <>
+                        <p className="text-sm text-zinc-600 mb-2">
+                          <strong>Reembolso:</strong> Recibirás el 80% del
+                          monto pagado con tarjeta (Conekta).
+                        </p>
+                        <p className="text-lg font-semibold text-[#103948]">
+                          Monto a reembolsar: $
+                          {formatCurrency(refundAmount)} MXN
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-2">
+                          El reembolso se procesará en un plazo de 5-7 días
+                          hábiles al método de pago original.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-zinc-600">
+                        No hay reembolso por tarjeta: esta reserva se pagó por
+                        otro método (efectivo/transferencia).
+                      </p>
+                    )}
                   </div>
                 );
               })()}

@@ -21,6 +21,7 @@ export interface Reservation {
   price: number;
   original_price: number;
   payment_id: string | null;
+  payment_method?: string | null;
   status: "confirmed" | "cancelled" | "completed";
   created_at: string;
   // Campos de descuentos

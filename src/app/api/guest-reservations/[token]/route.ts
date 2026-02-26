@@ -45,7 +45,7 @@ export async function GET(
     const { data: reservationData, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_amount, additional_payment_id, additional_payment_method, rescheduled_by_user_id, cancelled_by_user_id, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, payment_method, created_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_amount, additional_payment_id, additional_payment_method, rescheduled_by_user_id, cancelled_by_user_id, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at"
       )
       .eq("id", reservationId)
       .ilike("email", email)
