@@ -58,8 +58,8 @@ export async function GET(request: NextRequest) {
       return errorResponse("Error al cargar eventos", 500);
     }
 
-    // Formatear para react-big-calendar: { start, end, title, resource: { id } }
-    // Título muestra solo hora inicial (ej. "1:45 pm Nancy Garcia")
+    // Formatear para react-big-calendar: { start, end, title, resource }
+    // Títulos: manual_available → "Hora - Reservado para Alvero"; manual_client → #order_number Nombre; resto → #id Nombre
     const formatTime = (t: string) => {
       const s = String(t || "0").trim();
       const [h, m] = s.split(":").map((x) => Number(x) || 0);
@@ -83,6 +83,17 @@ export async function GET(request: NextRequest) {
       const startDate = fromZonedTime(startStr, MONTERREY_TZ);
       const endDate = fromZonedTime(endStr, MONTERREY_TZ);
       const name = (r.name || "").trim() || "Sin nombre";
+      // Slots de Nancy (naranjas): solo hora + título "Reservado para Alvero"
+      if (r.import_type === "manual_available") {
+        const title = `${formatTime(r.start_time)} - Reservado para Alvero`;
+        return {
+          id: r.id,
+          title,
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+          resource: { reservationId: r.id, source: r.source, import_type: r.import_type },
+        };
+      }
       // Citas de Alberto (manual_client): mostrar número de orden; resto: ID de reserva
       const displayId = r.import_type === "manual_client" && r.order_number ? r.order_number : String(r.id);
       const title = `${formatTime(r.start_time)} - #${displayId} ${name}`;

@@ -370,14 +370,14 @@ async function main() {
   }
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Borrar importaciones manuales anteriores (source = 'google_import' que no son de Appointly)
-  // Los de Appointly tienen google_event_id que empieza con "#"
+  // Borrar solo importaciones manuales (manual_available, manual_client, manual_other).
+  // No tocar las de Appointly (import_type = 'appointly').
   console.log("\nBorrando reservas manuales anteriores...");
   const { data: existingManual } = await supabase
     .from("reservations")
     .select("id")
     .eq("source", "google_import")
-    .not("google_event_id", "like", "#%");
+    .in("import_type", ["manual_available", "manual_client", "manual_other"]);
 
   if (existingManual && existingManual.length > 0) {
     const ids = existingManual.map((r) => r.id);

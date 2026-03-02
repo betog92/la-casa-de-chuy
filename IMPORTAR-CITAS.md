@@ -32,17 +32,27 @@ Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` de
 
 ## Paso 1 — Limpiar la base de datos y resetear la secuencia
 
+**Importante:** Este paso **debe hacerse siempre en el SQL Editor de Supabase** antes de reimportar. El script de importación intenta resetear la secuencia pero en Supabase suele fallar por permisos; si no se resetea, la secuencia sigue subiendo (10001, 10002, … 10745, 10746…) y por eso ves IDs altos.
+
 Abre el **SQL Editor de Supabase** y ejecuta:
 
 ```sql
 -- Borrar todas las citas importadas
 DELETE FROM reservations WHERE source = 'google_import';
 
--- Resetear la secuencia de IDs (empieza desde 10001)
+-- Resetear la secuencia de IDs (el próximo ID será 10001)
 ALTER SEQUENCE reservations_google_import_id_seq MINVALUE 10001 RESTART WITH 10001;
 ```
 
 > ⚠️ Esto borra **todas** las citas importadas (Appointly + manuales). Las reservas reales de la nueva web NO se tocan.
+
+**Ver valor actual de la secuencia** (opcional, para comprobar antes de reimportar):
+
+```sql
+SELECT last_value FROM reservations_google_import_id_seq;
+```
+
+Si ves por ejemplo `10745`, el próximo ID sería 10746. Después de ejecutar el `ALTER SEQUENCE ... RESTART WITH 10001` de arriba, el próximo ID será 10001.
 
 ---
 
@@ -83,6 +93,10 @@ Errores:    0
 
 ## Paso 4 — Importar citas manuales del Google Calendar (Fase 2)
 
+El script solo borra y reinserta las citas **manuales** (Nancy, Alberto, otras). No toca las de Appointly insertadas en el Paso 3.
+
+Requisitos: en `.env.local` deben estar `GOOGLE_CALENDAR_ID` y `GOOGLE_CALENDAR_CREDENTIALS` (JSON de la cuenta de servicio con acceso de solo lectura al calendario).
+
 ```bash
 node scripts/import-manual-events.mjs
 ```
@@ -109,8 +123,8 @@ Errores:    0
 
 1. Entra al **Calendario Admin** y confirma que se ven los 4 colores de importadas:
    - 🔵 **Cian** → Citas de Appointly (clientes reales web anterior)
-   - 🟣 **Morado** → Sesiones de Alberto con cliente confirmado
-   - 🟠 **Naranja** → Espacios disponibles para Alberto (slots de Nancy)
+   - 🟣 **Morado** → Sesiones de Alberto con cliente confirmado (muestra #orden + nombre)
+   - 🟠 **Naranja** → Espacios reservados para Alvero (slots de Nancy); en el calendario se muestra "Hora - Reservado para Alvero"
    - 🔴 **Rojo** → Otras citas manuales (45 min, no Appointly ni Alberto)
    - 🟦 **Azul oscuro** → Reservas reales de la nueva web
 
@@ -127,6 +141,7 @@ Errores:    0
 ## Notas importantes
 
 - **La secuencia de IDs** de citas importadas va de `10001` en adelante. Las reservas reales de la nueva web tienen IDs bajos (1, 2, 3...) y no se mezclan.
+- **Si ves reservaciones con ID 10745 o más:** es porque en alguna re-importación no se ejecutó el Paso 1 en el SQL Editor (o el reset falló). La secuencia no se reinició y siguió creciendo. Para la próxima re-importación, ejecuta el Paso 1 completo (DELETE + ALTER SEQUENCE) y los nuevos IDs volverán a empezar en 10001. Los IDs ya existentes (10745, etc.) no se cambian; solo afecta a las **siguientes** inserciones.
 - **No se envían emails** al importar — los clientes no son notificados.
 - **Los time slots quedan bloqueados** automáticamente vía trigger de Postgres, igual que las reservas reales.
 - **Después de 6 meses del lanzamiento**, las citas importadas se pueden eliminar con:

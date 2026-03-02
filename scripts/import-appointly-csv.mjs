@@ -112,16 +112,26 @@ async function main() {
   console.log(`\nModo: ${COMMIT ? "COMMIT (modifica la base de datos)" : "PREVIEW (solo lectura)"}\n`);
 
   // 1. Leer bookings.csv
-  const bookings = parseCSV(resolve(ROOT, "bookings.csv"));
+  const bookingsPath = resolve(ROOT, "bookings.csv");
+  if (!existsSync(bookingsPath)) {
+    console.error("No se encontró bookings.csv en la raíz del proyecto.");
+    process.exit(1);
+  }
+  const bookings = parseCSV(bookingsPath);
   console.log(`bookings.csv: ${bookings.length} filas leídas`);
 
   // 2. Leer orders_export_1.csv y construir mapa orden → teléfono
-  const orders = parseCSV(resolve(ROOT, "orders_export_1.csv"));
+  const ordersPath = resolve(ROOT, "orders_export_1.csv");
+  if (!existsSync(ordersPath)) {
+    console.error("No se encontró orders_export_1.csv en la raíz del proyecto.");
+    process.exit(1);
+  }
+  const orders = parseCSV(ordersPath);
   console.log(`orders_export_1.csv: ${orders.length} filas leídas`);
 
   const phoneByOrder = {};
   for (const order of orders) {
-    const name = (order["Name"] ?? "").trim();
+    const name = (order["Name"] ?? "").trim().replace(/^#/, "");
     const phone = (order["Billing Phone"] ?? order["Phone"] ?? "").trim();
     if (name && phone) {
       phoneByOrder[name] = phone;
@@ -155,7 +165,9 @@ async function main() {
       seenOrders[rawOrderNum] = 0;
     }
 
-    const phone = phoneByOrder[rawOrderNum] ?? null;
+    // Buscar teléfono: Appointly puede traer "#6521", Shopify suele tener "6521" o "#6521" en Name
+    const orderKeyForPhone = (rawOrderNum ?? "").replace(/^#/, "");
+    const phone = orderKeyForPhone ? phoneByOrder[orderKeyForPhone] ?? null : null;
     if (!phone) noPhone++;
 
     records.push({
