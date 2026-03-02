@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, dateFnsLocalizer, Views } from "react-big-calendar";
 import type { NavigateAction } from "react-big-calendar";
 import {
@@ -71,6 +71,29 @@ interface GooglePreviewEvent {
 
 export default function AdminCalendarioPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Inicializar fecha desde URL para que al volver (Atrás) se restaure el mes (sin pasar del mes actual ni 6 meses adelante)
+  const getInitialDate = useCallback(() => {
+    const m = searchParams.get("month");
+    const today = getMonterreyDate();
+    const minD = startOfMonth(today);
+    const maxD = addMonths(today, 6);
+    if (!m || m.length < 6) return minD;
+    const parts = m.split("-");
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) return minD;
+    const parsed = parse(`${year}-${String(month).padStart(2, "0")}-01`, "yyyy-MM-dd", new Date());
+    if (Number.isNaN(parsed.getTime())) return minD;
+    const d = startOfMonth(parsed);
+    if (d < minD) return minD;
+    if (d > maxD) return maxD;
+    return d;
+  }, [searchParams]);
+
+  const initialDate = useMemo(() => getInitialDate(), [getInitialDate]);
+
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -108,14 +131,11 @@ export default function AdminCalendarioPage() {
     }
   }, []);
 
-  const [date, setDate] = useState(() => getMonterreyDate());
-  const [range, setRange] = useState<{ start: Date; end: Date }>(() => {
-    const now = getMonterreyDate();
-    return {
-      start: startOfMonth(now),
-      end: endOfMonth(now),
-    };
-  });
+  const [date, setDate] = useState(initialDate);
+  const [range, setRange] = useState<{ start: Date; end: Date }>(() => ({
+    start: startOfMonth(initialDate),
+    end: endOfMonth(initialDate),
+  }));
 
   const fetchIdRef = useRef(0);
 
@@ -212,17 +232,23 @@ export default function AdminCalendarioPage() {
     []
   );
 
-  // Límite de 6 meses hacia el futuro (como en el calendario de reservas)
+  // Límite: no ir antes del mes actual ni más de 6 meses al futuro
+  const minDate = useMemo(() => startOfMonth(getMonterreyDate()), []);
   const maxDate = useMemo(() => addMonths(getMonterreyDate(), 6), []);
 
   const handleNavigate = useCallback(
     (newDate: Date) => {
       const newStart = startOfMonth(newDate);
+      const minStart = startOfMonth(minDate);
       const maxStart = startOfMonth(maxDate);
-      const clamped = newStart > maxStart ? maxDate : newDate;
+      let clamped = newDate;
+      if (newStart < minStart) clamped = minDate;
+      else if (newStart > maxStart) clamped = maxDate;
       setDate(clamped);
+      const monthStr = format(startOfMonth(clamped), "yyyy-MM");
+      router.replace(`/admin/calendario?month=${monthStr}`, { scroll: false });
     },
-    [maxDate]
+    [minDate, maxDate, router]
   );
 
   const isNextDisabled = useMemo(() => {
@@ -230,6 +256,12 @@ export default function AdminCalendarioPage() {
     const maxStart = startOfMonth(maxDate);
     return currentStart >= maxStart;
   }, [date, maxDate]);
+
+  const isPrevDisabled = useMemo(() => {
+    const currentStart = startOfMonth(date);
+    const minStart = startOfMonth(minDate);
+    return currentStart <= minStart;
+  }, [date, minDate]);
 
   const CustomToolbar = useCallback(
     (props: {
@@ -249,7 +281,7 @@ export default function AdminCalendarioPage() {
           ? Object.keys(views as Record<string, unknown>).filter((k) => (views as Record<string, unknown>)[k])
           : [];
       return (
-        <div className="rbc-toolbar">
+        <div className="rbc-toolbar" style={{ marginTop: "0.5rem", marginBottom: "0.75rem" }}>
           <span className="rbc-btn-group">
             <button
               type="button"
@@ -260,6 +292,7 @@ export default function AdminCalendarioPage() {
             <button
               type="button"
               onClick={() => onNavigate("PREV" as NavigateAction)}
+              disabled={isPrevDisabled}
             >
               {msgs.previous}
             </button>
@@ -271,7 +304,9 @@ export default function AdminCalendarioPage() {
               {msgs.next}
             </button>
           </span>
-          <span className="rbc-toolbar-label">{label}</span>
+          <span className="rbc-toolbar-label" style={{ fontSize: "1.35rem", fontWeight: 600, color: "#103948" }}>
+            {label}
+          </span>
           <span className="rbc-btn-group">
             {viewNames.length > 1 &&
               viewNames.map((name: string) => (
@@ -288,7 +323,7 @@ export default function AdminCalendarioPage() {
         </div>
       );
     },
-    [isNextDisabled]
+    [isNextDisabled, isPrevDisabled]
   );
 
   const handleSelectEvent = useCallback(

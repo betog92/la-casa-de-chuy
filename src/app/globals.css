@@ -47,10 +47,17 @@ html {
   display: none;
 }
 
-/* Botón Siguiente deshabilitado cuando se alcanza el límite de 6 meses */
+/* Botones Anterior/Siguiente deshabilitados en los límites (mes actual / +6 meses) */
 .rbc-toolbar button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Nombre del mes más visible en el calendario admin */
+.rbc-toolbar-label {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #103948;
 }
 
 /* Estilos para react-calendar */
