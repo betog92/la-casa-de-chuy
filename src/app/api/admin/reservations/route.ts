@@ -43,30 +43,42 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Si la búsqueda parece un número de orden de Appointly (#XXXX o XXXX),
-    // buscar también en google_event_id e incluir importadas
-    const isOrderSearch = search && /^#?\d+(-[a-z])?$/i.test(search);
-    const normalizedOrder = search.startsWith("#") ? search : search ? `#${search}` : "";
-
     let query = supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, discount_code, source, google_event_id",
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, discount_code, source, google_event_id, import_type, order_number",
         { count: "exact" }
       )
       .order("id", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (isOrderSearch) {
-      // Buscar por número de orden de Appointly (incluye importadas)
-      // Usa like para cubrir sufijos como #6521-b
-      query = query.like("google_event_id", `${normalizedOrder}%`);
-    } else {
-      // Búsqueda normal: excluir importadas
-      query = query.neq("source", "google_import");
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+    // Excluir slots de Nancy / "Reservado para Alvero" (manual_available)
+    query = query.or("import_type.is.null,import_type.neq.manual_available");
+
+    if (search) {
+      // Búsqueda "contiene": nombre, email, teléfono, orden #, google_event_id y (si es número) id
+      const term = search.replace(/^#/, "").trim();
+      const escaped = search
+        .replace(/\\/g, "\\\\")
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_")
+        .replace(/'/g, "''");
+      const pattern = `%${escaped}%`;
+      const quoted = pattern.includes(",") || pattern.includes('"')
+        ? `"${pattern.replace(/"/g, '""')}"`
+        : pattern;
+      const orParts = [
+        `name.ilike.${quoted}`,
+        `email.ilike.${quoted}`,
+        `phone.ilike.${quoted}`,
+        `order_number.ilike.${quoted}`,
+        `google_event_id.ilike.${quoted}`,
+      ];
+      const num = parseInt(term, 10);
+      if (term !== "" && !Number.isNaN(num) && num > 0 && String(num) === term) {
+        orParts.push(`id.eq.${num}`);
       }
+      query = query.or(orParts.join(","));
     }
 
     if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {

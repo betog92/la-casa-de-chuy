@@ -137,6 +137,15 @@ export default function AdminCalendarioPage() {
     end: endOfMonth(initialDate),
   }));
 
+  // Re-sincronizar fecha y rango cuando la URL cambie (p. ej. botón Atrás del navegador)
+  useEffect(() => {
+    setDate(initialDate);
+    setRange({
+      start: startOfMonth(initialDate),
+      end: endOfMonth(initialDate),
+    });
+  }, [initialDate]);
+
   const fetchIdRef = useRef(0);
 
   const fetchEvents = useCallback(async (start: Date, end: Date, signal?: AbortSignal) => {

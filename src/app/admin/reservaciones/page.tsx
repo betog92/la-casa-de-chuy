@@ -82,6 +82,10 @@ interface Reservation {
   created_at: string;
   reschedule_count?: number;
   discount_code: string | null;
+  source?: string | null;
+  import_type?: string | null;
+  order_number?: string | null;
+  google_event_id?: string | null;
 }
 
 const getStatusLabel = (status: string, rescheduleCount?: number): string => {
@@ -486,7 +490,27 @@ export default function AdminReservacionesPage() {
                       onClick={() => router.push(`/reservaciones/${r.id}`)}
                       className={`cursor-pointer transition-colors ${index % 2 === 1 ? "bg-zinc-100" : "bg-white"} hover:bg-zinc-200`}
                     >
-                      <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900">{r.id}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900">
+                        {r.source === "google_import" && r.order_number?.trim() ? (
+                          <>
+                            <span>#{r.order_number.trim()}</span>
+                            <span className="ml-1.5 inline-flex rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">Importada</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>#{r.id}</span>
+                            {r.order_number?.trim() && r.source !== "google_import" && (
+                              <span className="ml-1 text-zinc-500 font-normal">#{r.order_number.trim()}</span>
+                            )}
+                            {r.google_event_id && r.source !== "google_import" && (
+                              <span className="ml-1 text-zinc-500 font-normal">{r.google_event_id.startsWith("#") ? r.google_event_id : `#${r.google_event_id}`}</span>
+                            )}
+                            {r.source === "google_import" && (
+                              <span className="ml-1.5 inline-flex rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">Importada</span>
+                            )}
+                          </>
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-900">
                         {formatDisplayDateShort(r.date)}
                         <br />
