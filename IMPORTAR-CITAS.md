@@ -16,7 +16,7 @@ sql/04-cron-jobs.sql
 sql/populate-initial-data.sql
 ```
 
-Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` desde cero, ya están integrados. Si ya tienes la BD y quieres usar el calendario de renta de vestidos en la app, ejecuta además `sql/25-migration-vestido-calendar-events.sql` para crear la tabla y luego `node scripts/sync-vestidos-calendar.mjs --commit`.
+Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` desde cero, ya están integrados. Si ya tienes la BD y quieres usar el calendario de renta de vestidos en la app, ejecuta además `sql/25-migration-vestido-calendar-events.sql` para crear las tablas (vestido_calendar_notes y vestido_calendar_events) y luego `node scripts/sync-vestidos-calendar.mjs --commit`.
 
 ---
 
