@@ -437,6 +437,55 @@ export interface Database {
           created_at?: string;
         };
       };
+      vestido_calendar_events: {
+        Row: {
+          google_event_id: string;
+          title: string;
+          date: string;
+          original_start: string;
+          original_end: string;
+          is_all_day: boolean;
+          synced_at: string | null;
+        };
+        Insert: {
+          google_event_id: string;
+          title: string;
+          date: string;
+          original_start: string;
+          original_end: string;
+          is_all_day?: boolean;
+          synced_at?: string | null;
+        };
+        Update: {
+          google_event_id?: string;
+          title?: string;
+          date?: string;
+          original_start?: string;
+          original_end?: string;
+          is_all_day?: boolean;
+          synced_at?: string | null;
+        };
+      };
+      vestido_calendar_notes: {
+        Row: {
+          google_event_id: string;
+          title_override: string | null;
+          last_edited_at: string | null;
+          last_edited_by_user_id: string | null;
+        };
+        Insert: {
+          google_event_id: string;
+          title_override?: string | null;
+          last_edited_at?: string | null;
+          last_edited_by_user_id?: string | null;
+        };
+        Update: {
+          google_event_id?: string;
+          title_override?: string | null;
+          last_edited_at?: string | null;
+          last_edited_by_user_id?: string | null;
+        };
+      };
     };
     Functions: {
       get_available_slots: {

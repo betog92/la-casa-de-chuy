@@ -165,6 +165,31 @@ CREATE TABLE IF NOT EXISTS referrals (
 );
 
 -- =====================================================
+-- CALENDARIO DE RENTA DE VESTIDOS (copia desde Google)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS vestido_calendar_events (
+  google_event_id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  date TEXT NOT NULL,
+  original_start TEXT NOT NULL,
+  original_end TEXT NOT NULL,
+  is_all_day BOOLEAN NOT NULL DEFAULT FALSE,
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+COMMENT ON TABLE vestido_calendar_events IS 'Copia de eventos del calendario de renta de vestidos (Google). Sincronizada por scripts/sync-vestidos-calendar.mjs.';
+
+-- =====================================================
+-- NOTAS DEL CALENDARIO DE RENTA DE VESTIDOS (títulos editados en la app)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS vestido_calendar_notes (
+  google_event_id TEXT PRIMARY KEY,
+  title_override TEXT,
+  last_edited_at TIMESTAMP WITH TIME ZONE,
+  last_edited_by_user_id UUID REFERENCES users(id)
+);
+COMMENT ON TABLE vestido_calendar_notes IS 'Títulos editados por evento del calendario de vestidos. Solo en esta app; no modifica Google Calendar.';
+
+-- =====================================================
 -- ÍNDICES BÁSICOS PARA MEJORAR PERFORMANCE
 -- =====================================================
 CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin) WHERE is_admin = TRUE;
@@ -178,6 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_credits_user_id ON credits(user_id);
 CREATE INDEX IF NOT EXISTS idx_loyalty_points_user_id ON loyalty_points(user_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals(code);
+CREATE INDEX IF NOT EXISTS idx_vestido_calendar_events_date ON vestido_calendar_events(date);
 
 -- =====================================================
 -- ÍNDICES COMPUESTOS PARA CONSULTAS AVANZADAS

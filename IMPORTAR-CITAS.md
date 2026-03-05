@@ -16,7 +16,7 @@ sql/04-cron-jobs.sql
 sql/populate-initial-data.sql
 ```
 
-Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` desde cero, ya están integrados.
+Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` desde cero, ya están integrados. Si ya tienes la BD y quieres usar el calendario de renta de vestidos en la app, ejecuta además `sql/25-migration-vestido-calendar-events.sql` para crear la tabla y luego `node scripts/sync-vestidos-calendar.mjs --commit`.
 
 ---
 
@@ -45,6 +45,19 @@ ALTER SEQUENCE reservations_google_import_id_seq MINVALUE 10001 RESTART WITH 100
 ```
 
 > ⚠️ Esto borra **todas** las citas importadas (Appointly + manuales). Las reservas reales de la nueva web NO se tocan.
+
+Si también quieres limpiar los datos del **calendario de renta de vestidos** (eventos copiados de Google + títulos editados en la app), ejecuta además:
+
+```sql
+TRUNCATE vestido_calendar_events;
+TRUNCATE vestido_calendar_notes;
+```
+
+Después de reimportar citas, vuelve a llenar los eventos de vestidos con:
+
+```bash
+node scripts/sync-vestidos-calendar.mjs --commit
+```
 
 **Ver valor actual de la secuencia** (opcional, para comprobar antes de reimportar):
 

@@ -71,22 +71,16 @@ function toDateString(date: Date): string {
 }
 
 /**
- * Obtiene los eventos del calendario de Google en el rango:
+ * Obtiene los eventos de un calendario de Google en el rango:
  * desde hoy hasta 6 meses adelante (en zona horaria Monterrey).
- *
- * Solo devuelve eventos con hora (no eventos de todo el día),
- * aunque los incluye marcados con isAllDay = true para que el preview
- * los muestre y se pueda decidir qué hacer con ellos.
+ * Usa las mismas credenciales (cuenta de servicio); el calendario
+ * debe estar compartido con esa cuenta si es de otra cuenta de Google.
  */
-export async function fetchGoogleCalendarEvents(): Promise<GoogleCalendarEvent[]> {
-  const calendarId = process.env.GOOGLE_CALENDAR_ID;
-  if (!calendarId) {
-    throw new Error("Falta la variable de entorno GOOGLE_CALENDAR_ID");
-  }
-
+export async function fetchGoogleCalendarEventsFromCalendar(
+  calendarId: string
+): Promise<GoogleCalendarEvent[]> {
   const calendar = getCalendarClient();
 
-  // Rango: hoy → +6 meses en zona Monterrey
   const nowMonterrey = toZonedTime(new Date(), MONTERREY_TZ);
   const todayStart = startOfDay(nowMonterrey);
   const sixMonthsLater = addMonths(todayStart, 6);
@@ -114,7 +108,6 @@ export async function fetchGoogleCalendarEvents(): Promise<GoogleCalendarEvent[]
       let originalEnd = "";
 
       if (isAllDay) {
-        // Evento de todo el día: solo tiene date, sin hora
         date = event.start?.date ?? "";
         originalStart = date;
         originalEnd = event.end?.date ?? date;
@@ -139,6 +132,35 @@ export async function fetchGoogleCalendarEvents(): Promise<GoogleCalendarEvent[]
         isAllDay,
       };
     });
+}
+
+/**
+ * Obtiene los eventos del calendario principal (citas / Appointly).
+ */
+export async function fetchGoogleCalendarEvents(): Promise<GoogleCalendarEvent[]> {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  if (!calendarId) {
+    throw new Error("Falta la variable de entorno GOOGLE_CALENDAR_ID");
+  }
+  return fetchGoogleCalendarEventsFromCalendar(calendarId);
+}
+
+/**
+ * Obtiene los eventos del calendario de renta de vestidos (otra cuenta de Google,
+ * compartido con la misma cuenta de servicio). Solo lectura; no se importa a BD.
+ * Si no está configurado GOOGLE_CALENDAR_VESTIDOS_ID, devuelve [].
+ */
+export async function fetchVestidosCalendarEvents(): Promise<GoogleCalendarEvent[]> {
+  const calendarId = process.env.GOOGLE_CALENDAR_VESTIDOS_ID;
+  if (!calendarId?.trim()) {
+    return [];
+  }
+  try {
+    return await fetchGoogleCalendarEventsFromCalendar(calendarId.trim());
+  } catch (err) {
+    console.error("Error al obtener calendario de vestidos:", err);
+    return [];
+  }
 }
 
 /**

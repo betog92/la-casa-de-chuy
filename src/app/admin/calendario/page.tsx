@@ -51,16 +51,18 @@ const formats = {
 };
 
 interface CalendarEvent {
-  id: number;
+  id: number | string;
   title: string;
   start: Date;
   end: Date;
-  resource?: { reservationId: number; source?: string; import_type?: string | null };
+  resource?: { reservationId?: number; source?: string; import_type?: string | null; isVestidos?: boolean; googleEventId?: string };
 }
 
 interface GooglePreviewEvent {
   googleEventId: string;
   title: string;
+  /** Título editado en la app (vestido_calendar_notes); viene del API al cargar. */
+  title_override?: string | null;
   date: string;
   startTime: string;
   endTime: string;
@@ -108,6 +110,22 @@ export default function AdminCalendarioPage() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState<{ imported: number; skipped: number; errors: { googleEventId: string; error: string }[] } | null>(null);
 
+  // Calendario de renta de vestidos (solo lectura; no es reservación)
+  const [vestidosEvents, setVestidosEvents] = useState<GooglePreviewEvent[]>([]);
+  /** Títulos editados en la app por google_event_id; se usan en la agenda en lugar del de Google. */
+  const [vestidoTitleOverrides, setVestidoTitleOverrides] = useState<Record<string, string>>({});
+  const [vestidoDetail, setVestidoDetail] = useState<{
+    googleEventId: string;
+    title: string;
+    titleOverride: string | null;
+    date: string;
+    originalEnd: string;
+    lastEditedAt: string | null;
+    lastEditedBy: { id: string; name: string | null; email: string } | null;
+  } | null>(null);
+  const [vestidoNotesSaving, setVestidoNotesSaving] = useState(false);
+  const [vestidoSaveSuccess, setVestidoSaveSuccess] = useState(false);
+
   const handlePreview = useCallback(async () => {
     setPreviewLoading(true);
     setPreviewError("");
@@ -136,15 +154,6 @@ export default function AdminCalendarioPage() {
     start: startOfMonth(initialDate),
     end: endOfMonth(initialDate),
   }));
-
-  // Re-sincronizar fecha y rango cuando la URL cambie (p. ej. botón Atrás del navegador)
-  useEffect(() => {
-    setDate(initialDate);
-    setRange({
-      start: startOfMonth(initialDate),
-      end: endOfMonth(initialDate),
-    });
-  }, [initialDate]);
 
   const fetchIdRef = useRef(0);
 
@@ -218,6 +227,57 @@ export default function AdminCalendarioPage() {
     fetchEvents(range.start, range.end, ctrl.signal);
     return () => ctrl.abort();
   }, [range.start, range.end, fetchEvents]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await axios.get("/api/admin/google-calendar/vestidos");
+        if (!cancelled && res.data?.events) setVestidosEvents(res.data.events);
+      } catch {
+        if (!cancelled) setVestidosEvents([]);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const vestidosAsCalendarEvents = useMemo((): CalendarEvent[] => {
+    return vestidosEvents.map((ev) => {
+      const isAllDay = ev.isAllDay ?? !ev.originalStart?.includes("T");
+      const start = isAllDay
+        ? parse(ev.date + "T00:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date())
+        : new Date(ev.originalStart);
+      const end = isAllDay
+        ? parse(ev.originalEnd + "T00:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date())
+        : new Date(ev.originalEnd);
+      const title = vestidoTitleOverrides[ev.googleEventId] ?? ev.title_override ?? ev.title;
+      return {
+        id: `vestido-${ev.googleEventId}`,
+        title,
+        start,
+        end,
+        resource: { isVestidos: true, googleEventId: ev.googleEventId },
+      };
+    });
+  }, [vestidosEvents, vestidoTitleOverrides]);
+
+  const allDisplayEvents = useMemo(
+    () => [...events, ...vestidosAsCalendarEvents],
+    [events, vestidosAsCalendarEvents]
+  );
+
+  useEffect(() => {
+    if (!vestidoDetail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setVestidoDetail(null);
+        setVestidoSaveSuccess(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [vestidoDetail]);
 
   const handleRangeChange = useCallback(
     (newRange: { start: Date; end: Date } | Date[]) => {
@@ -336,11 +396,48 @@ export default function AdminCalendarioPage() {
   );
 
   const handleSelectEvent = useCallback(
-    (event: CalendarEvent) => {
+    async (event: CalendarEvent) => {
+      if (event.resource?.isVestidos && event.resource?.googleEventId) {
+        const googleEventId = event.resource.googleEventId;
+        const ev = vestidosEvents.find((e) => e.googleEventId === googleEventId);
+        setVestidoDetail({
+          googleEventId,
+          title: event.title,
+          titleOverride: null,
+          date: ev?.date ?? "",
+          originalEnd: ev?.originalEnd ?? "",
+          lastEditedAt: null,
+          lastEditedBy: null,
+        });
+        try {
+          const res = await axios.get(
+            `/api/admin/vestido-notes/${encodeURIComponent(googleEventId)}`
+          );
+          if (res.data?.success) {
+            const override = res.data.title_override ?? null;
+            setVestidoDetail((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    titleOverride: override,
+                    lastEditedAt: res.data.last_edited_at ?? null,
+                    lastEditedBy: res.data.last_edited_by ?? null,
+                  }
+                : null
+            );
+            if (override != null && override.trim() !== "") {
+              setVestidoTitleOverrides((prev) => ({ ...prev, [googleEventId]: override.trim() }));
+            }
+          }
+        } catch {
+          // Mantener modal con datos iniciales
+        }
+        return;
+      }
       const id = event.resource?.reservationId ?? event.id;
       router.push(`/reservaciones/${id}`);
     },
-    [router]
+    [router, vestidosEvents]
   );
 
   // Horarios del estudio: 11:00 - 19:15 (slots de 45 min, último termina 19:15)
@@ -516,7 +613,7 @@ export default function AdminCalendarioPage() {
           <Calendar
             localizer={localizer}
             formats={formats}
-            events={events}
+            events={allDisplayEvents}
             startAccessor="start"
             endAccessor="end"
             titleAccessor="title"
@@ -541,6 +638,16 @@ export default function AdminCalendarioPage() {
             step={45}
             timeslots={1}
             eventPropGetter={(event: CalendarEvent) => {
+              if (event.resource?.isVestidos) {
+                return {
+                  style: {
+                    backgroundColor: "#0ea5e9",
+                    borderRadius: "4px",
+                    opacity: 0.9,
+                    borderStyle: "dashed",
+                  },
+                };
+              }
               const importType = event.resource?.import_type;
               const source = event.resource?.source;
               let bgColor = "#103948"; // regular
@@ -562,6 +669,106 @@ export default function AdminCalendarioPage() {
           />
         </div>
       </div>
+
+      {vestidoDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+          onClick={() => { setVestidoDetail(null); setVestidoSaveSuccess(false); }}
+        >
+          <div
+            className="my-8 w-full max-w-lg rounded-xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-zinc-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-[#103948]">Renta de vestido</h2>
+              <div className="mt-2">
+                <label className="mb-1 block text-xs font-medium text-zinc-600">Título / descripción (editable)</label>
+                <input
+                  type="text"
+                  value={vestidoDetail.titleOverride ?? vestidoDetail.title}
+                  onChange={(e) =>
+                    setVestidoDetail((p) =>
+                      p ? { ...p, titleOverride: e.target.value || null } : null
+                    )
+                  }
+                  className="w-full rounded border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-800"
+                  placeholder="Ej. 3839 renta de vestido con cauda evento 24 abril"
+                />
+              </div>
+              {vestidoDetail.lastEditedAt && vestidoDetail.lastEditedBy && (() => {
+                const editedAt = new Date(vestidoDetail.lastEditedAt);
+                if (Number.isNaN(editedAt.getTime())) return null;
+                return (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Editado por última vez por {vestidoDetail.lastEditedBy.name ?? vestidoDetail.lastEditedBy.email}{" "}
+                    el {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
+                  </p>
+                );
+              })()}
+            </div>
+            <div className="flex flex-col gap-2 border-t border-zinc-200 px-6 py-4">
+              {vestidoSaveSuccess && (
+                <p className="text-sm text-green-600">Guardado correctamente.</p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setVestidoDetail(null); setVestidoSaveSuccess(false); }}
+                  className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  disabled={vestidoNotesSaving}
+                  onClick={async () => {
+                  if (!vestidoDetail) return;
+                  setVestidoNotesSaving(true);
+                  setVestidoSaveSuccess(false);
+                  try {
+                    const res = await axios.patch(
+                      `/api/admin/vestido-notes/${encodeURIComponent(vestidoDetail.googleEventId)}`,
+                      {
+                        title_override: (vestidoDetail.titleOverride ?? vestidoDetail.title).trim() || null,
+                      }
+                    );
+                    if (res.data?.success) {
+                      const newOverride = res.data.title_override ?? null;
+                      setVestidoDetail((p) =>
+                        p
+                          ? {
+                              ...p,
+                              titleOverride: newOverride,
+                              lastEditedAt: res.data.last_edited_at ?? null,
+                              lastEditedBy: res.data.last_edited_by ?? null,
+                            }
+                          : null
+                      );
+                      setVestidoTitleOverrides((prev) => {
+                        const next = { ...prev };
+                        if (newOverride != null && newOverride.trim() !== "") {
+                          next[vestidoDetail.googleEventId] = newOverride.trim();
+                        } else {
+                          delete next[vestidoDetail.googleEventId];
+                        }
+                        return next;
+                      });
+                      setVestidoSaveSuccess(true);
+                      setTimeout(() => setVestidoSaveSuccess(false), 4000);
+                    }
+                  } finally {
+                    setVestidoNotesSaving(false);
+                  }
+                  }}
+                  className="flex-1 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-60"
+                >
+                  {vestidoNotesSaving ? "Guardando…" : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
