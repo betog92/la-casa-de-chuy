@@ -27,6 +27,16 @@ const getMonterreyDate = (): Date => {
   return startOfDay(monterreyTime);
 };
 
+/** Colores de eventos del calendario (leyenda y eventPropGetter usan la misma fuente) */
+const CALENDAR_COLORS = {
+  reservation: "#103948",
+  reservationOldWeb: "#0e7490",
+  reservationManual: "#b91c1c",
+  alveroReservation: "#6d28d9",
+  alveroSpace: "#b45309",
+  vestidos: "#0ea5e9",
+} as const;
+
 const locales = { es };
 const localizer = dateFnsLocalizer({
   format,
@@ -664,7 +674,7 @@ export default function AdminCalendarioPage() {
               if (event.resource?.isVestidos) {
                 return {
                   style: {
-                    backgroundColor: "#0ea5e9",
+                    backgroundColor: CALENDAR_COLORS.vestidos,
                     borderRadius: "4px",
                     opacity: 0.9,
                     borderStyle: "dashed",
@@ -673,13 +683,13 @@ export default function AdminCalendarioPage() {
               }
               const importType = event.resource?.import_type;
               const source = event.resource?.source;
-              let bgColor = "#103948";
+              let bgColor: string = CALENDAR_COLORS.reservation;
               if (source === "google_import") {
-                if (importType === "appointly") bgColor = "#0e7490";
-                else if (importType === "manual_client") bgColor = "#6d28d9";
-                else if (importType === "manual_available") bgColor = "#b45309";
-                else if (importType === "manual_other") bgColor = "#b91c1c";
-                else bgColor = "#0e7490";
+                if (importType === "appointly") bgColor = CALENDAR_COLORS.reservationOldWeb;
+                else if (importType === "manual_client") bgColor = CALENDAR_COLORS.alveroReservation;
+                else if (importType === "manual_available") bgColor = CALENDAR_COLORS.alveroSpace;
+                else if (importType === "manual_other") bgColor = CALENDAR_COLORS.reservationManual;
+                else bgColor = CALENDAR_COLORS.reservationOldWeb;
               }
               return {
                 style: {
@@ -691,6 +701,35 @@ export default function AdminCalendarioPage() {
             }}
           />
         </div>
+      </div>
+
+      {/* Leyenda de colores */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-700">
+        <span className="font-medium text-zinc-500">Colores:</span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.reservation }} aria-hidden />
+          Reservación
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.reservationOldWeb }} aria-hidden />
+          Reservación (página web vieja)
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.reservationManual }} aria-hidden />
+          Reservación manuales
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.alveroReservation }} aria-hidden />
+          Reservación de Alvero
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.alveroSpace }} aria-hidden />
+          Espacio reservado para Alvero
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded border border-zinc-400/50" style={{ backgroundColor: CALENDAR_COLORS.vestidos, borderStyle: "dashed" }} aria-hidden />
+          Renta de vestidos
+        </span>
       </div>
 
       {vestidoDetail && (
