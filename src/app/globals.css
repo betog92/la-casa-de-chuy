@@ -37,9 +37,18 @@ html {
   overflow-x: hidden;
 }
 
-/* Ocultar fila "todo el día" vacía en react-big-calendar (vistas Semana y Día) */
+/* Mostrar fila "todo el día" en Semana y Día para eventos de vestidos (antes estaba display:none) */
 .rbc-time-view .rbc-allday-cell {
-  display: none;
+  min-height: 2.5rem;
+  height: auto !important;
+}
+.rbc-time-view .rbc-time-header .rbc-row,
+.rbc-time-view .rbc-time-header-content .rbc-row {
+  min-height: 2.5rem;
+  flex-shrink: 0;
+}
+.rbc-time-view .rbc-allday-events {
+  min-height: 2rem;
 }
 
 /* Ocultar etiqueta de hora duplicada en eventos (vistas Semana y Día) - el título ya incluye la hora */

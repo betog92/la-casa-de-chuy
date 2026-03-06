@@ -8,11 +8,13 @@ import {
   format,
   parse,
   startOfWeek,
+  endOfWeek,
   getDay,
   startOfMonth,
   endOfMonth,
   addMonths,
   startOfDay,
+  endOfDay,
 } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
@@ -55,6 +57,7 @@ interface CalendarEvent {
   title: string;
   start: Date;
   end: Date;
+  allDay?: boolean;
   resource?: { reservationId?: number; source?: string; import_type?: string | null; isVestidos?: boolean; googleEventId?: string };
 }
 
@@ -223,10 +226,24 @@ export default function AdminCalendarioPage() {
   }, [fetchEvents, range.start, range.end]);
 
   useEffect(() => {
+    if (view === "month") {
+      setRange({ start: startOfMonth(date), end: endOfMonth(date) });
+    } else if (view === "week") {
+      setRange({ start: startOfWeek(date, { locale: es }), end: endOfWeek(date, { locale: es }) });
+    } else {
+      setRange({ start: startOfDay(date), end: endOfDay(date) });
+    }
+  }, [view, date]);
+
+  useEffect(() => {
     const ctrl = new AbortController();
     fetchEvents(range.start, range.end, ctrl.signal);
     return () => ctrl.abort();
   }, [range.start, range.end, fetchEvents]);
+
+  useEffect(() => {
+    if (view === "month") setDate(initialDate);
+  }, [initialDate, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,18 +262,17 @@ export default function AdminCalendarioPage() {
   const vestidosAsCalendarEvents = useMemo((): CalendarEvent[] => {
     return vestidosEvents.map((ev) => {
       const isAllDay = ev.isAllDay ?? !ev.originalStart?.includes("T");
-      const start = isAllDay
-        ? parse(ev.date + "T00:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date())
-        : new Date(ev.originalStart);
-      const end = isAllDay
-        ? parse(ev.originalEnd + "T00:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date())
-        : new Date(ev.originalEnd);
+      const atNoon = parse(ev.date + "T12:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date());
+      const startDay = startOfDay(atNoon);
+      const start = isAllDay ? startDay : new Date(ev.originalStart);
+      const end = isAllDay ? endOfDay(startDay) : new Date(ev.originalEnd);
       const title = vestidoTitleOverrides[ev.googleEventId] ?? ev.title_override ?? ev.title;
       return {
         id: `vestido-${ev.googleEventId}`,
         title,
         start,
         end,
+        allDay: isAllDay,
         resource: { isVestidos: true, googleEventId: ev.googleEventId },
       };
     });
@@ -296,6 +312,9 @@ export default function AdminCalendarioPage() {
     (newView: "month" | "week" | "day" | "work_week" | "agenda") => {
       if (newView === "month" || newView === "week" || newView === "day") {
         setView(newView);
+        if (newView === "week" || newView === "day") {
+          setDate(getMonterreyDate());
+        }
       }
     },
     []
@@ -320,17 +339,19 @@ export default function AdminCalendarioPage() {
     [minDate, maxDate, router]
   );
 
+  const today = useMemo(() => getMonterreyDate(), []);
+
   const isNextDisabled = useMemo(() => {
-    const currentStart = startOfMonth(date);
-    const maxStart = startOfMonth(maxDate);
-    return currentStart >= maxStart;
-  }, [date, maxDate]);
+    if (view === "month") return startOfMonth(date).getTime() >= startOfMonth(maxDate).getTime();
+    if (view === "week") return startOfWeek(date, { locale: es }).getTime() >= startOfWeek(maxDate, { locale: es }).getTime();
+    return startOfDay(date).getTime() >= startOfDay(maxDate).getTime();
+  }, [view, date, maxDate]);
 
   const isPrevDisabled = useMemo(() => {
-    const currentStart = startOfMonth(date);
-    const minStart = startOfMonth(minDate);
-    return currentStart <= minStart;
-  }, [date, minDate]);
+    if (view === "month") return startOfMonth(date).getTime() <= startOfMonth(today).getTime();
+    if (view === "week") return startOfWeek(date, { locale: es }).getTime() <= startOfWeek(today, { locale: es }).getTime();
+    return startOfDay(date).getTime() <= startOfDay(today).getTime();
+  }, [view, date, today]);
 
   const CustomToolbar = useCallback(
     (props: {
@@ -617,6 +638,7 @@ export default function AdminCalendarioPage() {
             startAccessor="start"
             endAccessor="end"
             titleAccessor="title"
+            allDayAccessor="allDay"
             style={{ height: "100%" }}
             popup={true}
             view={view}
@@ -637,6 +659,7 @@ export default function AdminCalendarioPage() {
             max={maxTime}
             step={45}
             timeslots={1}
+            showMultiDayTimes={false}
             eventPropGetter={(event: CalendarEvent) => {
               if (event.resource?.isVestidos) {
                 return {
@@ -650,13 +673,13 @@ export default function AdminCalendarioPage() {
               }
               const importType = event.resource?.import_type;
               const source = event.resource?.source;
-              let bgColor = "#103948"; // regular
+              let bgColor = "#103948";
               if (source === "google_import") {
-                if (importType === "appointly") bgColor = "#0e7490";          // cian
-                else if (importType === "manual_client") bgColor = "#6d28d9"; // morado
-                else if (importType === "manual_available") bgColor = "#b45309"; // naranja
-                else if (importType === "manual_other") bgColor = "#b91c1c"; // rojo
-                else bgColor = "#0e7490"; // fallback cian
+                if (importType === "appointly") bgColor = "#0e7490";
+                else if (importType === "manual_client") bgColor = "#6d28d9";
+                else if (importType === "manual_available") bgColor = "#b45309";
+                else if (importType === "manual_other") bgColor = "#b91c1c";
+                else bgColor = "#0e7490";
               }
               return {
                 style: {
