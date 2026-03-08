@@ -69,6 +69,64 @@ html {
   color: #103948;
 }
 
+/* En móvil: "+N más" y el número del día no capturan el clic; el toque va al cuadro y abre nuestro modal (onSelectSlot), no vista día */
+@media (max-width: 767px) {
+  .rbc-month-view .rbc-show-more {
+    pointer-events: none;
+  }
+  .rbc-month-view .rbc-date-cell a,
+  .rbc-month-view .rbc-date-cell button {
+    pointer-events: none;
+  }
+  /* Vista semana: evitar que el encabezado del día cambie a vista día; que el slot abra el modal */
+  .rbc-time-view .rbc-time-header-content a,
+  .rbc-time-view .rbc-time-header-content button {
+    pointer-events: none;
+  }
+}
+
+/* En móvil: más espacio entre botones del toolbar (Hoy, Anterior, Siguiente, Mes, Semana, Día) */
+@media (max-width: 767px) {
+  .rbc-toolbar {
+    gap: 0.75rem 1rem !important;
+  }
+  .rbc-toolbar .rbc-btn-group {
+    gap: 0.5rem !important;
+  }
+  .rbc-toolbar .rbc-btn-group button {
+    margin: 0 0.15rem;
+    padding: 0.4rem 0.6rem;
+  }
+}
+
+/* Margen abajo del grupo Mes / Semana / Día */
+.rbc-toolbar .rbc-btn-group:last-of-type {
+  margin-bottom: 0.75rem;
+}
+@media (min-width: 768px) {
+  .rbc-toolbar .rbc-btn-group:last-of-type {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* En móvil: popup "+N más" del calendario centrado y completo (evita que salga cortado) */
+@media (max-width: 767px) {
+  .rbc-overlay {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    right: auto !important;
+    bottom: auto !important;
+    max-width: calc(100vw - 2rem);
+    max-height: 85vh;
+    overflow: auto;
+    z-index: 50;
+    border-radius: 0.75rem;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  }
+}
+
 /* Estilos para react-calendar */
 .react-calendar {
   width: 100% !important;

@@ -37,6 +37,20 @@ const CALENDAR_COLORS = {
   vestidos: "#0ea5e9",
 } as const;
 
+function getEventColor(event: { resource?: { isVestidos?: boolean; source?: string; import_type?: string | null } }): string {
+  if (event.resource?.isVestidos) return CALENDAR_COLORS.vestidos;
+  const source = event.resource?.source;
+  const importType = event.resource?.import_type;
+  if (source === "google_import") {
+    if (importType === "appointly") return CALENDAR_COLORS.reservationOldWeb;
+    if (importType === "manual_client") return CALENDAR_COLORS.alveroReservation;
+    if (importType === "manual_available") return CALENDAR_COLORS.alveroSpace;
+    if (importType === "manual_other") return CALENDAR_COLORS.reservationManual;
+    return CALENDAR_COLORS.reservationOldWeb;
+  }
+  return CALENDAR_COLORS.reservation;
+}
+
 const locales = { es };
 const localizer = dateFnsLocalizer({
   format,
@@ -114,15 +128,6 @@ export default function AdminCalendarioPage() {
   const [error, setError] = useState("");
   const [view, setView] = useState<"month" | "week" | "day">("month");
 
-  // Estado del preview de Google Calendar
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState("");
-  const [previewEvents, setPreviewEvents] = useState<GooglePreviewEvent[] | null>(null);
-
-  // Estado de la importación real
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ imported: number; skipped: number; errors: { googleEventId: string; error: string }[] } | null>(null);
-
   // Calendario de renta de vestidos (solo lectura; no es reservación)
   const [vestidosEvents, setVestidosEvents] = useState<GooglePreviewEvent[]>([]);
   /** Títulos editados en la app por google_event_id; se usan en la agenda en lugar del de Google. */
@@ -139,27 +144,16 @@ export default function AdminCalendarioPage() {
   const [vestidoNotesSaving, setVestidoNotesSaving] = useState(false);
   const [vestidoSaveSuccess, setVestidoSaveSuccess] = useState(false);
 
-  const handlePreview = useCallback(async () => {
-    setPreviewLoading(true);
-    setPreviewError("");
-    setPreviewEvents(null);
-    setSyncResult(null);
-    try {
-      const res = await axios.get("/api/admin/google-calendar/preview");
-      if (res.data.success) {
-        setPreviewEvents(res.data.events ?? []);
-      } else {
-        setPreviewError(res.data.error || "Error al obtener preview");
-      }
-    } catch (err) {
-      setPreviewError(
-        axios.isAxiosError(err)
-          ? (err.response?.data?.error as string) || err.message || "Error al obtener preview"
-          : "Error al conectar con Google Calendar"
-      );
-    } finally {
-      setPreviewLoading(false);
-    }
+  /** En móvil, al tocar un día en vista mes se abre un modal centrado con los eventos del día */
+  const [dayModal, setDayModal] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
 
   const [date, setDate] = useState(initialDate);
@@ -211,29 +205,6 @@ export default function AdminCalendarioPage() {
       }
     }
   }, []);
-
-  const handleSync = useCallback(async () => {
-    if (!confirm("¿Confirmas la importación de las citas de Appointly desde Google Calendar? Esta acción insertará reservas en la base de datos.")) return;
-    setSyncLoading(true);
-    setSyncResult(null);
-    try {
-      const res = await axios.post("/api/admin/google-calendar/sync");
-      if (res.data.success) {
-        setSyncResult({ imported: res.data.imported, skipped: res.data.skipped, errors: res.data.errors ?? [] });
-        fetchEvents(range.start, range.end);
-      } else {
-        setPreviewError(res.data.error || "Error al sincronizar");
-      }
-    } catch (err) {
-      setPreviewError(
-        axios.isAxiosError(err)
-          ? (err.response?.data?.error as string) || err.message || "Error al sincronizar"
-          : "Error al conectar con Google Calendar"
-      );
-    } finally {
-      setSyncLoading(false);
-    }
-  }, [fetchEvents, range.start, range.end]);
 
   useEffect(() => {
     if (view === "month") {
@@ -293,6 +264,17 @@ export default function AdminCalendarioPage() {
     [events, vestidosAsCalendarEvents]
   );
 
+  /** Eventos del modal día ordenados (vestidos primero, luego por hora); solo cuando dayModal está abierto */
+  const sortedDayModalEvents = useMemo(() => {
+    if (!dayModal || dayModal.events.length === 0) return [];
+    return [...dayModal.events].sort((a, b) => {
+      const aV = a.resource?.isVestidos ? 0 : 1;
+      const bV = b.resource?.isVestidos ? 0 : 1;
+      if (aV !== bV) return aV - bV;
+      return a.start.getTime() - b.start.getTime();
+    });
+  }, [dayModal]);
+
   useEffect(() => {
     if (!vestidoDetail) return;
     const onKey = (e: KeyboardEvent) => {
@@ -304,6 +286,15 @@ export default function AdminCalendarioPage() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [vestidoDetail]);
+
+  useEffect(() => {
+    if (!dayModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDayModal(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [dayModal]);
 
   const handleRangeChange = useCallback(
     (newRange: { start: Date; end: Date } | Date[]) => {
@@ -381,7 +372,7 @@ export default function AdminCalendarioPage() {
           ? Object.keys(views as Record<string, unknown>).filter((k) => (views as Record<string, unknown>)[k])
           : [];
       return (
-        <div className="rbc-toolbar" style={{ marginTop: "0.5rem", marginBottom: "0.75rem" }}>
+        <div className="rbc-toolbar mt-4 mb-4 px-1 sm:mt-2 sm:mb-3 sm:px-0" style={{ marginTop: "0", marginBottom: "0" }}>
           <span className="rbc-btn-group">
             <button
               type="button"
@@ -426,7 +417,8 @@ export default function AdminCalendarioPage() {
     [isNextDisabled, isPrevDisabled]
   );
 
-  const handleSelectEvent = useCallback(
+  /** Abre la reservación (detalle) o el modal de vestido. Usado desde el calendario y desde el modal del día (móvil). */
+  const openReservationOrVestido = useCallback(
     async (event: CalendarEvent) => {
       if (event.resource?.isVestidos && event.resource?.googleEventId) {
         const googleEventId = event.resource.googleEventId;
@@ -471,6 +463,37 @@ export default function AdminCalendarioPage() {
     [router, vestidosEvents]
   );
 
+  const handleSelectEvent = useCallback(
+    async (event: CalendarEvent) => {
+      // En móvil + vista mes o semana: siempre abrir el modal del día (la vista se ve muy chiquita)
+      if (isMobile && (view === "month" || view === "week")) {
+        const start = startOfDay(event.start);
+        const end = endOfDay(event.start);
+        const dayEvents = allDisplayEvents.filter(
+          (ev) => ev.start < end && ev.end > start
+        );
+        setDayModal({ date: start, events: dayEvents });
+        return;
+      }
+      await openReservationOrVestido(event);
+    },
+    [isMobile, view, allDisplayEvents, openReservationOrVestido]
+  );
+
+  /** En móvil + vista mes: al tocar un día, abrir modal centrado con los eventos de ese día */
+  const handleSelectSlot = useCallback(
+    (slotInfo: { start: Date; end: Date; action: string }) => {
+      if (!isMobile || view !== "month") return;
+      const start = slotInfo.start;
+      const end = slotInfo.end;
+      const dayEvents = allDisplayEvents.filter(
+        (ev) => ev.start < end && ev.end > start
+      );
+      setDayModal({ date: start, events: dayEvents });
+    },
+    [isMobile, view, allDisplayEvents]
+  );
+
   // Horarios del estudio: 11:00 - 19:15 (slots de 45 min, último termina 19:15)
   const minTime = useMemo(() => {
     const d = new Date();
@@ -511,122 +534,17 @@ export default function AdminCalendarioPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1
-            className="text-3xl font-bold text-[#103948]"
-            style={{ fontFamily: "var(--font-cormorant), serif" }}
-          >
-            Calendario
-          </h1>
-          <p className="mt-1 text-zinc-600">
-            Vista de reservas. Haz clic en una para ver detalles.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handlePreview}
-            disabled={previewLoading || syncLoading}
-            className="flex items-center gap-2 rounded-lg border border-[#103948] px-4 py-2 text-sm font-semibold text-[#103948] transition-colors hover:bg-[#103948] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {previewLoading ? (
-              <>
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                Cargando...
-              </>
-            ) : (
-              "Ver citas de Google Calendar"
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleSync}
-            disabled={syncLoading || previewLoading}
-            className="flex items-center gap-2 rounded-lg bg-[#103948] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0d2d38] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {syncLoading ? (
-              <>
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                Importando...
-              </>
-            ) : (
-              "Importar citas (Appointly)"
-            )}
-          </button>
-        </div>
+      <div>
+        <h1
+          className="text-3xl font-bold text-[#103948]"
+          style={{ fontFamily: "var(--font-cormorant), serif" }}
+        >
+          Calendario
+        </h1>
+        <p className="mt-1 text-zinc-600">
+          Vista de reservas. Haz clic en una para ver detalles.
+        </p>
       </div>
-
-      {/* Panel de preview de Google Calendar */}
-      {previewError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {previewError}
-        </div>
-      )}
-      {previewEvents !== null && (
-        <div className="rounded-lg border border-zinc-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
-            <h2 className="font-semibold text-zinc-800">
-              Preview — Google Calendar{" "}
-              <span className="font-normal text-zinc-500">
-                (hoy → +6 meses · {previewEvents.length} evento{previewEvents.length !== 1 ? "s" : ""})
-              </span>
-            </h2>
-            <button
-              type="button"
-              onClick={() => setPreviewEvents(null)}
-              className="text-sm text-zinc-400 hover:text-zinc-700"
-            >
-              Cerrar
-            </button>
-          </div>
-          {previewEvents.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-zinc-500">
-              No se encontraron eventos en Google Calendar para este rango.
-            </p>
-          ) : (
-            <div className="divide-y divide-zinc-100 max-h-72 overflow-y-auto">
-              {previewEvents.map((ev) => (
-                <div key={ev.googleEventId} className="flex items-start gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-zinc-800">{ev.title}</p>
-                    <p className="text-xs text-zinc-500">
-                      {ev.date}
-                      {ev.isAllDay ? (
-                        <span className="ml-2 rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-700">Todo el día</span>
-                      ) : (
-                        <> · {ev.startTime.slice(0, 5)} – {ev.endTime.slice(0, 5)}</>
-                      )}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 font-mono">
-                    {ev.googleEventId.slice(0, 10)}…
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="border-t border-zinc-100 px-4 py-3 text-xs text-zinc-400">
-            Estos datos son solo de lectura. Nada ha sido importado aún.
-          </div>
-        </div>
-      )}
-
-      {/* Resultado de la importación */}
-      {syncResult !== null && (
-        <div className={`rounded-lg border p-4 ${syncResult.errors.length > 0 ? "border-amber-200 bg-amber-50" : "border-green-200 bg-green-50"}`}>
-          <p className={`font-semibold ${syncResult.errors.length > 0 ? "text-amber-800" : "text-green-800"}`}>
-            Importación completada
-          </p>
-          <ul className="mt-1 text-sm text-zinc-700 space-y-0.5">
-            <li>Reservas importadas: <strong>{syncResult.imported}</strong></li>
-            <li>Ya existían (omitidas): <strong>{syncResult.skipped}</strong></li>
-            {syncResult.errors.length > 0 && (
-              <li className="text-red-700">Errores: <strong>{syncResult.errors.length}</strong></li>
-            )}
-          </ul>
-        </div>
-      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
@@ -640,7 +558,7 @@ export default function AdminCalendarioPage() {
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
           </div>
         )}
-        <div className="h-[650px] p-4">
+        <div className="h-[70vh] sm:h-[650px] p-4 min-h-[400px]">
           <Calendar
             localizer={localizer}
             formats={formats}
@@ -650,13 +568,16 @@ export default function AdminCalendarioPage() {
             titleAccessor="title"
             allDayAccessor="allDay"
             style={{ height: "100%" }}
-            popup={true}
+            popup={!isMobile}
+            doShowMoreDrillDown={!isMobile}
             view={view}
             date={date}
             onView={handleViewChange}
             onNavigate={handleNavigate}
             onRangeChange={handleRangeChange}
             onSelectEvent={handleSelectEvent}
+            onSelectSlot={handleSelectSlot}
+            selectable={isMobile && (view === "month" || view === "week")}
             getNow={getMonterreyDate}
             messages={messages}
             culture="es"
@@ -704,9 +625,9 @@ export default function AdminCalendarioPage() {
       </div>
 
       {/* Leyenda de colores */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-700">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-700 overflow-visible">
         <span className="font-medium text-zinc-500">Colores:</span>
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 basis-full sm:basis-auto mt-0.5 sm:mt-0">
           <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.reservation }} aria-hidden />
           Reservación
         </span>
@@ -727,10 +648,75 @@ export default function AdminCalendarioPage() {
           Espacio reservado para Alvero
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3 w-3 shrink-0 rounded border border-zinc-400/50" style={{ backgroundColor: CALENDAR_COLORS.vestidos, borderStyle: "dashed" }} aria-hidden />
+          <span className="h-3 w-3 min-w-[0.75rem] shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.vestidos }} aria-hidden />
           Renta de vestidos
         </span>
       </div>
+
+      {/* Modal día (móvil): al tocar un día en vista mes se abre centrado con los eventos */}
+      {dayModal && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDayModal(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Eventos del día"
+        >
+          <div
+            className="w-full md:max-w-md max-h-[85vh] flex flex-col rounded-xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+              <h2 className="text-lg font-semibold text-[#103948]">
+                {format(dayModal.date, "EEEE d 'de' MMMM", { locale: es })}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setDayModal(null)}
+                className="rounded p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                aria-label="Cerrar"
+              >
+                <span className="text-xl leading-none">×</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-2">
+              {sortedDayModalEvents.length === 0 ? (
+                <p className="py-6 text-center text-sm text-zinc-500">No hay eventos este día.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {sortedDayModalEvents.map((ev) => (
+                    <li key={ev.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDayModal(null);
+                          openReservationOrVestido(ev);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2.5 text-left text-sm transition-colors hover:bg-zinc-50 active:bg-zinc-100"
+                      >
+                        <span
+                          className="h-4 w-4 shrink-0 rounded"
+                          style={{
+                            backgroundColor: getEventColor(ev),
+                            border: ev.resource?.isVestidos ? "1px dashed rgba(0,0,0,0.2)" : undefined,
+                          }}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1 truncate font-medium text-zinc-800">{ev.title}</span>
+                        {!ev.resource?.isVestidos && (
+                          <span className="shrink-0 text-xs text-zinc-500">
+                            {format(ev.start, "h:mm a", { locale: es })} – {format(ev.end, "h:mm a", { locale: es })}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {vestidoDetail && (
         <div
