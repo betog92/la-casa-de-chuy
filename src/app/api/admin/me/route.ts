@@ -10,7 +10,7 @@ import {
  * Usado por el frontend para proteger rutas y mostrar/ocultar el panel.
  */
 export async function GET() {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isAdmin, isSuperAdmin } = await requireAdmin();
 
   if (!user) {
     return unauthorizedResponse("Debes iniciar sesión para acceder");
@@ -20,5 +20,5 @@ export async function GET() {
     return forbiddenResponse("No tienes permisos de administrador");
   }
 
-  return successResponse({ user, isAdmin: true });
+  return successResponse({ user, isAdmin: true, isSuperAdmin: isSuperAdmin ?? false });
 }

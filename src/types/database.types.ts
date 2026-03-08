@@ -17,6 +17,7 @@ export interface Database {
           phone: string | null;
           password_hash: string | null;
           is_admin: boolean;
+          is_super_admin: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -27,6 +28,7 @@ export interface Database {
           phone?: string | null;
           password_hash?: string | null;
           is_admin?: boolean;
+          is_super_admin?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -37,6 +39,7 @@ export interface Database {
           phone?: string | null;
           password_hash?: string | null;
           is_admin?: boolean;
+          is_super_admin?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -82,6 +85,9 @@ export interface Database {
           created_by_user_id: string | null;
           rescheduled_by_user_id: string | null;
           cancelled_by_user_id: string | null;
+          payment_status: "pending" | "paid" | "not_applicable" | null;
+          payment_validated_at: string | null;
+          payment_validated_by_user_id: string | null;
         };
         Insert: {
           id?: number;
@@ -123,6 +129,9 @@ export interface Database {
           created_by_user_id?: string | null;
           rescheduled_by_user_id?: string | null;
           cancelled_by_user_id?: string | null;
+          payment_status?: "pending" | "paid" | "not_applicable" | null;
+          payment_validated_at?: string | null;
+          payment_validated_by_user_id?: string | null;
         };
         Update: {
           id?: number;
@@ -130,6 +139,9 @@ export interface Database {
           created_by_user_id?: string | null;
           rescheduled_by_user_id?: string | null;
           cancelled_by_user_id?: string | null;
+          payment_status?: "pending" | "paid" | "not_applicable" | null;
+          payment_validated_at?: string | null;
+          payment_validated_by_user_id?: string | null;
           email?: string;
           name?: string;
           phone?: string;

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
     const status = searchParams.get("status");
+    const paymentStatusFilter = searchParams.get("paymentStatus");
     const search = searchParams.get("search")?.trim() || "";
     const limit = Math.min(
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50),
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, created_at, reschedule_count, discount_code, source, google_event_id, import_type, order_number",
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, payment_method, payment_status, created_at, reschedule_count, discount_code, source, google_event_id, import_type, order_number",
         { count: "exact" }
       )
       .order("id", { ascending: false })
@@ -90,6 +91,9 @@ export async function GET(request: NextRequest) {
     if (status && ["confirmed", "cancelled", "completed"].includes(status)) {
       query = query.eq("status", status);
     }
+    if (paymentStatusFilter === "pending") {
+      query = query.eq("payment_status", "pending");
+    }
 
     const { data, error, count } = await query;
 
@@ -111,9 +115,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const PLACEHOLDER_EMAIL = "reservado-alvero@lacasaddechuy.local";
+const PLACEHOLDER_PHONE = "—";
+
+type Variant = "cliente" | "reservado_alvero" | "cita_alvero";
+
 /**
- * Crea una reserva manual (efectivo o transferencia).
+ * Crea una reserva desde el panel admin (una de tres variantes).
  * Solo accesible por admins.
+ * variant: cliente (efectivo/transferencia) | reservado_alvero (bloqueo) | cita_alvero (sesión Alvero + orden)
  */
 export async function POST(request: NextRequest) {
   const { user: adminUser, isAdmin } = await requireAdmin();
@@ -123,6 +133,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const variant: Variant | undefined = body.variant;
+    if (
+      !variant ||
+      !["cliente", "reservado_alvero", "cita_alvero"].includes(variant)
+    ) {
+      return validationErrorResponse(
+        "Tipo de reserva inválido (use cliente, reservado_alvero o cita_alvero)"
+      );
+    }
+
     const {
       date,
       startTime,
@@ -132,6 +152,7 @@ export async function POST(request: NextRequest) {
       price,
       payment_method,
       sendEmail,
+      order_number,
     } = body;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -140,47 +161,77 @@ export async function POST(request: NextRequest) {
     if (!startTime || !/^\d{2}:\d{2}$/.test(startTime)) {
       return validationErrorResponse("Horario inválido (use HH:mm)");
     }
-    if (!name?.trim()) {
-      return validationErrorResponse("Nombre requerido");
-    }
-    if (!email?.trim()) {
-      return validationErrorResponse("Email requerido");
-    }
-    if (!phone?.trim()) {
-      return validationErrorResponse("Teléfono requerido");
-    }
-    const priceNum = Number(price);
-    if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      return validationErrorResponse("El precio debe ser mayor a 0");
-    }
-    if (
-      !payment_method ||
-      !["efectivo", "transferencia"].includes(payment_method)
-    ) {
-      return validationErrorResponse(
-        "Método de pago inválido (use 'efectivo' o 'transferencia')"
-      );
+
+    let finalName: string;
+    let finalEmail: string;
+    let finalPhone: string;
+    let finalPrice: number;
+    let finalPaymentMethod: "efectivo" | "transferencia" | null = null;
+    let importType: string | null = null;
+    let finalOrderNumber: string | null = null;
+    let shouldSendEmail = false;
+    let paymentStatus: "pending" | "paid" | "not_applicable" = "not_applicable";
+
+    if (variant === "cliente") {
+      if (!name?.trim()) return validationErrorResponse("Nombre requerido");
+      if (!email?.trim()) return validationErrorResponse("Email requerido");
+      if (!phone?.trim()) return validationErrorResponse("Teléfono requerido");
+      const priceNum = Number(price);
+      if (!Number.isFinite(priceNum) || priceNum <= 0) {
+        return validationErrorResponse("El precio debe ser mayor a 0");
+      }
+      if (
+        !payment_method ||
+        !["efectivo", "transferencia"].includes(payment_method)
+      ) {
+        return validationErrorResponse(
+          "Método de pago inválido (use efectivo o transferencia)"
+        );
+      }
+      finalName = String(name).trim();
+      finalEmail = String(email).toLowerCase().trim();
+      finalPhone = String(phone).trim();
+      finalPrice = priceNum;
+      finalPaymentMethod = payment_method as "efectivo" | "transferencia";
+      shouldSendEmail = Boolean(sendEmail);
+      paymentStatus = "pending";
+    } else if (variant === "reservado_alvero") {
+      finalName = "Espacio reservado para Alvero";
+      finalEmail = PLACEHOLDER_EMAIL;
+      finalPhone = PLACEHOLDER_PHONE;
+      finalPrice = 0;
+      importType = "manual_available";
+    } else {
+      // cita_alvero
+      if (!name?.trim()) return validationErrorResponse("Nombre requerido");
+      if (!order_number?.toString()?.trim()) {
+        return validationErrorResponse("Número de orden requerido");
+      }
+      finalName = String(name).trim();
+      finalEmail = (email?.toString()?.trim() || "").toLowerCase() || PLACEHOLDER_EMAIL;
+      finalPhone = String(phone ?? "").trim() || PLACEHOLDER_PHONE;
+      finalPrice = Number(price);
+      finalPrice = Number.isFinite(finalPrice) && finalPrice >= 0 ? finalPrice : 0;
+      finalOrderNumber = String(order_number).trim();
+      importType = "manual_client";
     }
 
     const supabase = createServiceRoleClient();
-    const normalizedEmail = String(email).toLowerCase().trim();
 
-    // Si existe un usuario registrado con ese email, vincular la reserva para que aparezca en "Mis Reservas"
     let userId: string | null = null;
-    const { data: existingUserRow } = await supabase
-      .from("users")
-      .select("id")
-      .ilike("email", normalizedEmail)
-      .limit(1)
-      .maybeSingle();
-    const existingUser = existingUserRow as { id: string } | null;
-    if (existingUser?.id) userId = existingUser.id;
+    if (variant === "cliente" || (variant === "cita_alvero" && finalEmail !== PLACEHOLDER_EMAIL)) {
+      const { data: existingUserRow } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("email", finalEmail)
+        .limit(1)
+        .maybeSingle();
+      const existingUser = existingUserRow as { id: string } | null;
+      if (existingUser?.id) userId = existingUser.id;
+    }
 
-    const isAvailable = await validateSlotAvailability(
-      supabase,
-      date,
-      startTime.includes(":00:00") ? startTime.slice(0, 5) : startTime
-    );
+    const startTimeNorm = startTime.includes(":00:00") ? startTime.slice(0, 5) : startTime;
+    const isAvailable = await validateSlotAvailability(supabase, date, startTimeNorm);
     if (!isAvailable) {
       return conflictResponse(
         "El horario seleccionado ya no está disponible. Elige otro slot."
@@ -189,16 +240,20 @@ export async function POST(request: NextRequest) {
 
     const endTime = calculateEndTime(startTime);
     const reservationData = {
-      email: normalizedEmail,
-      name: String(name).trim(),
-      phone: String(phone).trim(),
+      source: "admin" as const,
+      import_type: importType,
+      order_number: finalOrderNumber,
+      email: finalEmail,
+      name: finalName,
+      phone: finalPhone,
       date,
       start_time: formatTimeToSeconds(startTime),
       end_time: endTime,
-      price: priceNum,
-      original_price: priceNum,
+      price: finalPrice,
+      original_price: finalPrice,
       payment_id: null,
-      payment_method: payment_method as "efectivo" | "transferencia",
+      payment_method: finalPaymentMethod,
+      payment_status: paymentStatus,
       status: "confirmed" as const,
       user_id: userId,
       created_by_user_id: adminUser?.id ?? null,
@@ -236,20 +291,16 @@ export async function POST(request: NextRequest) {
       return errorResponse("No se pudo obtener el ID de la reserva", 500);
     }
 
-    let manageUrl: string | null = null;
-    if (sendEmail && normalizedEmail) {
+    if (shouldSendEmail && finalEmail && finalEmail !== PLACEHOLDER_EMAIL) {
       try {
-        const token = await generateGuestToken(
-          normalizedEmail,
-          String(reservationId)
-        );
-        manageUrl = generateGuestReservationUrl(token);
+        const token = await generateGuestToken(finalEmail, String(reservationId));
+        const manageUrl = generateGuestReservationUrl(token);
         sendReservationConfirmation({
-          to: normalizedEmail,
-          name: String(name).trim(),
+          to: finalEmail,
+          name: finalName,
           date,
-          startTime: startTime.slice(0, 5),
-          price: priceNum,
+          startTime: startTimeNorm,
+          price: finalPrice,
           reservationId,
           manageUrl,
         })

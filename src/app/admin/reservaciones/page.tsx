@@ -79,6 +79,8 @@ interface Reservation {
   original_price: number;
   status: string;
   payment_id: string | null;
+  payment_method?: string | null;
+  payment_status?: "pending" | "paid" | "not_applicable" | null;
   created_at: string;
   reschedule_count?: number;
   discount_code: string | null;
@@ -114,10 +116,13 @@ export default function AdminReservacionesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "", search: "" });
+  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "", search: "", paymentStatus: "" });
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero";
   const [showNewModal, setShowNewModal] = useState(false);
   const [newForm, setNewForm] = useState({
+    variant: "cliente" as NewReservationVariant,
     date: "",
     startTime: "",
     name: "",
@@ -126,6 +131,8 @@ export default function AdminReservacionesPage() {
     price: 0,
     payment_method: "efectivo" as "efectivo" | "transferencia",
     sendEmail: true,
+    order_number: "",
+    payment_state: "pending" as "pending" | "already_paid",
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -149,6 +156,12 @@ export default function AdminReservacionesPage() {
     return d;
   }, []);
 
+  useEffect(() => {
+    axios.get("/api/admin/me").then((res) => {
+      if (res.data?.success && res.data?.isSuperAdmin) setIsSuperAdmin(true);
+    }).catch(() => {});
+  }, []);
+
   const fetchReservations = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -157,6 +170,7 @@ export default function AdminReservacionesPage() {
       if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
       if (filters.dateTo) params.set("dateTo", filters.dateTo);
       if (filters.status) params.set("status", filters.status);
+      if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
       if (filters.search) params.set("search", filters.search);
       const res = await axios.get(`/api/admin/reservations?${params}`);
       if (res.data.success) {
@@ -170,7 +184,7 @@ export default function AdminReservacionesPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.status, filters.search]);
+  }, [filters.dateFrom, filters.dateTo, filters.status, filters.paymentStatus, filters.search]);
 
   useEffect(() => {
     fetchReservations();
@@ -321,6 +335,7 @@ export default function AdminReservacionesPage() {
     const today = getMonterreyDate();
     const tomorrow = addDays(today, 1);
     setNewForm({
+      variant: "cliente",
       date: format(tomorrow, "yyyy-MM-dd"),
       startTime: "",
       name: "",
@@ -329,6 +344,8 @@ export default function AdminReservacionesPage() {
       price: 0,
       payment_method: "efectivo",
       sendEmail: true,
+      order_number: "",
+      payment_state: "pending",
     });
     setPickerDate(tomorrow);
     setPickerTime(null);
@@ -379,26 +396,54 @@ export default function AdminReservacionesPage() {
   const submitNewReservation = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError("");
-    if (!newForm.date || !newForm.startTime || !newForm.name?.trim() || !newForm.email?.trim() || !newForm.phone?.trim()) {
-      setCreateError("Completa todos los campos requeridos.");
+    const { variant, date, startTime, name, email, phone, price, payment_method, sendEmail, order_number } = newForm;
+    if (!date || !startTime) {
+      setCreateError("Selecciona fecha y horario.");
       return;
     }
-    if (!newForm.price || newForm.price <= 0) {
-      setCreateError("El precio debe ser mayor a 0.");
-      return;
+    if (variant === "cliente") {
+      if (!name?.trim() || !email?.trim() || !phone?.trim()) {
+        setCreateError("Completa nombre, email y teléfono.");
+        return;
+      }
+      if (!price || price <= 0) {
+        setCreateError("El precio debe ser mayor a 0.");
+        return;
+      }
+    } else if (variant === "cita_alvero") {
+      if (!name?.trim()) {
+        setCreateError("Nombre requerido.");
+        return;
+      }
+      if (!order_number?.trim()) {
+        setCreateError("Número de orden requerido.");
+        return;
+      }
     }
     setCreateLoading(true);
     try {
-      const res = await axios.post("/api/admin/reservations", {
-        date: newForm.date,
-        startTime: newForm.startTime,
-        name: newForm.name.trim(),
-        email: newForm.email.trim(),
-        phone: newForm.phone.trim(),
-        price: newForm.price,
-        payment_method: newForm.payment_method,
-        sendEmail: newForm.sendEmail,
-      });
+      const payload: Record<string, unknown> = {
+        variant,
+        date,
+        startTime: startTime.slice(0, 5),
+      };
+      if (variant === "cliente") {
+        payload.name = name!.trim();
+        payload.email = email!.trim();
+        payload.phone = phone!.trim();
+        payload.price = price;
+        payload.payment_method = payment_method;
+        payload.sendEmail = sendEmail;
+      } else if (variant === "reservado_alvero") {
+        // API usa placeholders para nombre, email, teléfono y precio 0
+      } else {
+        payload.name = name!.trim();
+        payload.order_number = order_number!.trim();
+        if (email?.trim()) payload.email = email.trim();
+        if (phone?.trim()) payload.phone = phone.trim();
+        if (price > 0) payload.price = price;
+      }
+      const res = await axios.post("/api/admin/reservations", payload);
       if (res.data.success && res.data.reservationId) {
         setShowNewModal(false);
         fetchReservations();
@@ -455,6 +500,15 @@ export default function AdminReservacionesPage() {
             <option value="completed">Completadas</option>
           </select>
         </div>
+        {isSuperAdmin && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-500">Pago</label>
+            <select value={filters.paymentStatus} onChange={(e) => setFilters((f) => ({ ...f, paymentStatus: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
+              <option value="">Todos</option>
+              <option value="pending">Pago pendiente</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -475,13 +529,14 @@ export default function AdminReservacionesPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Fecha / Hora</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Cliente</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Estado</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Pago</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase text-zinc-500">Precio</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {reservations.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-zinc-500">No hay reservaciones con los filtros aplicados</td>
+                    <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">No hay reservaciones con los filtros aplicados</td>
                   </tr>
                 ) : (
                   reservations.map((r, index) => (
@@ -525,6 +580,17 @@ export default function AdminReservacionesPage() {
                           {getStatusLabel(r.status, r.reschedule_count)}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        {r.payment_status === "pending" && (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">Pago pendiente</span>
+                        )}
+                        {(r.payment_status === "paid" || (r.source === "web" && (r.payment_method === "conekta" || r.payment_id))) && (
+                          <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">Pagado</span>
+                        )}
+                        {!(r.payment_status === "pending" || r.payment_status === "paid" || (r.source === "web" && (r.payment_method === "conekta" || r.payment_id))) && (
+                          <span className="text-zinc-400 text-xs">—</span>
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-zinc-900">{formatCurrency(r.price)}</td>
                     </tr>
                   ))
@@ -548,13 +614,31 @@ export default function AdminReservacionesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-zinc-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-[#103948]">Nueva reserva manual</h2>
-              <p className="text-sm text-zinc-500">Efectivo o transferencia en tienda</p>
+              <h2 className="text-lg font-semibold text-[#103948]">Nueva reserva</h2>
+              <p className="text-sm text-zinc-500">Creada desde el panel de administración</p>
             </div>
             <form onSubmit={submitNewReservation} className="space-y-4 p-6">
               {createError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{createError}</div>
               )}
+
+              <div>
+                <p className="mb-2 text-xs font-medium text-zinc-600">Tipo de reserva</p>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="variant" checked={newForm.variant === "cliente"} onChange={() => setNewForm((f) => ({ ...f, variant: "cliente" }))} className="rounded-full border-zinc-300" />
+                    <span className="text-sm">La casa de chuy</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="variant" checked={newForm.variant === "reservado_alvero"} onChange={() => setNewForm((f) => ({ ...f, variant: "reservado_alvero" }))} className="rounded-full border-zinc-300" />
+                    <span className="text-sm">Espacio reservado para Alvero</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="variant" checked={newForm.variant === "cita_alvero"} onChange={() => setNewForm((f) => ({ ...f, variant: "cita_alvero" }))} className="rounded-full border-zinc-300" />
+                    <span className="text-sm">Cita Alvero</span>
+                  </label>
+                </div>
+              </div>
 
               <div className="grid gap-4 border-b border-zinc-100 pb-4 sm:grid-cols-2">
                 <div>
@@ -597,7 +681,7 @@ export default function AdminReservacionesPage() {
                             </button>
                           ))}
                       </div>
-                      {pickerPrice !== null && (
+                      {newForm.variant === "cliente" && pickerPrice !== null && (
                         <p className="mt-3 text-sm font-semibold text-zinc-900">Precio: {formatCurrency(pickerPrice)}</p>
                       )}
                     </>
@@ -605,33 +689,73 @@ export default function AdminReservacionesPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Nombre *</label>
-                <input type="text" value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. Juan Pérez" required />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Email *</label>
-                <input type="email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="cliente@ejemplo.com" required />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Teléfono *</label>
-                <input type="tel" value={newForm.phone} onChange={(e) => setNewForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 8123456789" required />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Precio (MXN) *</label>
-                <input type="number" min={0} step={1} value={newForm.price || ""} onChange={(e) => setNewForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" required />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Método de pago *</label>
-                <select value={newForm.payment_method} onChange={(e) => setNewForm((f) => ({ ...f, payment_method: e.target.value as "efectivo" | "transferencia" }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm">
-                  <option value="efectivo">Efectivo</option>
-                  <option value="transferencia">Transferencia</option>
-                </select>
-              </div>
-              <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={newForm.sendEmail} onChange={(e) => setNewForm((f) => ({ ...f, sendEmail: e.target.checked }))} className="rounded border-zinc-300" />
-                <span className="text-sm text-zinc-600">Enviar email de confirmación</span>
-              </label>
+              {newForm.variant === "cliente" && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Nombre *</label>
+                    <input type="text" value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. Juan Pérez" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Email *</label>
+                    <input type="email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="cliente@ejemplo.com" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Teléfono *</label>
+                    <input type="tel" value={newForm.phone} onChange={(e) => setNewForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 8123456789" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Precio (MXN) *</label>
+                    <input type="number" min={0} step={1} value={newForm.price || ""} onChange={(e) => setNewForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Método de pago *</label>
+                    <select value={newForm.payment_method} onChange={(e) => setNewForm((f) => ({ ...f, payment_method: e.target.value as "efectivo" | "transferencia" }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm">
+                      <option value="efectivo">Efectivo</option>
+                      <option value="transferencia">Transferencia</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-zinc-600">Estado del pago</p>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="radio" name="payment_state" checked={newForm.payment_state === "pending"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "pending" }))} className="rounded-full border-zinc-300" />
+                        <span className="text-sm">Cliente aún no ha pagado</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="radio" name="payment_state" checked={newForm.payment_state === "already_paid"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "already_paid" }))} className="rounded-full border-zinc-300" />
+                        <span className="text-sm">Cliente ya pagó (efectivo/transferencia)</span>
+                      </label>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-500">Nancy podrá validar el pago después.</p>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" checked={newForm.sendEmail} onChange={(e) => setNewForm((f) => ({ ...f, sendEmail: e.target.checked }))} className="rounded border-zinc-300" />
+                    <span className="text-sm text-zinc-600">Enviar email de confirmación</span>
+                  </label>
+                </>
+              )}
+
+              {newForm.variant === "cita_alvero" && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Nombre *</label>
+                    <input type="text" value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Nombre del cliente" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Número de orden *</label>
+                    <input type="text" value={newForm.order_number} onChange={(e) => setNewForm((f) => ({ ...f, order_number: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 6521" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Email (opcional)</label>
+                    <input type="email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="cliente@ejemplo.com" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Teléfono (opcional)</label>
+                    <input type="tel" value={newForm.phone} onChange={(e) => setNewForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 8123456789" />
+                  </div>
+                </>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowNewModal(false)} className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
                   Cancelar

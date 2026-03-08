@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   phone TEXT,
   is_admin BOOLEAN DEFAULT FALSE,
+  is_super_admin BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -95,8 +96,12 @@ CREATE TABLE IF NOT EXISTS reservations (
   additional_payment_method TEXT,  -- conekta | efectivo | transferencia | pendiente (reportes)
   rescheduled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que reagendó (si aplica)
   cancelled_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Admin que canceló (si aplica)
-  -- Campos de importación desde web anterior
-  source TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web', 'google_import')),
+  -- Campos de importación y reservas manuales admin
+  source TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web', 'google_import', 'admin')),
+  -- Estado de pago en reservas manuales (La casa de chuy): pending | paid | not_applicable
+  payment_status TEXT CHECK (payment_status IS NULL OR payment_status IN ('pending', 'paid', 'not_applicable')),
+  payment_validated_at TIMESTAMP WITH TIME ZONE,
+  payment_validated_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   google_event_id TEXT,  -- Número de orden Appointly (#6521) o ID de Google Calendar; garantiza idempotencia
   import_type TEXT,      -- 'appointly' | 'manual_client' | 'manual_available' (solo cuando source='google_import')
   order_number TEXT,     -- número de orden/folio (ej. 3972) en citas Alberto
@@ -233,6 +238,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_google_event_id
 CREATE INDEX IF NOT EXISTS idx_reservations_source
   ON reservations (source)
   WHERE source = 'google_import';
+
+-- Índice para filtro "Pago pendiente" en listado admin
+CREATE INDEX IF NOT EXISTS idx_reservations_payment_status_pending
+  ON reservations (payment_status)
+  WHERE payment_status = 'pending';
 
 -- Índice compuesto para optimizar consultas de slots disponibles por fecha y hora
 -- Útil especialmente cuando se consulta la fecha actual y se filtra por hora

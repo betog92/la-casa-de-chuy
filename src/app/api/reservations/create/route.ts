@@ -192,6 +192,7 @@ export async function POST(request: NextRequest) {
       price,
       original_price: originalPrice,
       payment_id: paymentId,
+      payment_method: paymentId ? "conekta" : null,
       status: "confirmed" as const,
       user_id: userId || null,
       discount_amount: discountAmount || 0,

@@ -52,7 +52,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id"
       )
       .eq("id", reservationId)
       .single();
@@ -115,8 +115,9 @@ export async function GET(
     const rescheduledByUserId = (reservationData as { rescheduled_by_user_id?: string | null }).rescheduled_by_user_id;
     const cancelledByUserId = (reservationData as { cancelled_by_user_id?: string | null }).cancelled_by_user_id;
     const importNotesEditedByUserId = (reservationData as { import_notes_edited_by_user_id?: string | null }).import_notes_edited_by_user_id;
+    const paymentValidatedByUserId = (reservationData as { payment_validated_by_user_id?: string | null }).payment_validated_by_user_id;
     const historyUserIds = historyList.map((h) => h.rescheduled_by_user_id).filter(Boolean) as string[];
-    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, cancelledByUserId, importNotesEditedByUserId, ...historyUserIds].filter(Boolean))] as string[];
+    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, cancelledByUserId, importNotesEditedByUserId, paymentValidatedByUserId, ...historyUserIds].filter(Boolean))] as string[];
     let usersMap: Record<string, { id: string; name: string | null; email: string }> = {};
     if (allUserIds.length > 0) {
       const { data: usersData } = await supabase
@@ -132,6 +133,7 @@ export async function GET(
     const rescheduled_by = rescheduledByUserId ? usersMap[rescheduledByUserId] ?? null : null;
     const cancelled_by = cancelledByUserId ? usersMap[cancelledByUserId] ?? null : null;
     const import_notes_edited_by = importNotesEditedByUserId ? usersMap[importNotesEditedByUserId] ?? null : null;
+    const payment_validated_by = paymentValidatedByUserId ? usersMap[paymentValidatedByUserId] ?? null : null;
     const reschedule_history = historyList.map((h) => ({
       rescheduled_at: h.rescheduled_at,
       rescheduled_by: h.rescheduled_by_user_id ? usersMap[h.rescheduled_by_user_id] ?? null : null,
@@ -149,6 +151,7 @@ export async function GET(
       rescheduled_by,
       cancelled_by,
       import_notes_edited_by,
+      payment_validated_by,
       reschedule_history,
     };
 

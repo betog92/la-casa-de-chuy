@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Formatear para react-big-calendar: { start, end, title, resource }
-    // Títulos: manual_available → "Hora - Reservado para Alvero"; manual_client → #order_number Nombre; resto → #id Nombre
+    // Títulos: manual_available → "Hora - Espacio reservado para Alvero"; manual_client → #order_number Nombre; resto → #id Nombre
     const formatTime = (t: string) => {
       const s = String(t || "0").trim();
       const [h, m] = s.split(":").map((x) => Number(x) || 0);
@@ -83,9 +83,9 @@ export async function GET(request: NextRequest) {
       const startDate = fromZonedTime(startStr, MONTERREY_TZ);
       const endDate = fromZonedTime(endStr, MONTERREY_TZ);
       const name = (r.name || "").trim() || "Sin nombre";
-      // Slots de Nancy (naranjas): solo hora + título "Reservado para Alvero"
+      // Slots de Nancy (naranjas): solo hora + título "Espacio reservado para Alvero"
       if (r.import_type === "manual_available") {
-        const title = `${formatTime(r.start_time)} - Reservado para Alvero`;
+        const title = `${formatTime(r.start_time)} - Espacio reservado para Alvero`;
         return {
           id: r.id,
           title,

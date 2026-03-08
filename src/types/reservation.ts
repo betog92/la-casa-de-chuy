@@ -22,6 +22,12 @@ export interface Reservation {
   original_price: number;
   payment_id: string | null;
   payment_method?: string | null;
+  /** Estado de pago en reservas manuales: pending (pendiente), paid (validado), not_applicable */
+  payment_status?: "pending" | "paid" | "not_applicable" | null;
+  payment_validated_at?: string | null;
+  payment_validated_by_user_id?: string | null;
+  /** Resuelto por la API cuando hay payment_validated_by_user_id */
+  payment_validated_by?: { id: string; name: string | null; email: string } | null;
   status: "confirmed" | "cancelled" | "completed";
   created_at: string;
   // Campos de descuentos

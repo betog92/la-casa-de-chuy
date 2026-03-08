@@ -45,6 +45,8 @@ export default function ReservationDetailsPage() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [validatingPayment, setValidatingPayment] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
@@ -63,16 +65,23 @@ export default function ReservationDetailsPage() {
   const hasLoadedRef = useRef(false);
   const previousReservationIdRef = useRef<string | null>(null);
 
-  // Verificar si el usuario es admin (para mostrar datos de contacto completos)
+  // Verificar si el usuario es admin y super admin (para mostrar datos y validar pago)
   useEffect(() => {
     if (!user?.id) {
       setIsAdmin(false);
+      setIsSuperAdmin(false);
       return;
     }
     fetch("/api/admin/me")
       .then((res) => res.json())
-      .then((data) => setIsAdmin(data.success === true && data.isAdmin === true))
-      .catch(() => setIsAdmin(false));
+      .then((data) => {
+        setIsAdmin(data.success === true && data.isAdmin === true);
+        setIsSuperAdmin(data.success === true && data.isSuperAdmin === true);
+      })
+      .catch(() => {
+        setIsAdmin(false);
+        setIsSuperAdmin(false);
+      });
   }, [user?.id]);
 
   // Sincronizar formulario de edición con la reserva cargada
@@ -548,7 +557,20 @@ export default function ReservationDetailsPage() {
             {/* Datos de contacto: editable solo para admin en citas de Alberto */}
             {isAdmin && (
               <div className="pt-4 border-t border-zinc-200 space-y-3">
-                {reservation.source === "google_import" &&
+                {(reservation.source === "google_import" || reservation.source === "admin") &&
+                reservation.import_type === "manual_available" ? (
+                  <>
+                    <p className="text-sm text-zinc-600">Espacio reservado para Alvero (bloqueo de horario, sin cliente).</p>
+                    {reservation.created_by && (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">Creada por</p>
+                        <p className="text-lg font-medium text-[#103948]">
+                          {reservation.created_by.name?.trim() || reservation.created_by.email}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (reservation.source === "google_import" || reservation.source === "admin") &&
                 reservation.import_type === "manual_client" ? (
                   <>
                     <div>
@@ -567,7 +589,7 @@ export default function ReservationDetailsPage() {
                     </div>
                     {(reservation.order_number || reservation.google_event_id) && (
                       <div>
-                        <p className="text-sm text-zinc-600 mb-1">Orden (web anterior)</p>
+                        <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
                         <p className="text-lg font-medium text-[#103948]">
                           {reservation.order_number ? `#${reservation.order_number}` : reservation.google_event_id}
                         </p>
@@ -658,15 +680,15 @@ export default function ReservationDetailsPage() {
                         {reservation.phone || "No proporcionado"}
                       </p>
                     </div>
-                    {reservation.source === "google_import" && (reservation.order_number || reservation.google_event_id) && (
+                    {(reservation.source === "google_import" || reservation.source === "admin") && (reservation.order_number || reservation.google_event_id) && (
                       <div>
-                        <p className="text-sm text-zinc-600 mb-1">Orden (web anterior)</p>
+                        <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
                         <p className="text-lg font-medium text-[#103948]">
                           {reservation.order_number ? `#${reservation.order_number}` : reservation.google_event_id}
                         </p>
                       </div>
                     )}
-                    {reservation.source === "google_import" && reservation.import_notes && (
+                    {(reservation.source === "google_import" || reservation.source === "admin") && reservation.import_notes && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">Detalles de la cita</p>
                         <p className="text-base font-medium text-[#103948] whitespace-pre-line">
@@ -674,7 +696,7 @@ export default function ReservationDetailsPage() {
                         </p>
                       </div>
                     )}
-                    {reservation.source !== "google_import" && (
+                    {(reservation.source === "web" || reservation.source === "admin") && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">Creada el</p>
                         <p className="text-lg font-medium text-[#103948]">
@@ -692,6 +714,75 @@ export default function ReservationDetailsPage() {
                         <p className="text-lg font-medium text-[#103948]">
                           {reservation.created_by.name?.trim() || reservation.created_by.email}
                         </p>
+                      </div>
+                    )}
+                    {isAdmin && (
+                      (reservation.source === "admin" && reservation.import_type == null && reservation.payment_method) ||
+                      (reservation.source === "web" && (reservation.payment_method === "conekta" || reservation.payment_id))
+                    ) && (
+                      <div className="pt-3 border-t border-zinc-100">
+                        <p className="text-sm text-zinc-600 mb-1">Estado del pago</p>
+                        {reservation.source === "web" && (reservation.payment_method === "conekta" || reservation.payment_id) && (
+                          <p className="text-lg font-medium text-emerald-700">Pagado (en línea)</p>
+                        )}
+                        {reservation.source === "admin" && reservation.payment_status === "pending" && (
+                          <>
+                            <p className="text-lg font-medium text-amber-700">Pago pendiente</p>
+                            {isSuperAdmin && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setValidatingPayment(true);
+                                  setActionError(null);
+                                  try {
+                                    const res = await fetch(`/api/admin/reservations/${reservation.id}/payment-status`, { method: "PATCH" });
+                                    const data = await res.json();
+                                    if (!data.success) {
+                                      setActionError(data.error || "Error al validar pago");
+                                      return;
+                                    }
+                                    const detailRes = await fetch(`/api/reservations/${reservation.id}`);
+                                    if (detailRes.ok) {
+                                      const detailData = await detailRes.json();
+                                      if (detailData.reservation) {
+                                        setReservation(detailData.reservation as Reservation);
+                                      } else {
+                                        setReservation((prev) => (prev ? { ...prev, payment_status: "paid" as const } : null));
+                                      }
+                                    } else {
+                                      setReservation((prev) => (prev ? { ...prev, payment_status: "paid" as const } : null));
+                                    }
+                                  } catch {
+                                    setActionError("Error de conexión");
+                                  } finally {
+                                    setValidatingPayment(false);
+                                  }
+                                }}
+                                disabled={validatingPayment}
+                                className="mt-2 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-50"
+                              >
+                                {validatingPayment ? "Validando…" : "Validar / Marcar como pagado"}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {reservation.source === "admin" && reservation.payment_status === "paid" && (
+                          <>
+                            <p className="text-lg font-medium text-emerald-700">Pagado (validado)</p>
+                            {reservation.payment_validated_at && reservation.payment_validated_by && (() => {
+                              const validatedAt = new Date(reservation.payment_validated_at);
+                              return (
+                                <p className="text-sm text-zinc-500 mt-1">
+                                  Validado por {reservation.payment_validated_by.name || reservation.payment_validated_by.email}
+                                  {isValid(validatedAt) ? ` el ${format(validatedAt, "d 'de' MMMM 'de' yyyy 'a las' h:mm a", { locale: es })}` : ""}.
+                                </p>
+                              );
+                            })()}
+                          </>
+                        )}
+                        {reservation.source === "admin" && (reservation.payment_status == null || reservation.payment_status === "not_applicable") && (
+                          <p className="text-zinc-500 text-sm">—</p>
+                        )}
                       </div>
                     )}
                   </>
