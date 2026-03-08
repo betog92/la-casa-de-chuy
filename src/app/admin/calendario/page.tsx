@@ -480,16 +480,17 @@ export default function AdminCalendarioPage() {
     [isMobile, view, allDisplayEvents, openReservationOrVestido]
   );
 
-  /** En móvil + vista mes: al tocar un día, abrir modal centrado con los eventos de ese día */
+  /** En móvil + vista mes o semana: al tocar un día/slot, abrir modal con los eventos de ese día */
   const handleSelectSlot = useCallback(
     (slotInfo: { start: Date; end: Date; action: string }) => {
-      if (!isMobile || view !== "month") return;
-      const start = slotInfo.start;
-      const end = slotInfo.end;
+      if (!isMobile || (view !== "month" && view !== "week")) return;
+      const slotStart = slotInfo.start;
+      const dayStart = startOfDay(slotStart);
+      const dayEnd = endOfDay(slotStart);
       const dayEvents = allDisplayEvents.filter(
-        (ev) => ev.start < end && ev.end > start
+        (ev) => ev.start < dayEnd && ev.end > dayStart
       );
-      setDayModal({ date: start, events: dayEvents });
+      setDayModal({ date: dayStart, events: dayEvents });
     },
     [isMobile, view, allDisplayEvents]
   );
