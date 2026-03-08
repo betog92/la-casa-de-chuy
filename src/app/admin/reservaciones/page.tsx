@@ -433,6 +433,7 @@ export default function AdminReservacionesPage() {
         payload.phone = phone!.trim();
         payload.price = price;
         payload.payment_method = payment_method;
+        payload.payment_status = newForm.payment_state === "already_paid" ? "paid" : "pending";
         payload.sendEmail = sendEmail;
       } else if (variant === "reservado_alvero") {
         // API usa placeholders para nombre, email, teléfono y precio 0

@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
       phone,
       price,
       payment_method,
+      payment_status: bodyPaymentStatus,
       sendEmail,
       order_number,
     } = body;
@@ -194,7 +195,8 @@ export async function POST(request: NextRequest) {
       finalPrice = priceNum;
       finalPaymentMethod = payment_method as "efectivo" | "transferencia";
       shouldSendEmail = Boolean(sendEmail);
-      paymentStatus = "pending";
+      paymentStatus =
+        bodyPaymentStatus === "paid" ? "paid" : "pending";
     } else if (variant === "reservado_alvero") {
       finalName = "Espacio reservado para Alvero";
       finalEmail = PLACEHOLDER_EMAIL;
