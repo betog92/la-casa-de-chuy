@@ -64,14 +64,12 @@ export async function PATCH(
   }
 
   const now = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from("reservations")
-    .update({
-      payment_status: "paid",
-      payment_validated_at: now,
-      payment_validated_by_user_id: adminUser?.id ?? null,
-    })
-    .eq("id", reservationId);
+  const table = supabase.from("reservations");
+  const { error: updateError } = await table.update({
+    payment_status: "paid",
+    payment_validated_at: now,
+    payment_validated_by_user_id: adminUser?.id ?? null,
+  } as Parameters<typeof table.update>[0]).eq("id", reservationId);
 
   if (updateError) {
     console.error("Error updating payment_status:", updateError);
