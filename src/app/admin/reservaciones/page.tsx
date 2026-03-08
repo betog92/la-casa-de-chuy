@@ -540,11 +540,11 @@ export default function AdminReservacionesPage() {
 
       {showNewModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex min-h-0 items-center justify-center overflow-y-auto bg-black/50 p-4"
           onClick={() => setShowNewModal(false)}
         >
           <div
-            className="my-8 w-full max-w-4xl rounded-xl bg-white shadow-xl"
+            className="my-8 w-full max-w-4xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-zinc-200 px-6 py-4">
