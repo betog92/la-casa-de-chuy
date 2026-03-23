@@ -119,7 +119,7 @@ export default function AdminReservacionesPage() {
   const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "", search: "", paymentStatus: "" });
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero";
+  type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero" | "renta_vestido";
   const [showNewModal, setShowNewModal] = useState(false);
   const [newForm, setNewForm] = useState({
     variant: "cliente" as NewReservationVariant,
@@ -133,6 +133,8 @@ export default function AdminReservacionesPage() {
     sendEmail: true,
     order_number: "",
     payment_state: "pending" as "pending" | "already_paid",
+    /** Solo variant renta_vestido: cuadro azul en calendario (todo el día) */
+    vestido_title: "",
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -269,8 +271,8 @@ export default function AdminReservacionesPage() {
       setNewForm((f) => ({
         ...f,
         date: format(value, "yyyy-MM-dd"),
-        startTime: "",
-        price: 0,
+        startTime: f.variant === "renta_vestido" ? f.startTime : "",
+        price: f.variant === "renta_vestido" ? f.price : 0,
       }));
     }
   }, []);
@@ -296,6 +298,7 @@ export default function AdminReservacionesPage() {
       const future = isFutureDate(date);
       const isMonthLoaded = isMonthLoadedForDate(date);
       const slots = monthAvailability.get(dateStr);
+      // Misma regla para todas las variantes (incl. renta de vestidos): hoy sin cupos queda deshabilitado, etc.
       if (!isMonthLoaded && future && checkDate <= maxDate) return true;
       const hasNoSlots = isMonthLoaded && (slots === undefined || slots === 0);
       return checkDate < today || checkDate > maxDate || closedDates.has(dateStr) || (hasNoSlots && future);
@@ -346,6 +349,7 @@ export default function AdminReservacionesPage() {
       sendEmail: true,
       order_number: "",
       payment_state: "pending",
+      vestido_title: "",
     });
     setPickerDate(tomorrow);
     setPickerTime(null);
@@ -397,6 +401,36 @@ export default function AdminReservacionesPage() {
     e.preventDefault();
     setCreateError("");
     const { variant, date, startTime, name, email, phone, price, payment_method, sendEmail, order_number } = newForm;
+    if (variant === "renta_vestido") {
+      if (!date) {
+        setCreateError("Selecciona una fecha.");
+        return;
+      }
+      if (!newForm.vestido_title?.trim()) {
+        setCreateError("Escribe un título o descripción para el evento.");
+        return;
+      }
+      setCreateLoading(true);
+      try {
+        const res = await axios.post("/api/admin/google-calendar/vestidos", {
+          date,
+          title: newForm.vestido_title.trim(),
+          isAllDay: true,
+        });
+        if (res.data?.success) {
+          setShowNewModal(false);
+          const monthStr = date.slice(0, 7);
+          router.push(`/admin/calendario?month=${monthStr}`);
+        } else {
+          setCreateError(res.data?.error || "Error al crear el evento");
+        }
+      } catch (err) {
+        setCreateError(axios.isAxiosError(err) ? (err.response?.data?.error as string) || "Error" : "Error");
+      } finally {
+        setCreateLoading(false);
+      }
+      return;
+    }
     if (!date || !startTime) {
       setCreateError("Selecciona fecha y horario.");
       return;
@@ -469,7 +503,7 @@ export default function AdminReservacionesPage() {
           <p className="mt-1 text-zinc-600">Listado de todas las reservas</p>
         </div>
         <button type="button" onClick={openNewModal} className="rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39]">
-          Nueva reserva
+          Nueva reserva / evento
         </button>
       </div>
 
@@ -615,8 +649,8 @@ export default function AdminReservacionesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-zinc-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-[#103948]">Nueva reserva</h2>
-              <p className="text-sm text-zinc-500">Creada desde el panel de administración</p>
+              <h2 className="text-lg font-semibold text-[#103948]">Nueva reserva o evento</h2>
+              <p className="text-sm text-zinc-500">Reservas de estudio o evento de renta de vestidos (calendario azul)</p>
             </div>
             <form onSubmit={submitNewReservation} className="space-y-4 p-6">
               {createError && (
@@ -637,6 +671,10 @@ export default function AdminReservacionesPage() {
                   <label className="flex cursor-pointer items-center gap-2">
                     <input type="radio" name="variant" checked={newForm.variant === "cita_alvero"} onChange={() => setNewForm((f) => ({ ...f, variant: "cita_alvero" }))} className="rounded-full border-zinc-300" />
                     <span className="text-sm">Cita Alvero</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="variant" checked={newForm.variant === "renta_vestido"} onChange={() => { setPickerTime(null); setNewForm((f) => ({ ...f, variant: "renta_vestido", startTime: "" })); }} className="rounded-full border-zinc-300" />
+                    <span className="text-sm">Renta de vestidos</span>
                   </label>
                 </div>
               </div>
@@ -660,6 +698,24 @@ export default function AdminReservacionesPage() {
                 <div>
                   {!pickerDate ? (
                     <div className="flex h-[200px] items-center justify-center text-sm text-zinc-500">Selecciona una fecha</div>
+                  ) : newForm.variant === "renta_vestido" ? (
+                    <div className="space-y-4">
+                      <h3 className="mb-2 text-sm font-semibold text-zinc-800">Evento en calendario (vestidos)</h3>
+                      <p className="text-xs text-zinc-600">{format(pickerDate, "EEEE, d 'de' MMMM", { locale: es })}</p>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">Título / descripción *</label>
+                        <input
+                          type="text"
+                          value={newForm.vestido_title}
+                          onChange={(e) => setNewForm((f) => ({ ...f, vestido_title: e.target.value }))}
+                          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
+                          placeholder="Ej. Renta vestido #3839, evento 24 abril"
+                        />
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        Se registra como evento de <strong>todo el día</strong> en el calendario (cuadro azul). Al crear se abrirá el calendario para revisarlo.
+                      </p>
+                    </div>
                   ) : slotsLoading ? (
                     <div className="flex h-[200px] items-center justify-center text-sm text-zinc-500">Cargando horarios...</div>
                   ) : (
@@ -761,8 +817,12 @@ export default function AdminReservacionesPage() {
                 <button type="button" onClick={() => setShowNewModal(false)} className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
                   Cancelar
                 </button>
-                <button type="submit" disabled={createLoading} className="flex-1 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-60">
-                  {createLoading ? "Creando..." : "Crear reserva"}
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className="flex-1 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-60"
+                >
+                  {createLoading ? "Creando..." : newForm.variant === "renta_vestido" ? "Crear evento vestido" : "Crear reserva"}
                 </button>
               </div>
             </form>

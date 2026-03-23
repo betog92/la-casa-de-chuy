@@ -143,6 +143,10 @@ export default function AdminCalendarioPage() {
   } | null>(null);
   const [vestidoNotesSaving, setVestidoNotesSaving] = useState(false);
   const [vestidoSaveSuccess, setVestidoSaveSuccess] = useState(false);
+  const [vestidoDeleting, setVestidoDeleting] = useState(false);
+  /** Confirmación de borrado dentro del mismo modal (sin alert del navegador) */
+  const [vestidoDeleteConfirm, setVestidoDeleteConfirm] = useState(false);
+  const [vestidoDeleteError, setVestidoDeleteError] = useState("");
 
   /** En móvil, al tocar un día en vista mes se abre un modal centrado con los eventos del día */
   const [dayModal, setDayModal] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
@@ -226,19 +230,18 @@ export default function AdminCalendarioPage() {
     if (view === "month") setDate(initialDate);
   }, [initialDate, view]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await axios.get("/api/admin/google-calendar/vestidos");
-        if (!cancelled && res.data?.events) setVestidosEvents(res.data.events);
-      } catch {
-        if (!cancelled) setVestidosEvents([]);
-      }
-    };
-    load();
-    return () => { cancelled = true; };
+  const loadVestidos = useCallback(async () => {
+    try {
+      const res = await axios.get("/api/admin/google-calendar/vestidos");
+      if (res.data?.events) setVestidosEvents(res.data.events);
+    } catch {
+      setVestidosEvents([]);
+    }
   }, []);
+
+  useEffect(() => {
+    loadVestidos();
+  }, [loadVestidos]);
 
   const vestidosAsCalendarEvents = useMemo((): CalendarEvent[] => {
     return vestidosEvents.map((ev) => {
@@ -279,13 +282,20 @@ export default function AdminCalendarioPage() {
     if (!vestidoDetail) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setVestidoDetail(null);
-        setVestidoSaveSuccess(false);
+        if (vestidoDeleteConfirm) {
+          setVestidoDeleteConfirm(false);
+          setVestidoDeleteError("");
+        } else {
+          setVestidoDeleteConfirm(false);
+          setVestidoDeleteError("");
+          setVestidoDetail(null);
+          setVestidoSaveSuccess(false);
+        }
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [vestidoDetail]);
+  }, [vestidoDetail, vestidoDeleteConfirm]);
 
   useEffect(() => {
     if (!dayModal) return;
@@ -423,6 +433,8 @@ export default function AdminCalendarioPage() {
       if (event.resource?.isVestidos && event.resource?.googleEventId) {
         const googleEventId = event.resource.googleEventId;
         const ev = vestidosEvents.find((e) => e.googleEventId === googleEventId);
+        setVestidoDeleteConfirm(false);
+        setVestidoDeleteError("");
         setVestidoDetail({
           googleEventId,
           title: event.title,
@@ -722,7 +734,12 @@ export default function AdminCalendarioPage() {
       {vestidoDetail && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-          onClick={() => { setVestidoDetail(null); setVestidoSaveSuccess(false); }}
+          onClick={() => {
+            setVestidoDeleteConfirm(false);
+            setVestidoDeleteError("");
+            setVestidoDetail(null);
+            setVestidoSaveSuccess(false);
+          }}
         >
           <div
             className="my-8 w-full max-w-lg rounded-xl bg-white shadow-xl"
@@ -759,13 +776,97 @@ export default function AdminCalendarioPage() {
               {vestidoSaveSuccess && (
                 <p className="text-sm text-green-600">Guardado correctamente.</p>
               )}
-              <div className="flex gap-3">
+              {vestidoDeleteConfirm ? (
+                <div className="rounded-lg border border-red-200 bg-red-50/60 px-4 py-4">
+                  <p className="text-sm font-medium text-zinc-900">
+                    ¿Eliminar este evento de renta de vestidos?
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">Esta acción no se puede deshacer.</p>
+                  {vestidoDeleteError && (
+                    <p className="mt-3 text-sm text-red-600">{vestidoDeleteError}</p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={vestidoDeleting}
+                      onClick={() => {
+                        setVestidoDeleteConfirm(false);
+                        setVestidoDeleteError("");
+                      }}
+                      className="min-w-[120px] flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+                    >
+                      No, volver
+                    </button>
+                    <button
+                      type="button"
+                      disabled={vestidoDeleting}
+                      onClick={async () => {
+                        if (!vestidoDetail) return;
+                        setVestidoDeleteError("");
+                        setVestidoDeleting(true);
+                        try {
+                          const res = await axios.delete(
+                            `/api/admin/google-calendar/vestidos/${encodeURIComponent(vestidoDetail.googleEventId)}`
+                          );
+                          if (res.data?.success) {
+                            const gid = vestidoDetail.googleEventId;
+                            setVestidoTitleOverrides((prev) => {
+                              const next = { ...prev };
+                              delete next[gid];
+                              return next;
+                            });
+                            setVestidoDeleteConfirm(false);
+                            setVestidoDeleteError("");
+                            setVestidoDetail(null);
+                            setVestidoSaveSuccess(false);
+                            await loadVestidos();
+                          } else {
+                            setVestidoDeleteError(
+                              (res.data?.error as string) || "No se pudo eliminar el evento"
+                            );
+                          }
+                        } catch (err) {
+                          setVestidoDeleteError(
+                            axios.isAxiosError(err)
+                              ? (err.response?.data?.error as string) ||
+                                  err.message ||
+                                  "Error al eliminar"
+                              : "Error al eliminar"
+                          );
+                        } finally {
+                          setVestidoDeleting(false);
+                        }
+                      }}
+                      className="min-w-[120px] flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                    >
+                      {vestidoDeleting ? "Eliminando…" : "Sí, eliminar"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => { setVestidoDetail(null); setVestidoSaveSuccess(false); }}
-                  className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                  onClick={() => {
+                    setVestidoDeleteConfirm(false);
+                    setVestidoDeleteError("");
+                    setVestidoDetail(null);
+                    setVestidoSaveSuccess(false);
+                  }}
+                  className="min-w-[100px] flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   Cerrar
+                </button>
+                <button
+                  type="button"
+                  disabled={vestidoDeleting || vestidoNotesSaving}
+                  onClick={() => {
+                    setVestidoDeleteError("");
+                    setVestidoDeleteConfirm(true);
+                  }}
+                  className="min-w-[100px] flex-1 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+                >
+                  Eliminar
                 </button>
                 <button
                   type="button"
@@ -809,15 +910,17 @@ export default function AdminCalendarioPage() {
                     setVestidoNotesSaving(false);
                   }
                   }}
-                  className="flex-1 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-60"
+                  className="min-w-[100px] flex-1 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-60"
                 >
                   {vestidoNotesSaving ? "Guardando…" : "Guardar"}
                 </button>
               </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

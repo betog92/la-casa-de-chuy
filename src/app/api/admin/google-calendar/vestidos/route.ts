@@ -1,6 +1,16 @@
+import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { successResponse, unauthorizedResponse } from "@/utils/api-response";
+import type { Database } from "@/types/database.types";
+import {
+  successResponse,
+  errorResponse,
+  unauthorizedResponse,
+  validationErrorResponse,
+} from "@/utils/api-response";
+import { randomUUID } from "crypto";
+
+type VestidoEventInsert = Database["public"]["Tables"]["vestido_calendar_events"]["Insert"];
 
 /**
  * Formatea una fecha ISO a HH:mm:ss (solo para eventos con hora).
@@ -81,4 +91,69 @@ export async function GET() {
   });
 
   return successResponse({ events });
+}
+
+/**
+ * POST /api/admin/google-calendar/vestidos
+ *
+ * Crea un evento de renta de vestidos desde la app (cuadro azul).
+ * Solo admite isAllDay: true (todo el día).
+ * google_event_id = "app-{uuid}" para no colisionar con eventos sincronizados de Google.
+ */
+export async function POST(request: NextRequest) {
+  const { isAdmin } = await requireAdmin();
+  if (!isAdmin) {
+    return unauthorizedResponse("No tienes permisos de administrador");
+  }
+
+  try {
+    const body = await request.json();
+    const { date, title, isAllDay } = body as {
+      date?: string;
+      title?: string;
+      isAllDay?: boolean;
+    };
+
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return validationErrorResponse("Fecha inválida (use YYYY-MM-DD)");
+    }
+    const titleTrim = title?.toString()?.trim() ?? "";
+    if (!titleTrim) {
+      return validationErrorResponse("El título es requerido");
+    }
+    // Solo eventos de todo el día (evita ambigüedad de zona horaria con horas locales vs UTC).
+    if (isAllDay !== true) {
+      return validationErrorResponse(
+        "Solo se admiten eventos de todo el día (envíe isAllDay: true)"
+      );
+    }
+
+    const original_start = date;
+    const original_end = date;
+
+    const google_event_id = `app-${randomUUID()}`;
+    const supabase = createServiceRoleClient();
+    const row: VestidoEventInsert = {
+      google_event_id,
+      title: titleTrim,
+      date,
+      original_start,
+      original_end,
+      is_all_day: true,
+    };
+    const { error } = await supabase.from("vestido_calendar_events").insert(row as never);
+
+    if (error) {
+      console.error("Error al crear evento vestido:", error);
+      return errorResponse("Error al crear el evento", 500);
+    }
+
+    return successResponse({
+      success: true,
+      google_event_id,
+      message: "Evento creado",
+    });
+  } catch {
+    return errorResponse("Error al procesar la solicitud", 500);
+  }
 }
