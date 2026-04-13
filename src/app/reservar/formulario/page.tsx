@@ -76,6 +76,8 @@ function FormularioReservaContent() {
   const [showPayConsentModal, setShowPayConsentModal] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
+  /** Evita doble envío: segundo clic en Aceptar o en Pagar mientras corre handleSubmit/onSubmit */
+  const paymentFlowLockRef = useRef(false);
   const { user } = useAuth();
 
   // Estados para descuentos y beneficios
@@ -485,6 +487,7 @@ function FormularioReservaContent() {
   };
 
   const handlePayClick = async () => {
+    if (loading || paymentFlowLockRef.current) return;
     const ok = await trigger([
       "email",
       "name",
@@ -497,8 +500,12 @@ function FormularioReservaContent() {
   };
 
   const handlePayConsentConfirm = () => {
+    if (paymentFlowLockRef.current) return;
+    paymentFlowLockRef.current = true;
     setShowPayConsentModal(false);
-    void handleSubmit(onSubmit)();
+    void Promise.resolve(handleSubmit(onSubmit)()).finally(() => {
+      paymentFlowLockRef.current = false;
+    });
   };
 
   const onSubmit = async (data: ReservationFormData) => {

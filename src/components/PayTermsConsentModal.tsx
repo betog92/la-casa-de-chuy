@@ -44,17 +44,17 @@ export default function PayTermsConsentModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-2 sm:p-4 lg:p-8"
       aria-hidden={false}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="pay-consent-title"
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl"
+        className="flex max-h-[92vh] w-full min-w-0 max-w-7xl flex-col rounded-xl bg-white shadow-2xl ring-1 ring-black/5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="shrink-0 border-b border-zinc-200 px-5 py-4 sm:px-6">
+        <div className="shrink-0 border-b border-zinc-200 px-5 py-4 sm:px-8">
           <h2
             id="pay-consent-title"
             className="text-lg font-bold text-zinc-900 sm:text-xl"
@@ -67,13 +67,13 @@ export default function PayTermsConsentModal({
           </p>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:px-6">
-          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-4 text-sm sm:text-[0.9375rem]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:px-8">
+          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-4 sm:p-6 text-[0.9375rem] sm:text-base leading-relaxed text-zinc-800">
             <TermsContent />
           </div>
         </div>
 
-        <div className="shrink-0 space-y-3 border-t border-zinc-200 bg-white px-5 py-4 sm:px-6">
+        <div className="shrink-0 space-y-3 border-t border-zinc-200 bg-white px-5 py-4 sm:px-8">
           <p className="text-xs leading-relaxed text-zinc-600 sm:text-sm">
             Al pulsar &quot;Acepto y continuar con el pago&quot; declaras haber
             leído y aceptar los términos y condiciones anteriores.
