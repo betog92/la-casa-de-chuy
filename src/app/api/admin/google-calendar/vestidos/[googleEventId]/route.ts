@@ -42,7 +42,15 @@ export async function DELETE(
       return notFoundResponse("Evento");
     }
 
-    await supabase.from("vestido_calendar_notes").delete().eq("google_event_id", id);
+    const { error: notesDelError } = await supabase
+      .from("vestido_calendar_notes")
+      .delete()
+      .eq("google_event_id", id);
+
+    if (notesDelError) {
+      console.error("Error al eliminar notas del evento vestido:", notesDelError);
+      return errorResponse("Error al eliminar las notas del evento", 500);
+    }
 
     const { error } = await supabase.from("vestido_calendar_events").delete().eq("google_event_id", id);
 

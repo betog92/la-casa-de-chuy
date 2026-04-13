@@ -90,6 +90,10 @@ interface GooglePreviewEvent {
   title: string;
   /** Título editado en la app (vestido_calendar_notes); viene del API al cargar. */
   title_override?: string | null;
+  /** Descripción/notas (Google o POST); sincronizada por script. */
+  description?: string | null;
+  /** Sustituto opcional de la descripción en la app. */
+  description_override?: string | null;
   date: string;
   startTime: string;
   endTime: string;
@@ -130,12 +134,18 @@ export default function AdminCalendarioPage() {
 
   // Calendario de renta de vestidos (solo lectura; no es reservación)
   const [vestidosEvents, setVestidosEvents] = useState<GooglePreviewEvent[]>([]);
+  const [vestidosLoadError, setVestidosLoadError] = useState("");
   /** Títulos editados en la app por google_event_id; se usan en la agenda en lugar del de Google. */
   const [vestidoTitleOverrides, setVestidoTitleOverrides] = useState<Record<string, string>>({});
   const [vestidoDetail, setVestidoDetail] = useState<{
     googleEventId: string;
     title: string;
     titleOverride: string | null;
+    description: string | null;
+    descriptionOverride: string | null;
+    /** Texto efectivo al abrir / tras cargar notas o guardar (para deshabilitar Guardar si no hay cambios). */
+    baselineTitleForSave: string;
+    baselineDescriptionForSave: string;
     date: string;
     originalEnd: string;
     lastEditedAt: string | null;
@@ -143,6 +153,7 @@ export default function AdminCalendarioPage() {
   } | null>(null);
   const [vestidoNotesSaving, setVestidoNotesSaving] = useState(false);
   const [vestidoSaveSuccess, setVestidoSaveSuccess] = useState(false);
+  const [vestidoNotesSaveError, setVestidoNotesSaveError] = useState("");
   const [vestidoDeleting, setVestidoDeleting] = useState(false);
   /** Confirmación de borrado dentro del mismo modal (sin alert del navegador) */
   const [vestidoDeleteConfirm, setVestidoDeleteConfirm] = useState(false);
@@ -231,11 +242,23 @@ export default function AdminCalendarioPage() {
   }, [initialDate, view]);
 
   const loadVestidos = useCallback(async () => {
+    setVestidosLoadError("");
     try {
       const res = await axios.get("/api/admin/google-calendar/vestidos");
-      if (res.data?.events) setVestidosEvents(res.data.events);
-    } catch {
+      if (res.data?.success === false && res.data?.error) {
+        setVestidosLoadError(String(res.data.error));
+        setVestidosEvents([]);
+        return;
+      }
+      if (Array.isArray(res.data?.events)) setVestidosEvents(res.data.events);
+      else setVestidosEvents([]);
+    } catch (err) {
       setVestidosEvents([]);
+      setVestidosLoadError(
+        axios.isAxiosError(err)
+          ? (err.response?.data?.error as string) || err.message || "Error al cargar vestidos"
+          : "Error al cargar vestidos"
+      );
     }
   }, []);
 
@@ -267,6 +290,16 @@ export default function AdminCalendarioPage() {
     [events, vestidosAsCalendarEvents]
   );
 
+  const vestidoFormDirty = useMemo(() => {
+    if (!vestidoDetail) return false;
+    const t = (vestidoDetail.titleOverride ?? vestidoDetail.title).trim();
+    const d = (vestidoDetail.descriptionOverride ?? vestidoDetail.description ?? "").trim();
+    return (
+      t !== vestidoDetail.baselineTitleForSave.trim() ||
+      d !== vestidoDetail.baselineDescriptionForSave.trim()
+    );
+  }, [vestidoDetail]);
+
   /** Eventos del modal día ordenados (vestidos primero, luego por hora); solo cuando dayModal está abierto */
   const sortedDayModalEvents = useMemo(() => {
     if (!dayModal || dayModal.events.length === 0) return [];
@@ -285,9 +318,11 @@ export default function AdminCalendarioPage() {
         if (vestidoDeleteConfirm) {
           setVestidoDeleteConfirm(false);
           setVestidoDeleteError("");
+          setVestidoNotesSaveError("");
         } else {
           setVestidoDeleteConfirm(false);
           setVestidoDeleteError("");
+          setVestidoNotesSaveError("");
           setVestidoDetail(null);
           setVestidoSaveSuccess(false);
         }
@@ -435,10 +470,16 @@ export default function AdminCalendarioPage() {
         const ev = vestidosEvents.find((e) => e.googleEventId === googleEventId);
         setVestidoDeleteConfirm(false);
         setVestidoDeleteError("");
+        setVestidoNotesSaveError("");
+        const descFromList = (ev?.description_override ?? ev?.description ?? "") as string;
         setVestidoDetail({
           googleEventId,
           title: event.title,
           titleOverride: null,
+          description: ev?.description ?? null,
+          descriptionOverride: null,
+          baselineTitleForSave: event.title.trim(),
+          baselineDescriptionForSave: String(descFromList).trim(),
           date: ev?.date ?? "",
           originalEnd: ev?.originalEnd ?? "",
           lastEditedAt: null,
@@ -450,16 +491,23 @@ export default function AdminCalendarioPage() {
           );
           if (res.data?.success) {
             const override = res.data.title_override ?? null;
-            setVestidoDetail((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    titleOverride: override,
-                    lastEditedAt: res.data.last_edited_at ?? null,
-                    lastEditedBy: res.data.last_edited_by ?? null,
-                  }
-                : null
-            );
+            const descOverride = res.data.description_override ?? null;
+            setVestidoDetail((prev) => {
+              if (!prev || prev.googleEventId !== googleEventId) return prev;
+              return {
+                ...prev,
+                titleOverride: override,
+                descriptionOverride: descOverride,
+                baselineTitleForSave: (override ?? prev.title).trim(),
+                baselineDescriptionForSave: (
+                  descOverride ??
+                  prev.description ??
+                  ""
+                ).trim(),
+                lastEditedAt: res.data.last_edited_at ?? null,
+                lastEditedBy: res.data.last_edited_by ?? null,
+              };
+            });
             if (override != null && override.trim() !== "") {
               setVestidoTitleOverrides((prev) => ({ ...prev, [googleEventId]: override.trim() }));
             }
@@ -562,6 +610,12 @@ export default function AdminCalendarioPage() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error}
+        </div>
+      )}
+
+      {vestidosLoadError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <span className="font-medium">Calendario de vestidos:</span> {vestidosLoadError}
         </div>
       )}
 
@@ -737,6 +791,7 @@ export default function AdminCalendarioPage() {
           onClick={() => {
             setVestidoDeleteConfirm(false);
             setVestidoDeleteError("");
+            setVestidoNotesSaveError("");
             setVestidoDetail(null);
             setVestidoSaveSuccess(false);
           }}
@@ -748,7 +803,7 @@ export default function AdminCalendarioPage() {
             <div className="border-b border-zinc-200 px-6 py-4">
               <h2 className="text-lg font-semibold text-[#103948]">Renta de vestido</h2>
               <div className="mt-2">
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Título / descripción (editable)</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-600">Título (editable)</label>
                 <input
                   type="text"
                   value={vestidoDetail.titleOverride ?? vestidoDetail.title}
@@ -759,6 +814,26 @@ export default function AdminCalendarioPage() {
                   }
                   className="w-full rounded border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-800"
                   placeholder="Ej. 3839 renta de vestido con cauda evento 24 abril"
+                />
+              </div>
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-medium text-zinc-600">
+                  Notas / descripción (como en Google Calendar)
+                </label>
+                <textarea
+                  rows={6}
+                  value={
+                    vestidoDetail.descriptionOverride ??
+                    vestidoDetail.description ??
+                    ""
+                  }
+                  onChange={(e) =>
+                    setVestidoDetail((p) =>
+                      p ? { ...p, descriptionOverride: e.target.value || null } : null
+                    )
+                  }
+                  className="w-full resize-y rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-800"
+                  placeholder="Contacto, vestido, depósito, etc. (se guarda en la app; tras sync desde Google se actualiza la copia base si no hay sustituto)"
                 />
               </div>
               {vestidoDetail.lastEditedAt && vestidoDetail.lastEditedBy && (() => {
@@ -775,6 +850,9 @@ export default function AdminCalendarioPage() {
             <div className="flex flex-col gap-2 border-t border-zinc-200 px-6 py-4">
               {vestidoSaveSuccess && (
                 <p className="text-sm text-green-600">Guardado correctamente.</p>
+              )}
+              {vestidoNotesSaveError && (
+                <p className="text-sm text-red-600">{vestidoNotesSaveError}</p>
               )}
               {vestidoDeleteConfirm ? (
                 <div className="rounded-lg border border-red-200 bg-red-50/60 px-4 py-4">
@@ -817,6 +895,7 @@ export default function AdminCalendarioPage() {
                             });
                             setVestidoDeleteConfirm(false);
                             setVestidoDeleteError("");
+                            setVestidoNotesSaveError("");
                             setVestidoDetail(null);
                             setVestidoSaveSuccess(false);
                             await loadVestidos();
@@ -850,6 +929,7 @@ export default function AdminCalendarioPage() {
                   onClick={() => {
                     setVestidoDeleteConfirm(false);
                     setVestidoDeleteError("");
+                    setVestidoNotesSaveError("");
                     setVestidoDetail(null);
                     setVestidoSaveSuccess(false);
                   }}
@@ -870,25 +950,37 @@ export default function AdminCalendarioPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={vestidoNotesSaving}
+                  disabled={vestidoNotesSaving || !vestidoFormDirty}
                   onClick={async () => {
                   if (!vestidoDetail) return;
                   setVestidoNotesSaving(true);
                   setVestidoSaveSuccess(false);
+                  setVestidoNotesSaveError("");
                   try {
                     const res = await axios.patch(
                       `/api/admin/vestido-notes/${encodeURIComponent(vestidoDetail.googleEventId)}`,
                       {
                         title_override: (vestidoDetail.titleOverride ?? vestidoDetail.title).trim() || null,
+                        description_override:
+                          (vestidoDetail.descriptionOverride ?? vestidoDetail.description ?? "").trim() ||
+                          null,
                       }
                     );
                     if (res.data?.success) {
                       const newOverride = res.data.title_override ?? null;
+                      const newDescOverride = res.data.description_override ?? null;
                       setVestidoDetail((p) =>
                         p
                           ? {
                               ...p,
                               titleOverride: newOverride,
+                              descriptionOverride: newDescOverride,
+                              baselineTitleForSave: (newOverride ?? p.title).trim(),
+                              baselineDescriptionForSave: (
+                                newDescOverride ??
+                                p.description ??
+                                ""
+                              ).trim(),
                               lastEditedAt: res.data.last_edited_at ?? null,
                               lastEditedBy: res.data.last_edited_by ?? null,
                             }
@@ -905,7 +997,17 @@ export default function AdminCalendarioPage() {
                       });
                       setVestidoSaveSuccess(true);
                       setTimeout(() => setVestidoSaveSuccess(false), 4000);
+                    } else {
+                      setVestidoNotesSaveError(
+                        (res.data?.error as string) || "No se pudo guardar"
+                      );
                     }
+                  } catch (err) {
+                    setVestidoNotesSaveError(
+                      axios.isAxiosError(err)
+                        ? (err.response?.data?.error as string) || err.message || "Error al guardar"
+                        : "Error al guardar"
+                    );
                   } finally {
                     setVestidoNotesSaving(false);
                   }

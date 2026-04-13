@@ -1,10 +1,19 @@
 /**
  * Sincroniza el calendario de renta de vestidos desde Google a nuestra BD (vestido_calendar_events).
- * Similar a import-appointly / import-manual: se ejecuta cuando quieras actualizar la copia local.
+ *
+ * IMPORTANTE (lanzamiento / abandono de Google Calendar):
+ *   --commit VACÍA la tabla y la rellena SOLO con lo que hay en Google. Cualquier evento creado
+ *   en la app (google_event_id "app-...") SE PIERDE. Tras la migración inicial, si ya operan
+ *   solo desde la app, NO vuelvan a ejecutar --commit salvo que acepten borrar esos eventos
+ *   o hayan exportado/respaldado antes.
  *
  * Uso (desde la raíz del proyecto):
  *   node scripts/sync-vestidos-calendar.mjs            (solo preview: imprime qué se escribiría)
  *   node scripts/sync-vestidos-calendar.mjs --commit   (escribe en la BD)
+ *   node scripts/sync-vestidos-calendar.mjs --debug    (log de cada evento tal como viene de Google: summary, description, etc.)
+ *   (puedes combinar --debug con preview o --commit)
+ *
+ * Solo inspección Google (sin Supabase), con description/location en el JSON: node scripts/preview-vestidos-calendar.mjs
  *
  * Requiere en .env.local:
  *   GOOGLE_CALENDAR_VESTIDOS_ID=xxx@group.calendar.google.com
@@ -39,6 +48,7 @@ for (const line of envLines) {
 }
 
 const COMMIT = process.argv.includes("--commit");
+const DEBUG = process.argv.includes("--debug");
 const MONTERREY_TZ = "America/Monterrey";
 
 function toZoned(date, tz) {
@@ -101,6 +111,34 @@ async function fetchFromGoogle() {
   });
 
   const items = res.data.items ?? [];
+
+  if (DEBUG) {
+    console.log("\n=== --debug: cada evento crudo desde Google Calendar API ===\n");
+    for (const e of items) {
+      const desc = e.description ?? "";
+      console.log(
+        JSON.stringify(
+          {
+            id: e.id,
+            summary: e.summary ?? null,
+            description: desc || null,
+            descriptionLength: desc.length,
+            location: e.location ?? null,
+            start: e.start ?? null,
+            end: e.end ?? null,
+            status: e.status ?? null,
+            htmlLink: e.htmlLink ?? null,
+            transparency: e.transparency ?? null,
+          },
+          null,
+          2
+        )
+      );
+      console.log("---");
+    }
+    console.log(`Total items: ${items.length}\n`);
+  }
+
   return items
     .filter((e) => !!e.id)
     .map((e) => {
@@ -120,9 +158,11 @@ async function fetchFromGoogle() {
         originalEnd = e.end.dateTime;
       }
 
+      const rawDesc = (e.description ?? "").trim();
       return {
         google_event_id: e.id,
         title: (e.summary ?? "").trim() || "Sin título",
+        description: rawDesc || null,
         date,
         original_start: originalStart,
         original_end: originalEnd,

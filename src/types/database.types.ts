@@ -453,6 +453,7 @@ export interface Database {
         Row: {
           google_event_id: string;
           title: string;
+          description: string | null;
           date: string;
           original_start: string;
           original_end: string;
@@ -462,6 +463,7 @@ export interface Database {
         Insert: {
           google_event_id: string;
           title: string;
+          description?: string | null;
           date: string;
           original_start: string;
           original_end: string;
@@ -471,6 +473,7 @@ export interface Database {
         Update: {
           google_event_id?: string;
           title?: string;
+          description?: string | null;
           date?: string;
           original_start?: string;
           original_end?: string;
@@ -482,18 +485,21 @@ export interface Database {
         Row: {
           google_event_id: string;
           title_override: string | null;
+          description_override: string | null;
           last_edited_at: string | null;
           last_edited_by_user_id: string | null;
         };
         Insert: {
           google_event_id: string;
           title_override?: string | null;
+          description_override?: string | null;
           last_edited_at?: string | null;
           last_edited_by_user_id?: string | null;
         };
         Update: {
           google_event_id?: string;
           title_override?: string | null;
+          description_override?: string | null;
           last_edited_at?: string | null;
           last_edited_by_user_id?: string | null;
         };

@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS referrals (
 CREATE TABLE IF NOT EXISTS vestido_calendar_events (
   google_event_id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  description TEXT,
   date TEXT NOT NULL,
   original_start TEXT NOT NULL,
   original_end TEXT NOT NULL,
@@ -187,12 +188,13 @@ COMMENT ON TABLE vestido_calendar_events IS 'Copia de eventos del calendario de 
 -- NOTAS DEL CALENDARIO DE RENTA DE VESTIDOS (títulos editados en la app)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS vestido_calendar_notes (
-  google_event_id TEXT PRIMARY KEY,
+  google_event_id TEXT PRIMARY KEY REFERENCES vestido_calendar_events (google_event_id) ON DELETE CASCADE,
   title_override TEXT,
+  description_override TEXT,
   last_edited_at TIMESTAMP WITH TIME ZONE,
   last_edited_by_user_id UUID REFERENCES users(id)
 );
-COMMENT ON TABLE vestido_calendar_notes IS 'Títulos editados por evento del calendario de vestidos. Solo en esta app; no modifica Google Calendar.';
+COMMENT ON TABLE vestido_calendar_notes IS 'Título y descripción editados por evento del calendario de vestidos. Solo en esta app; no modifica Google Calendar.';
 
 -- =====================================================
 -- ÍNDICES BÁSICOS PARA MEJORAR PERFORMANCE

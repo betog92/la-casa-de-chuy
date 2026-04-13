@@ -10,10 +10,11 @@ import {
   unauthorizedResponse,
   validationErrorResponse,
 } from "@/utils/api-response";
+import { VESTIDO_DESCRIPTION_MAX_CHARS, vestidoDescriptionTooLong } from "@/lib/vestido-calendar-limits";
 
 /**
  * GET /api/admin/vestido-notes/[googleEventId]
- * Devuelve título editable y "última edición" para un evento del calendario de vestidos.
+ * Devuelve título y descripción editables y "última edición" para un evento del calendario de vestidos.
  */
 export async function GET(
   _request: NextRequest,
@@ -34,7 +35,7 @@ export async function GET(
     const supabase = createServiceRoleClient();
     const { data: row, error } = await supabase
       .from("vestido_calendar_notes")
-      .select("title_override, last_edited_at, last_edited_by_user_id")
+      .select("title_override, description_override, last_edited_at, last_edited_by_user_id")
       .eq("google_event_id", id)
       .maybeSingle();
 
@@ -46,6 +47,7 @@ export async function GET(
     if (!row) {
       return successResponse({
         title_override: null,
+        description_override: null,
         last_edited_at: null,
         last_edited_by: null,
       });
@@ -53,6 +55,7 @@ export async function GET(
 
     const typedRow = row as {
       title_override: string | null;
+      description_override: string | null;
       last_edited_at: string | null;
       last_edited_by_user_id: string | null;
     };
@@ -60,11 +63,14 @@ export async function GET(
     let last_edited_by: { id: string; name: string | null; email: string } | null =
       null;
     if (editedByUserId) {
-      const { data: userRow } = await supabase
+      const { data: userRow, error: userLookupErr } = await supabase
         .from("users")
         .select("id, name, email")
         .eq("id", editedByUserId)
-        .single();
+        .maybeSingle();
+      if (userLookupErr) {
+        console.error("Error al resolver usuario de vestido-notes (GET):", userLookupErr);
+      }
       if (userRow) {
         last_edited_by = {
           id: (userRow as { id: string }).id,
@@ -76,6 +82,7 @@ export async function GET(
 
     return successResponse({
       title_override: typedRow.title_override ?? null,
+      description_override: typedRow.description_override ?? null,
       last_edited_at: typedRow.last_edited_at ?? null,
       last_edited_by,
     });
@@ -133,10 +140,32 @@ export async function PATCH(
           ? null
           : undefined;
 
+    const description_override =
+      typeof body.description_override === "string"
+        ? body.description_override.trim() || null
+        : body.description_override === null
+          ? null
+          : undefined;
+
+    if (
+      typeof description_override === "string" &&
+      description_override &&
+      vestidoDescriptionTooLong(description_override)
+    ) {
+      return validationErrorResponse(
+        `La descripción no puede superar ${VESTIDO_DESCRIPTION_MAX_CHARS} caracteres`
+      );
+    }
+
+    if (title_override === undefined && description_override === undefined) {
+      return validationErrorResponse("Envíe title_override y/o description_override");
+    }
+
     const supabase = createServiceRoleClient();
     const payload: {
       google_event_id: string;
       title_override?: string | null;
+      description_override?: string | null;
       last_edited_at: string;
       last_edited_by_user_id: string | null;
     } = {
@@ -145,6 +174,7 @@ export async function PATCH(
       last_edited_by_user_id: user?.id ?? null,
     };
     if (title_override !== undefined) payload.title_override = title_override;
+    if (description_override !== undefined) payload.description_override = description_override;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: upsertError } = await (supabase as any)
       .from("vestido_calendar_notes")
@@ -155,14 +185,20 @@ export async function PATCH(
       return errorResponse("Error al guardar notas", 500);
     }
 
-    const { data: rawRow } = await supabase
+    const { data: rawRow, error: rowFetchError } = await supabase
       .from("vestido_calendar_notes")
-      .select("title_override, last_edited_at, last_edited_by_user_id")
+      .select("title_override, description_override, last_edited_at, last_edited_by_user_id")
       .eq("google_event_id", id)
-      .single();
+      .maybeSingle();
+
+    if (rowFetchError) {
+      console.error("Error al leer vestido_calendar_notes tras guardar:", rowFetchError);
+      return errorResponse("Guardado aplicado pero no se pudo leer la fila actualizada", 500);
+    }
 
     type VestidoNoteRow = {
       title_override: string | null;
+      description_override: string | null;
       last_edited_at: string | null;
       last_edited_by_user_id: string | null;
     };
@@ -171,11 +207,14 @@ export async function PATCH(
     let last_edited_by: { id: string; name: string | null; email: string } | null =
       null;
     if (editedByUserId) {
-      const { data: userRow } = await supabase
+      const { data: userRow, error: userLookupErr } = await supabase
         .from("users")
         .select("id, name, email")
         .eq("id", editedByUserId)
-        .single();
+        .maybeSingle();
+      if (userLookupErr) {
+        console.error("Error al resolver usuario de vestido-notes (PATCH):", userLookupErr);
+      }
       if (userRow) {
         last_edited_by = {
           id: (userRow as { id: string }).id,
@@ -187,6 +226,7 @@ export async function PATCH(
 
     return successResponse({
       title_override: row?.title_override ?? null,
+      description_override: row?.description_override ?? null,
       last_edited_at: row?.last_edited_at ?? null,
       last_edited_by,
     });

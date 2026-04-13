@@ -16,7 +16,11 @@ sql/04-cron-jobs.sql
 sql/populate-initial-data.sql
 ```
 
-Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` desde cero, ya están integrados. Si ya tienes la BD y quieres usar el calendario de renta de vestidos en la app, ejecuta además `sql/25-migration-vestido-calendar-events.sql` para crear las tablas (vestido_calendar_notes y vestido_calendar_events) y luego `node scripts/sync-vestidos-calendar.mjs --commit`.
+Los migrations del 05 al 19 **no son necesarios** si ejecutas `01-schema.sql` desde cero, ya están integrados. Si ya tienes la BD y quieres usar el calendario de renta de vestidos en la app, ejecuta además `sql/25-migration-vestido-calendar-events.sql` para crear las tablas (vestido_calendar_notes y vestido_calendar_events) y luego `node scripts/sync-vestidos-calendar.mjs --commit`. Si las tablas ya existían antes de añadir la columna de descripción, ejecuta también `sql/26-migration-vestido-description.sql`. Para FK de notas → eventos, borrado en cascada y consulta embebida del API, ejecuta `sql/27-migration-vestido-notes-fk-cascade.sql` (limpia notas huérfanas antes de crear la FK).
+
+**Calendario de vestidos (solo consola, sin escribir BD):** `node scripts/preview-vestidos-calendar.mjs` muestra título, fechas y también `description` / `location` desde Google. Para ver el payload crudo evento por evento: `node scripts/sync-vestidos-calendar.mjs --debug` (sin `--commit` si no quieres tocar Supabase). El import a BD es `sync-vestidos-calendar.mjs --commit`.
+
+**Después del lanzamiento (sin Google Calendar para vestidos):** la idea es hacer **una sola** pasada con `--commit` para traer el histórico inicial; a partir de ahí los eventos viven solo en la app (admin: reservaciones / calendario). **No ejecutes `--commit` otra vez** mientras tengas eventos creados en la app (`app-...`), porque el script borra toda la tabla y solo reinserta lo que siga existiendo en Google (y esos eventos de app no están en Google).
 
 ---
 

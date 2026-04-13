@@ -135,6 +135,7 @@ export default function AdminReservacionesPage() {
     payment_state: "pending" as "pending" | "already_paid",
     /** Solo variant renta_vestido: cuadro azul en calendario (todo el día) */
     vestido_title: "",
+    vestido_notes: "",
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -350,6 +351,7 @@ export default function AdminReservacionesPage() {
       order_number: "",
       payment_state: "pending",
       vestido_title: "",
+      vestido_notes: "",
     });
     setPickerDate(tomorrow);
     setPickerTime(null);
@@ -412,10 +414,12 @@ export default function AdminReservacionesPage() {
       }
       setCreateLoading(true);
       try {
+        const notes = newForm.vestido_notes?.trim() ?? "";
         const res = await axios.post("/api/admin/google-calendar/vestidos", {
           date,
           title: newForm.vestido_title.trim(),
           isAllDay: true,
+          ...(notes ? { description: notes } : {}),
         });
         if (res.data?.success) {
           setShowNewModal(false);
@@ -703,13 +707,23 @@ export default function AdminReservacionesPage() {
                       <h3 className="mb-2 text-sm font-semibold text-zinc-800">Evento en calendario (vestidos)</h3>
                       <p className="text-xs text-zinc-600">{format(pickerDate, "EEEE, d 'de' MMMM", { locale: es })}</p>
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-zinc-600">Título / descripción *</label>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">Título *</label>
                         <input
                           type="text"
                           value={newForm.vestido_title}
                           onChange={(e) => setNewForm((f) => ({ ...f, vestido_title: e.target.value }))}
                           className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
                           placeholder="Ej. Renta vestido #3839, evento 24 abril"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">Notas (opcional)</label>
+                        <textarea
+                          rows={4}
+                          value={newForm.vestido_notes}
+                          onChange={(e) => setNewForm((f) => ({ ...f, vestido_notes: e.target.value }))}
+                          className="w-full resize-y rounded border border-zinc-300 px-3 py-2 text-sm"
+                          placeholder="Contacto, vestido, depósito… (como la descripción en Google Calendar)"
                         />
                       </div>
                       <p className="text-xs text-zinc-500">

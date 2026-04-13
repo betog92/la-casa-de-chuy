@@ -1,14 +1,28 @@
 /**
- * Script para probar el calendario de renta de vestidos.
+ * Script para probar el calendario de renta de vestidos (solo lectura Google, no toca Supabase).
  * Lee eventos de GOOGLE_CALENDAR_VESTIDOS_ID e imprime la respuesta en consola.
  *
  * Uso (desde la raíz del proyecto):
  *   node scripts/preview-vestidos-calendar.mjs
  *
+ * Relación con otros comandos:
+ *   - Este script: preview en consola (incluye description/location de Google; la app aún no las persiste en BD).
+ *   - node scripts/sync-vestidos-calendar.mjs        → preview de filas que se escribirían (solo title/fechas en BD).
+ *   - node scripts/sync-vestidos-calendar.mjs --commit → importa/reemplaza vestido_calendar_events en Supabase.
+ *   - node scripts/sync-vestidos-calendar.mjs --debug  → log crudo por evento desde Google (summary, description, etc.).
+ *
  * Requiere en .env.local:
  *   GOOGLE_CALENDAR_VESTIDOS_ID=xxx@group.calendar.google.com
  *   GOOGLE_CALENDAR_CREDENTIALS={"type":"service_account",...}
  */
+
+const DESCRIPTION_SNIPPET_MAX = 200;
+
+function snippet(text, maxLen) {
+  const s = text ?? "";
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen)}…`;
+}
 
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
@@ -104,6 +118,29 @@ async function main() {
 
   const items = res.data.items ?? [];
 
+  if (items.length > 0 && items[0]?.id) {
+    const raw = items[0];
+    console.log("\nPrimer evento (Google API, inspección rápida):");
+    console.log("  keys en el objeto:", Object.keys(raw).sort().join(", "));
+    console.log(
+      JSON.stringify(
+        {
+          id: raw.id,
+          summary: raw.summary ?? null,
+          description: raw.description ?? null,
+          descriptionLength: (raw.description ?? "").length,
+          location: raw.location ?? null,
+          start: raw.start ?? null,
+          end: raw.end ?? null,
+          status: raw.status ?? null,
+          htmlLink: raw.htmlLink ?? null,
+        },
+        null,
+        2
+      )
+    );
+  }
+
   const events = items
     .filter((e) => !!e.id)
     .map((e) => {
@@ -128,9 +165,16 @@ async function main() {
         originalEnd = e.end.dateTime;
       }
 
+      const description = e.description ?? null;
+      const descStr = description ?? "";
+
       return {
         googleEventId: e.id,
         title: (e.summary ?? "").trim() || "Sin título",
+        description,
+        descriptionLength: descStr.length,
+        descriptionSnippet: descStr ? snippet(descStr, DESCRIPTION_SNIPPET_MAX) : null,
+        location: e.location?.trim() ? e.location.trim() : null,
         date,
         startTime,
         endTime,
@@ -142,7 +186,9 @@ async function main() {
 
   console.log("Respuesta cruda (res.data) - keys:", Object.keys(res.data));
   console.log("Total eventos en la respuesta (items.length):", items.length);
-  console.log("\nEventos mapeados (igual que la API):");
+  console.log(
+    "\nEventos mapeados (fechas como en sync a BD + description/location desde Google; el GET admin devuelve description tras migración 26 y sync --commit):"
+  );
   console.log(JSON.stringify(events, null, 2));
   if (events.length > 0) {
     console.log("\nPrimer evento (resumen):");

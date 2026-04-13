@@ -9,8 +9,30 @@ import {
   validationErrorResponse,
 } from "@/utils/api-response";
 import { randomUUID } from "crypto";
+import { VESTIDO_DESCRIPTION_MAX_CHARS, vestidoDescriptionTooLong } from "@/lib/vestido-calendar-limits";
 
 type VestidoEventInsert = Database["public"]["Tables"]["vestido_calendar_events"]["Insert"];
+
+/** Nota embebida desde Supabase (objeto o array de 0–1 filas). */
+function pickEmbeddedNote(raw: unknown): {
+  title_override: string | null;
+  description_override: string | null;
+} | null {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) {
+    const first = raw[0] as { title_override?: string | null; description_override?: string | null } | undefined;
+    if (!first) return null;
+    return {
+      title_override: first.title_override ?? null,
+      description_override: first.description_override ?? null,
+    };
+  }
+  const o = raw as { title_override?: string | null; description_override?: string | null };
+  return {
+    title_override: o.title_override ?? null,
+    description_override: o.description_override ?? null,
+  };
+}
 
 /**
  * Formatea una fecha ISO a HH:mm:ss (solo para eventos con hora).
@@ -31,8 +53,11 @@ function isoToTimeString(iso: string): string {
  * GET /api/admin/google-calendar/vestidos
  *
  * Lee eventos desde nuestra BD (vestido_calendar_events), no de Google.
- * Los títulos editados vienen de vestido_calendar_notes (title_override).
+ * Títulos y descripciones editados en la app vienen de vestido_calendar_notes (title_override, description_override).
  * Para actualizar la copia local, ejecutar: node scripts/sync-vestidos-calendar.mjs --commit
+ *
+ * Depuración: en .env.local pon DEBUG_VESTIDOS_EVENTS=1 y reinicia el servidor;
+ * en la terminal verás cada evento (puede incluir datos personales de clientes: no subir logs a sitios públicos).
  */
 export async function GET() {
   const { isAdmin } = await requireAdmin();
@@ -42,45 +67,58 @@ export async function GET() {
 
   const supabase = createServiceRoleClient();
 
-  const [eventsResult, notesResult] = await Promise.all([
-    supabase
-      .from("vestido_calendar_events")
-      .select("google_event_id, title, date, original_start, original_end, is_all_day")
-      .order("date", { ascending: true }),
-    supabase.from("vestido_calendar_notes").select("google_event_id, title_override"),
-  ]);
+  const { data: eventsRows, error: queryError } = await supabase
+    .from("vestido_calendar_events")
+    .select(
+      `
+      google_event_id,
+      title,
+      description,
+      date,
+      original_start,
+      original_end,
+      is_all_day,
+      vestido_calendar_notes (
+        title_override,
+        description_override
+      )
+    `
+    )
+    .order("date", { ascending: true });
 
-  const eventsError = eventsResult.error;
-  const eventsRows = eventsResult.data ?? null;
-  if (eventsError || !eventsRows?.length) {
-    if (eventsError) console.error("Error al cargar vestido_calendar_events:", eventsError);
-    return successResponse({ events: [] });
+  if (queryError) {
+    console.error("Error al cargar vestido_calendar_events (con notas):", queryError);
+    return errorResponse("Error al cargar eventos de vestidos", 500);
   }
 
-  const overrides: Record<string, string> = {};
-  const notesRows = notesResult.data as { google_event_id: string; title_override: string | null }[] | null;
-  if (notesRows) {
-    for (const row of notesRows) {
-      if (row.title_override?.trim()) {
-        overrides[row.google_event_id] = row.title_override.trim();
-      }
-    }
+  if (!eventsRows?.length) {
+    return successResponse({ events: [] });
   }
 
   const events = eventsRows.map((r) => {
     const row = r as {
       google_event_id: string;
       title: string;
+      description: string | null;
       date: string;
       original_start: string;
       original_end: string;
       is_all_day: boolean;
+      vestido_calendar_notes: unknown;
     };
+    const note = pickEmbeddedNote(row.vestido_calendar_notes);
+    const titleOT = note?.title_override?.trim() ? note.title_override.trim() : null;
+    const descOT =
+      note?.description_override != null && note.description_override.trim() !== ""
+        ? note.description_override.trim()
+        : null;
     const isAllDay = row.is_all_day ?? !row.original_start?.includes("T");
     return {
       googleEventId: row.google_event_id,
       title: row.title,
-      title_override: overrides[row.google_event_id] ?? null,
+      title_override: titleOT,
+      description: row.description ?? null,
+      description_override: descOT,
       date: row.date,
       startTime: isAllDay ? "00:00:00" : isoToTimeString(row.original_start),
       endTime: isAllDay ? "00:00:00" : isoToTimeString(row.original_end),
@@ -89,6 +127,18 @@ export async function GET() {
       isAllDay,
     };
   });
+
+  if (process.env.DEBUG_VESTIDOS_EVENTS === "1") {
+    console.log(
+      "[DEBUG_VESTIDOS_EVENTS] GET /api/admin/google-calendar/vestidos —",
+      events.length,
+      "evento(s)"
+    );
+    for (const ev of events) {
+      console.log(JSON.stringify(ev, null, 2));
+      console.log("---");
+    }
+  }
 
   return successResponse({ events });
 }
@@ -108,9 +158,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { date, title, isAllDay } = body as {
+    const { date, title, description, isAllDay } = body as {
       date?: string;
       title?: string;
+      description?: string | null;
       isAllDay?: boolean;
     };
 
@@ -131,11 +182,25 @@ export async function POST(request: NextRequest) {
     const original_start = date;
     const original_end = date;
 
+    const descriptionForRow: string | null =
+      description === undefined
+        ? null
+        : typeof description === "string"
+          ? description.trim() || null
+          : null;
+
+    if (descriptionForRow && vestidoDescriptionTooLong(descriptionForRow)) {
+      return validationErrorResponse(
+        `La descripción no puede superar ${VESTIDO_DESCRIPTION_MAX_CHARS} caracteres`
+      );
+    }
+
     const google_event_id = `app-${randomUUID()}`;
     const supabase = createServiceRoleClient();
     const row: VestidoEventInsert = {
       google_event_id,
       title: titleTrim,
+      description: descriptionForRow,
       date,
       original_start,
       original_end,
