@@ -16,6 +16,7 @@ import {
 } from "@/utils/pricing";
 import Link from "next/link";
 import TermsModal from "@/components/TermsModal";
+import PayTermsConsentModal from "@/components/PayTermsConsentModal";
 import ConektaPaymentForm, {
   type ConektaPaymentFormRef,
 } from "@/components/ConektaPaymentForm";
@@ -36,9 +37,6 @@ const reservationFormSchema = z.object({
   photographerStudio: z
     .string()
     .max(500, "Máximo 500 caracteres"),
-  acceptTerms: z.boolean().refine((val) => val === true, {
-    message: "Debes aceptar los términos y condiciones para continuar",
-  }),
 });
 
 type ReservationFormData = z.infer<typeof reservationFormSchema>;
@@ -75,6 +73,7 @@ function FormularioReservaContent() {
   const [error, setError] = useState<string | null>(null);
   const [conektaError, setConektaError] = useState<string | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPayConsentModal, setShowPayConsentModal] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const paymentFormRef = useRef<ConektaPaymentFormRef>(null);
   const { user } = useAuth();
@@ -128,6 +127,7 @@ function FormularioReservaContent() {
   const {
     register,
     handleSubmit,
+    trigger,
     formState: { errors },
     watch,
     setValue,
@@ -482,6 +482,23 @@ function FormularioReservaContent() {
     const date = new Date();
     date.setHours(hours, minutes, 0, 0);
     return format(date, "h:mm a", { locale: es });
+  };
+
+  const handlePayClick = async () => {
+    const ok = await trigger([
+      "email",
+      "name",
+      "phone",
+      "sessionType",
+      "photographerStudio",
+    ]);
+    if (!ok) return;
+    setShowPayConsentModal(true);
+  };
+
+  const handlePayConsentConfirm = () => {
+    setShowPayConsentModal(false);
+    void handleSubmit(onSubmit)();
   };
 
   const onSubmit = async (data: ReservationFormData) => {
@@ -1285,7 +1302,10 @@ function FormularioReservaContent() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form
+              onSubmit={(e) => e.preventDefault()}
+              className="space-y-4"
+            >
               {/* Sección: Contacto */}
               <div className="bg-white rounded-lg border border-zinc-200 p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -1504,42 +1524,17 @@ function FormularioReservaContent() {
                 </div>
               </div>
 
-              {/* Términos y Condiciones */}
-              <div className="bg-white rounded-lg border border-zinc-200 p-6">
-                <div className="flex items-start">
-                  <input
-                    id="acceptTerms"
-                    type="checkbox"
-                    {...register("acceptTerms")}
-                    className="mt-1 h-4 w-4 rounded border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948]"
-                  />
-                  <label
-                    htmlFor="acceptTerms"
-                    className="ml-3 text-sm text-zinc-700"
-                  >
-                    Acepto los{" "}
-                    <button
-                      type="button"
-                      onClick={() => setShowTermsModal(true)}
-                      className="text-[#103948] hover:underline"
-                    >
-                      términos y condiciones
-                    </button>{" "}
-                    y la{" "}
-                    <Link
-                      href="/privacidad"
-                      className="text-[#103948] hover:underline"
-                    >
-                      política de privacidad
-                    </Link>
-                  </label>
-                </div>
-                {errors.acceptTerms && (
-                  <p className="mt-2 text-sm text-red-600">
-                    {errors.acceptTerms.message}
-                  </p>
-                )}
-              </div>
+              <p className="text-center text-sm text-zinc-600 px-1">
+                Al pulsar &quot;Pagar ahora&quot; podrás leer los términos y
+                condiciones y aceptarlos antes del cobro.{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="text-[#103948] font-medium hover:underline"
+                >
+                  Ver términos completos
+                </button>
+              </p>
 
               {/* Error general (no Conekta: reserva, formulario, etc.) */}
               {error && (
@@ -1550,7 +1545,8 @@ function FormularioReservaContent() {
 
               {/* Botón de pago */}
               <button
-                type="submit"
+                type="button"
+                onClick={() => void handlePayClick()}
                 disabled={loading}
                 className="w-full rounded-lg bg-[#103948] px-6 py-3 font-semibold text-white transition-colors hover:bg-[#0d2d3a] disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -2084,10 +2080,14 @@ function FormularioReservaContent() {
         </div>
       </div>
 
-      {/* Modal de Términos y Condiciones Completos */}
       <TermsModal
         isOpen={showTermsModal}
         onClose={() => setShowTermsModal(false)}
+      />
+      <PayTermsConsentModal
+        isOpen={showPayConsentModal}
+        onCancel={() => setShowPayConsentModal(false)}
+        onConfirm={handlePayConsentConfirm}
       />
     </div>
   );
