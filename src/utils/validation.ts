@@ -1,5 +1,9 @@
+import { isSessionType } from "@/utils/session-type";
+
 export const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 export const TIME_REGEX = /^\d{2}:\d{2}$/;
+
+const PHOTOGRAPHER_STUDIO_MAX = 500;
 
 /**
  * Valida el formato de fecha YYYY-MM-DD
@@ -38,6 +42,10 @@ export interface ReservationRequestBody {
   // Código de descuento
   discountCode?: string | null;
   discountCodeDiscount?: number;
+  /** Obligatorio en reservas web */
+  sessionType?: string;
+  /** Opcional: fotógrafo o estudio (texto libre) */
+  photographerStudio?: string | null;
 }
 
 /**
@@ -71,6 +79,24 @@ export function validateReservationFields(body: ReservationRequestBody): {
   }
   if (!body.paymentId || body.paymentId === "") {
     return { isValid: false, error: "Campo requerido faltante: paymentId" };
+  }
+
+  const st = body.sessionType != null ? String(body.sessionType).trim() : "";
+  if (!st || !isSessionType(st)) {
+    return {
+      isValid: false,
+      error: "Tipo de sesión inválido. Debe ser xv_anos, boda o casual.",
+    };
+  }
+
+  if (body.photographerStudio != null && body.photographerStudio !== "") {
+    const ps = String(body.photographerStudio).trim();
+    if (ps.length > PHOTOGRAPHER_STUDIO_MAX) {
+      return {
+        isValid: false,
+        error: `Fotógrafo/estudio: máximo ${PHOTOGRAPHER_STUDIO_MAX} caracteres`,
+      };
+    }
   }
 
   // Validar formato de fecha (ya sabemos que existe por las validaciones anteriores)

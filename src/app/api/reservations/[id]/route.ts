@@ -11,6 +11,7 @@ import {
   unauthorizedResponse,
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
+import { isSessionType } from "@/utils/session-type";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
 
@@ -52,7 +53,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio"
       )
       .eq("id", reservationId)
       .single();
@@ -229,6 +230,27 @@ export async function PATCH(
       updatePayload.import_notes_edited_by_user_id = user?.id ?? null;
     }
 
+    if (body.session_type !== undefined && body.session_type !== null) {
+      const st = String(body.session_type).trim();
+      if (!isSessionType(st)) {
+        return validationErrorResponse(
+          "session_type inválido (use xv_anos, boda o casual)"
+        );
+      }
+      updatePayload.session_type = st;
+    }
+    if (body.session_type === null) {
+      updatePayload.session_type = null;
+    }
+
+    if (body.photographer_studio !== undefined) {
+      const raw =
+        body.photographer_studio === "" || body.photographer_studio == null
+          ? null
+          : String(body.photographer_studio).trim().slice(0, 500);
+      updatePayload.photographer_studio = raw === "" ? null : raw;
+    }
+
     if (Object.keys(updatePayload).length === 0) {
       return validationErrorResponse("No hay campos válidos para actualizar");
     }
@@ -238,7 +260,7 @@ export async function PATCH(
     const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)
       .eq("id", reservationId)
-      .select("id, name, email, phone, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id")
+      .select("id, name, email, phone, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio")
       .single();
 
     if (error) {

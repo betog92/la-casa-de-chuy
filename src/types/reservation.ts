@@ -15,6 +15,10 @@ export interface Reservation {
   email: string;
   name: string;
   phone: string;
+  /** XV años, boda o casual (reservas web); null en datos antiguos */
+  session_type?: "xv_anos" | "boda" | "casual" | null;
+  /** Fotógrafo o estudio (texto libre); editable por admin */
+  photographer_studio?: string | null;
   date: string;
   start_time: string;
   end_time: string;

@@ -11,6 +11,7 @@ import {
   formatReservationId,
 } from "@/utils/formatters";
 import type { Reservation } from "@/types/reservation";
+import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
 
 function ConfirmacionContent() {
@@ -284,6 +285,26 @@ function ConfirmacionContent() {
                   <span className="font-medium">Teléfono:</span>
                   <span>{reservation.phone}</span>
                 </div>
+              </>
+            )}
+            {(reservation.session_type || reservation.photographer_studio) && (
+              <>
+                {reservation.session_type ? (
+                  <div className="flex justify-between">
+                    <span className="font-medium">Tipo de sesión:</span>
+                    <span>{sessionTypeLabel(reservation.session_type)}</span>
+                  </div>
+                ) : null}
+                {reservation.photographer_studio ? (
+                  <div className="flex justify-between gap-4">
+                    <span className="font-medium shrink-0">
+                      Fotógrafo / estudio:
+                    </span>
+                    <span className="text-right text-zinc-800">
+                      {reservation.photographer_studio}
+                    </span>
+                  </div>
+                ) : null}
               </>
             )}
             <div className="border-t border-zinc-200 pt-4">

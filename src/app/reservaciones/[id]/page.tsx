@@ -29,6 +29,7 @@ import {
 import { DiscountRow } from "@/components/DiscountRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import type { Reservation } from "@/types/reservation";
+import { sessionTypeLabel } from "@/utils/session-type";
 
 export default function ReservationDetailsPage() {
   const params = useParams();
@@ -53,6 +54,7 @@ export default function ReservationDetailsPage() {
     phone: "",
     order_number: "",
     import_notes: "",
+    photographer_studio: "",
   });
   const [savingDetail, setSavingDetail] = useState(false);
   const [editDetailError, setEditDetailError] = useState<string | null>(null);
@@ -93,8 +95,22 @@ export default function ReservationDetailsPage() {
       phone: reservation.phone ?? "",
       order_number: reservation.order_number ?? "",
       import_notes: reservation.import_notes ?? "",
+      photographer_studio: reservation.photographer_studio ?? "",
     });
-  }, [reservation?.id, reservation?.name, reservation?.email, reservation?.phone, reservation?.order_number, reservation?.import_notes]);
+  }, [
+    reservation?.id,
+    reservation?.name,
+    reservation?.email,
+    reservation?.phone,
+    reservation?.order_number,
+    reservation?.import_notes,
+    reservation?.photographer_studio,
+  ]);
+
+  useEffect(() => {
+    setSaveDetailSuccess(false);
+    setEditDetailError(null);
+  }, [reservation?.id]);
 
   // Ocultar mensaje "Detalles guardados" tras unos segundos
   useEffect(() => {
@@ -587,6 +603,24 @@ export default function ReservationDetailsPage() {
                         {reservation.phone || "No proporcionado"}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Tipo de sesión</p>
+                      <p className="text-lg font-medium text-[#103948]">
+                        {reservation.session_type
+                          ? sessionTypeLabel(reservation.session_type)
+                          : "—"}
+                      </p>
+                    </div>
+                    {reservation.photographer_studio ? (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">
+                          Fotógrafo / estudio
+                        </p>
+                        <p className="text-lg font-medium text-[#103948] whitespace-pre-line">
+                          {reservation.photographer_studio}
+                        </p>
+                      </div>
+                    ) : null}
                     {(reservation.order_number || reservation.google_event_id) && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
@@ -606,6 +640,25 @@ export default function ReservationDetailsPage() {
                         className="w-full rounded border border-zinc-300 px-3 py-2 text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
                       />
                     </div>
+                    <div>
+                      <label htmlFor="admin-photographer-studio-import" className="text-sm text-zinc-600 mb-1 block">
+                        Nombre del fotógrafo / estudio (opcional)
+                      </label>
+                      <input
+                        id="admin-photographer-studio-import"
+                        type="text"
+                        maxLength={500}
+                        value={editForm.photographer_studio}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            photographer_studio: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                        placeholder="Ej. Estudio Luz o nombre del fotógrafo"
+                      />
+                    </div>
                     {editDetailError && (
                       <p className="text-sm text-red-600">{editDetailError}</p>
                     )}
@@ -622,7 +675,11 @@ export default function ReservationDetailsPage() {
                           const res = await fetch(`/api/reservations/${reservation.id}`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ import_notes: editForm.import_notes || null }),
+                            body: JSON.stringify({
+                              import_notes: editForm.import_notes || null,
+                              photographer_studio:
+                                editForm.photographer_studio.trim() || null,
+                            }),
                           });
                           const data = await res.json();
                           if (!data.success) {
@@ -637,6 +694,10 @@ export default function ReservationDetailsPage() {
                                   import_notes: updated.import_notes ?? prev.import_notes ?? null,
                                   import_notes_edited_at: updated.import_notes_edited_at ?? prev.import_notes_edited_at ?? null,
                                   import_notes_edited_by: updated.import_notes_edited_by ?? prev.import_notes_edited_by ?? null,
+                                  photographer_studio:
+                                    updated.photographer_studio ??
+                                    prev.photographer_studio ??
+                                    null,
                                 }
                               : null
                           );
@@ -680,6 +741,106 @@ export default function ReservationDetailsPage() {
                         {reservation.phone || "No proporcionado"}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-sm text-zinc-600 mb-1">Tipo de sesión</p>
+                      <p className="text-lg font-medium text-[#103948]">
+                        {reservation.session_type
+                          ? sessionTypeLabel(reservation.session_type)
+                          : "—"}
+                      </p>
+                    </div>
+                    {reservation.photographer_studio ? (
+                      <div>
+                        <p className="text-sm text-zinc-600 mb-1">
+                          Fotógrafo / estudio
+                        </p>
+                        <p className="text-lg font-medium text-[#103948] whitespace-pre-line">
+                          {reservation.photographer_studio}
+                        </p>
+                      </div>
+                    ) : null}
+                    {isAdmin && reservation.source === "web" && (
+                      <div className="pt-3 border-t border-zinc-200 space-y-2">
+                        <label
+                          htmlFor="admin-photographer-studio"
+                          className="text-sm text-zinc-600 block"
+                        >
+                          Nombre del fotógrafo / estudio (solo administración;
+                          puedes completar o corregir)
+                        </label>
+                        <input
+                          id="admin-photographer-studio"
+                          type="text"
+                          maxLength={500}
+                          value={editForm.photographer_studio}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              photographer_studio: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                          placeholder="Ej. Estudio Luz o nombre del fotógrafo"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setEditDetailError(null);
+                            setSaveDetailSuccess(false);
+                            setSavingDetail(true);
+                            try {
+                              const res = await fetch(
+                                `/api/reservations/${reservation.id}`,
+                                {
+                                  method: "PATCH",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    photographer_studio:
+                                      editForm.photographer_studio.trim() ||
+                                      null,
+                                  }),
+                                }
+                              );
+                              const data = await res.json();
+                              if (!data.success) {
+                                setEditDetailError(
+                                  data.error || "Error al guardar"
+                                );
+                                return;
+                              }
+                              const updated = data.reservation;
+                              setReservation((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      photographer_studio:
+                                        updated.photographer_studio ??
+                                        prev.photographer_studio ??
+                                        null,
+                                    }
+                                  : null
+                              );
+                              setSaveDetailSuccess(true);
+                            } catch {
+                              setEditDetailError("Error de conexión");
+                            } finally {
+                              setSavingDetail(false);
+                            }
+                          }}
+                          disabled={savingDetail}
+                          className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
+                        >
+                          {savingDetail ? "Guardando…" : "Guardar fotógrafo / estudio"}
+                        </button>
+                        {saveDetailSuccess && (
+                          <p className="text-sm text-green-600 font-medium">
+                            Fotógrafo / estudio guardado correctamente.
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {(reservation.source === "google_import" || reservation.source === "admin") && (reservation.order_number || reservation.google_event_id) && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>

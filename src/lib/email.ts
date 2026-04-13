@@ -4,6 +4,7 @@ import {
   formatTimeRange,
   formatCurrency,
 } from "@/utils/formatters";
+import { sessionTypeLabel } from "@/utils/session-type";
 
 let resendClient: Resend | null = null;
 
@@ -25,6 +26,8 @@ export interface SendReservationConfirmationParams {
   reservationId: number;
   /** URL para gestionar la reserva (guest: /reservas/[token], user: /reservaciones/[id]) */
   manageUrl: string;
+  sessionType?: string | null;
+  photographerStudio?: string | null;
 }
 
 /**
@@ -43,12 +46,29 @@ export async function sendReservationConfirmation(
   }
 
   const to = params.to.trim();
-  const { name, date, startTime, price, reservationId, manageUrl } = params;
+  const {
+    name,
+    date,
+    startTime,
+    price,
+    reservationId,
+    manageUrl,
+    sessionType,
+    photographerStudio,
+  } = params;
 
   const dateFormatted = formatDisplayDate(date);
   const timeFormatted = formatTimeRange(startTime);
   const safePrice = Number.isFinite(Number(price)) ? Number(price) : 0;
   const priceFormatted = formatCurrency(safePrice);
+  const sessionRow =
+    sessionType != null && String(sessionType).trim() !== ""
+      ? `<tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Tipo de sesión</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(sessionTypeLabel(sessionType))}</td></tr>`
+      : "";
+  const photographerRow =
+    photographerStudio != null && String(photographerStudio).trim() !== ""
+      ? `<tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Fotógrafo / estudio</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(String(photographerStudio).trim())}</td></tr>`
+      : "";
 
   const subject = `Reserva confirmada – ${dateFormatted}`;
 
@@ -72,6 +92,8 @@ export async function sendReservationConfirmation(
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Fecha</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(dateFormatted)}</td></tr>
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Horario</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(timeFormatted)}</td></tr>
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">Monto pagado</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">$${escapeHtml(priceFormatted)} MXN</td></tr>
+          ${sessionRow}
+          ${photographerRow}
           <tr><td style="padding:10px 0; font-size:0.875rem; color:#71717a;">ID de reserva</td><td style="padding:10px 0; font-size:0.875rem; text-align:right; font-weight:500; color:#27272a;">${escapeHtml(String(reservationId))}</td></tr>
         </table>
       </div>

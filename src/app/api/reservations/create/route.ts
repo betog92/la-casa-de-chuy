@@ -82,7 +82,16 @@ export async function POST(request: NextRequest) {
       referralDiscount,
       discountCode,
       discountCodeDiscount,
+      sessionType,
+      photographerStudio,
     } = body;
+
+    const sessionTypeNorm = String(sessionType ?? "").trim();
+    const photographerStudioRaw = photographerStudio;
+    const photographerStudioNorm =
+      photographerStudioRaw == null || photographerStudioRaw === ""
+        ? null
+        : String(photographerStudioRaw).trim().slice(0, 500) || null;
 
     const normalizedEmail = (email || "").toLowerCase().trim();
 
@@ -195,6 +204,8 @@ export async function POST(request: NextRequest) {
       payment_method: paymentId ? "conekta" : null,
       status: "confirmed" as const,
       user_id: userId || null,
+      session_type: sessionTypeNorm,
+      photographer_studio: photographerStudioNorm,
       discount_amount: discountAmount || 0,
       // Campos específicos de descuentos
       last_minute_discount: lastMinuteDiscount || 0,
@@ -488,6 +499,8 @@ export async function POST(request: NextRequest) {
         price: Number.isFinite(Number(price)) ? Number(price) : 0,
         reservationId,
         manageUrl,
+        sessionType: sessionTypeNorm,
+        photographerStudio: photographerStudioNorm,
       })
         .then((r) => {
           if (!r.ok) {

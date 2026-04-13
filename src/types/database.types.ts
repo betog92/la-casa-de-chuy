@@ -88,6 +88,8 @@ export interface Database {
           payment_status: "pending" | "paid" | "not_applicable" | null;
           payment_validated_at: string | null;
           payment_validated_by_user_id: string | null;
+          session_type: "xv_anos" | "boda" | "casual" | null;
+          photographer_studio: string | null;
         };
         Insert: {
           id?: number;
@@ -132,6 +134,8 @@ export interface Database {
           payment_status?: "pending" | "paid" | "not_applicable" | null;
           payment_validated_at?: string | null;
           payment_validated_by_user_id?: string | null;
+          session_type?: "xv_anos" | "boda" | "casual" | null;
+          photographer_studio?: string | null;
         };
         Update: {
           id?: number;
@@ -142,6 +146,8 @@ export interface Database {
           payment_status?: "pending" | "paid" | "not_applicable" | null;
           payment_validated_at?: string | null;
           payment_validated_by_user_id?: string | null;
+          session_type?: "xv_anos" | "boda" | "casual" | null;
+          photographer_studio?: string | null;
           email?: string;
           name?: string;
           phone?: string;

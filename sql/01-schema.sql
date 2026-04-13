@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS reservations (
   import_notes TEXT,     -- notas tras el teléfono (vestido, sesión, ampliaciones, etc.)
   import_notes_edited_at TIMESTAMP WITH TIME ZONE,
   import_notes_edited_by_user_id UUID REFERENCES users(id),
+  session_type TEXT CHECK (session_type IS NULL OR session_type IN ('xv_anos', 'boda', 'casual')),
+  photographer_studio TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

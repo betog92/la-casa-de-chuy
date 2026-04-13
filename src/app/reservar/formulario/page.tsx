@@ -22,12 +22,20 @@ import ConektaPaymentForm, {
 import type { ReservationData } from "@/types/reservation";
 import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
+import { isSessionType } from "@/utils/session-type";
 
 // Schema de validación
 const reservationFormSchema = z.object({
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   email: z.string().email("Email inválido"),
   phone: z.string().min(10, "El teléfono debe tener al menos 10 dígitos"),
+  sessionType: z
+    .string()
+    .min(1, "Selecciona el tipo de sesión")
+    .refine((v) => isSessionType(v), "Selecciona el tipo de sesión"),
+  photographerStudio: z
+    .string()
+    .max(500, "Máximo 500 caracteres"),
   acceptTerms: z.boolean().refine((val) => val === true, {
     message: "Debes aceptar los términos y condiciones para continuar",
   }),
@@ -125,6 +133,10 @@ function FormularioReservaContent() {
     setValue,
   } = useForm<ReservationFormData>({
     resolver: zodResolver(reservationFormSchema),
+    defaultValues: {
+      sessionType: "",
+      photographerStudio: "",
+    },
   });
 
   // Obtener el email actual del formulario
@@ -559,6 +571,10 @@ function FormularioReservaContent() {
             discountCode: appliedDiscountCode?.code || null,
             discountCodeDiscount:
               priceCalculation?.discounts.discountCode?.amount || 0,
+            sessionType: data.sessionType,
+            photographerStudio: data.photographerStudio.trim()
+              ? data.photographerStudio.trim()
+              : null,
           }
         );
 
@@ -1378,10 +1394,10 @@ function FormularioReservaContent() {
                 </div>
               </div>
 
-              {/* Sección: Información de facturación */}
+              {/* Sección: Datos de contacto */}
               <div className="bg-white rounded-lg border border-zinc-200 p-6">
                 <h2 className="text-lg font-semibold text-zinc-900 mb-4">
-                  Información de facturación
+                  Datos de contacto
                 </h2>
 
                 {/* Nombre */}
@@ -1428,6 +1444,61 @@ function FormularioReservaContent() {
                   {errors.phone && (
                     <p className="mt-1 text-sm text-red-600">
                       {errors.phone.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección: Tu sesión (después de datos de contacto: primero quién eres, luego qué sesión es) */}
+              <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                <h2 className="text-lg font-semibold text-zinc-900 mb-1">
+                  Tu sesión
+                </h2>
+                <p className="text-sm text-zinc-500 mb-4">
+                  Indica el tipo de sesión. Si ya sabes quién te acompaña como
+                  fotógrafo o estudio, puedes anotarlo; si no, déjalo en blanco.
+                </p>
+                <div className="mb-4">
+                  <label
+                    htmlFor="sessionType"
+                    className="mb-2 block text-sm font-medium text-zinc-700"
+                  >
+                    Tipo de sesión <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    id="sessionType"
+                    {...register("sessionType")}
+                    className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                  >
+                    <option value="">Selecciona una opción</option>
+                    <option value="xv_anos">XV años</option>
+                    <option value="boda">Boda</option>
+                    <option value="casual">Casual</option>
+                  </select>
+                  {errors.sessionType && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.sessionType.message}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label
+                    htmlFor="photographerStudio"
+                    className="mb-2 block text-sm font-medium text-zinc-700"
+                  >
+                    Nombre del fotógrafo / estudio (opcional)
+                  </label>
+                  <input
+                    id="photographerStudio"
+                    type="text"
+                    maxLength={500}
+                    {...register("photographerStudio")}
+                    className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+                    placeholder="Ej. Estudio Luz o nombre del fotógrafo"
+                  />
+                  {errors.photographerStudio && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.photographerStudio.message}
                     </p>
                   )}
                 </div>
