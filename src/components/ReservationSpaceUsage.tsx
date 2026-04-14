@@ -33,7 +33,7 @@ export function ReservationSpaceUsage({
       aria-label={`Distribución del tiempo: ${u.interiorMinutes} minutos interior, ${u.exteriorMinutes} minutos jardín`}
     >
       <div
-        className="h-full min-w-0 bg-[#103948]"
+        className="h-full min-w-0 bg-zinc-600"
         style={{ flex: u.interiorMinutes }}
         aria-hidden
       />
@@ -58,7 +58,9 @@ export function ReservationSpaceUsage({
         <span className="flex min-w-0 flex-wrap items-center gap-2 text-zinc-700">
           <span aria-hidden>⏱</span>
           <span className="font-medium">Interior</span>
-          <span className={`${chipClass} bg-zinc-200/80 text-zinc-700`}>
+          <span
+            className={`${chipClass} bg-zinc-200 text-zinc-800 ring-1 ring-zinc-300/90`}
+          >
             {u.interiorMinutes} min
           </span>
         </span>
