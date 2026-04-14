@@ -6,10 +6,10 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import {
   formatDisplayDate,
-  formatTimeRange,
   formatCurrency,
   formatReservationId,
 } from "@/utils/formatters";
+import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
@@ -312,10 +312,11 @@ function ConfirmacionContent() {
                 <span className="font-medium">Fecha:</span>
                 <span>{formatDisplayDate(reservation.date)}</span>
               </div>
-              <div className="mb-3 flex justify-between">
-                <span className="font-medium">Hora:</span>
-                <span>{formatTimeRange(reservation.start_time)}</span>
-              </div>
+              <ReservationSpaceUsage
+                startTime={reservation.start_time}
+                calendarDate={reservation.date}
+                variant="confirm"
+              />
               {(() => {
                 // Este reagendo generó pago/pendiente: mostrar "Pago adicional"
                 if (rescheduled === "true" && additionalAmountThisReschedule > 0) {

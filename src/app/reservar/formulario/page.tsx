@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, parse } from "date-fns";
-import { es } from "date-fns/locale";
+import { parse } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import {
   calculatePriceWithCustom,
@@ -24,6 +23,11 @@ import type { ReservationData } from "@/types/reservation";
 import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
 import { isSessionType } from "@/utils/session-type";
+import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
+import {
+  formatDisplayDate,
+  formatDisplayTimeInMonterrey,
+} from "@/utils/formatters";
 
 // Schema de validación
 const reservationFormSchema = z.object({
@@ -468,24 +472,6 @@ function FormularioReservaContent() {
     }
   };
 
-  // Formatear fecha para mostrar
-  const formatDisplayDate = (dateString: string): string => {
-    const date = parse(dateString, "yyyy-MM-dd", new Date());
-    const formatted = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
-      locale: es,
-    });
-    // Capitalizar solo la primera letra
-    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-  };
-
-  // Formatear hora para mostrar
-  const formatDisplayTime = (time: string): string => {
-    const [hours, minutes] = time.split(":").map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return format(date, "h:mm a", { locale: es });
-  };
-
   const handlePayClick = async () => {
     if (loading || paymentFlowLockRef.current) return;
     const ok = await trigger([
@@ -547,7 +533,10 @@ function FormularioReservaContent() {
           },
           description: `Reserva - ${formatDisplayDate(
             reservationData.date
-          )} ${formatDisplayTime(reservationData.time)}`,
+          )} ${formatDisplayTimeInMonterrey(
+            reservationData.time,
+            reservationData.date
+          )}`,
         });
 
         if (!orderResponse.data.success) {
@@ -797,17 +786,14 @@ function FormularioReservaContent() {
                         <p className="text-zinc-600">
                           {formatDisplayDate(reservationData.date)}
                         </p>
-                        <p className="text-zinc-600">
-                          {formatDisplayTime(reservationData.time)} -{" "}
-                          {(() => {
-                            const [hours, minutes] = reservationData.time
-                              .split(":")
-                              .map(Number);
-                            const endTime = new Date();
-                            endTime.setHours(hours + 1, minutes, 0, 0);
-                            return format(endTime, "h:mm a", { locale: es });
-                          })()}
-                        </p>
+                        <div className="mt-3">
+                          <ReservationSpaceUsage
+                            startTime={reservationData.time}
+                            calendarDate={reservationData.date}
+                            variant="checkout"
+                            compact
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -1593,17 +1579,13 @@ function FormularioReservaContent() {
                   <p className="text-zinc-600">
                     {formatDisplayDate(reservationData.date)}
                   </p>
-                  <p className="text-zinc-600">
-                    {formatDisplayTime(reservationData.time)} -{" "}
-                    {(() => {
-                      const [hours, minutes] = reservationData.time
-                        .split(":")
-                        .map(Number);
-                      const endTime = new Date();
-                      endTime.setHours(hours + 1, minutes, 0, 0);
-                      return format(endTime, "h:mm a", { locale: es });
-                    })()}
-                  </p>
+                  <div className="mt-3">
+                    <ReservationSpaceUsage
+                      startTime={reservationData.time}
+                      calendarDate={reservationData.date}
+                      variant="checkout"
+                    />
+                  </div>
                 </div>
               </div>
 

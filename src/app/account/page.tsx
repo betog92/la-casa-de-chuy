@@ -353,7 +353,11 @@ export default function AccountPage() {
                         </p>
                         <div className="flex items-center gap-2">
                           <p className="text-base text-zinc-700">
-                            {formatTimeRange(reservation.start_time)}
+                            {formatTimeRange(
+                              reservation.start_time,
+                              undefined,
+                              reservation.date
+                            )}
                           </p>
                           <span className="px-2 py-0.5 text-xs font-mono font-medium bg-zinc-100 text-zinc-600 rounded">
                             ID: {formatReservationId(reservation.id)}

@@ -536,7 +536,11 @@ export default function ReservarPage() {
                                 : "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-900 hover:bg-zinc-50"
                             }`}
                           >
-                            {formatTimeRange(time)}
+                            {formatTimeRange(
+                              time,
+                              undefined,
+                              format(selectedDate, "yyyy-MM-dd")
+                            )}
                           </button>
                         );
                       })}

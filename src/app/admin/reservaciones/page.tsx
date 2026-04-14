@@ -608,7 +608,9 @@ export default function AdminReservacionesPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-900">
                         {formatDisplayDateShort(r.date)}
                         <br />
-                        <span className="text-zinc-500">{formatTimeRange(r.start_time)}</span>
+                        <span className="text-zinc-500">
+                          {formatTimeRange(r.start_time, undefined, r.date)}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-zinc-900">{r.name}</p>
@@ -748,7 +750,11 @@ export default function AdminReservacionesPage() {
                                 pickerTime === time ? "border-[#103948] bg-[#103948] text-white" : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
                               }`}
                             >
-                              {formatTimeRange(time)}
+                              {formatTimeRange(
+                                time,
+                                undefined,
+                                format(pickerDate, "yyyy-MM-dd")
+                              )}
                             </button>
                           ))}
                       </div>

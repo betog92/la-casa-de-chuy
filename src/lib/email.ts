@@ -58,7 +58,7 @@ export async function sendReservationConfirmation(
   } = params;
 
   const dateFormatted = formatDisplayDate(date);
-  const timeFormatted = formatTimeRange(startTime);
+  const timeFormatted = formatTimeRange(startTime, undefined, date);
   const safePrice = Number.isFinite(Number(price)) ? Number(price) : 0;
   const priceFormatted = formatCurrency(safePrice);
   const sessionRow =
@@ -151,7 +151,7 @@ export async function sendCancellationConfirmation(
   const { name, date, startTime, refundAmount, reservationId, manageUrl } =
     params;
   const dateFormatted = formatDisplayDate(date);
-  const timeFormatted = formatTimeRange(startTime);
+  const timeFormatted = formatTimeRange(startTime, undefined, date);
   const refundFormatted = formatCurrency(refundAmount);
   const idShort = String(reservationId);
 
@@ -231,7 +231,7 @@ export async function sendRescheduleConfirmation(
   const { name, date, startTime, reservationId, manageUrl, additionalAmount } =
     params;
   const dateFormatted = formatDisplayDate(date);
-  const timeFormatted = formatTimeRange(startTime);
+  const timeFormatted = formatTimeRange(startTime, undefined, date);
   const idShort = String(reservationId);
   const hasExtra = Number(additionalAmount) > 0;
   const extraFormatted = formatCurrency(Number(additionalAmount));

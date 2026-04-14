@@ -528,7 +528,11 @@ export default function RescheduleModal({
                                 : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
-                            {formatTimeRange(time)}
+                            {formatTimeRange(
+                              time,
+                              undefined,
+                              format(selectedDate, "yyyy-MM-dd")
+                            )}
                           </button>
                         );
                       })}

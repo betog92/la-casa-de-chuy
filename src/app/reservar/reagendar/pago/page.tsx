@@ -155,7 +155,7 @@ function ReschedulePaymentContent() {
           },
           description: `Pago adicional por reagendamiento - ${formatDisplayDate(
             newDate
-          )} ${formatTimeRange(newStartTime)}`,
+          )} ${formatTimeRange(newStartTime, undefined, newDate ?? undefined)}`,
         });
 
         if (!orderResponse.data.success) {
@@ -401,7 +401,9 @@ function ReschedulePaymentContent() {
                             .split(":")
                             .slice(0, 2)
                             .join(":")
-                        : currentReservation.start_time
+                        : currentReservation.start_time,
+                      undefined,
+                      currentReservation.date
                     )}
                   </p>
                 </div>
@@ -423,7 +425,11 @@ function ReschedulePaymentContent() {
                 <div>
                   <p className="text-xs text-zinc-500 mb-0.5">Horario</p>
                   <p className="text-sm text-zinc-800">
-                    {formatTimeRange(newStartTime)}
+                    {formatTimeRange(
+                      newStartTime,
+                      undefined,
+                      newDate ?? undefined
+                    )}
                   </p>
                 </div>
               </div>

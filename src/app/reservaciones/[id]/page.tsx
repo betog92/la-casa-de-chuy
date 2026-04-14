@@ -17,6 +17,7 @@ import {
   formatCurrency,
   formatBusinessDaysMessage,
 } from "@/utils/formatters";
+import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
 import {
   isValidDiscount,
   calculatePointsDiscount,
@@ -565,9 +566,11 @@ export default function ReservationDetailsPage() {
                   ? "Horario reagendado"
                   : "Horario"}
               </p>
-              <p className="text-lg font-medium text-[#103948]">
-                {formatTimeRange(reservation.start_time, reservation.end_time)}
-              </p>
+              <ReservationSpaceUsage
+                startTime={reservation.start_time}
+                calendarDate={reservation.date}
+                variant="detail"
+              />
             </div>
 
             {/* Datos de contacto: editable solo para admin en citas de Alberto */}
@@ -1113,7 +1116,11 @@ export default function ReservationDetailsPage() {
                       </p>
                       <p className="text-orange-900">
                         {formatDisplayDate(h.previous_date)} -{" "}
-                        {formatTimeRange(h.previous_start_time)}
+                        {formatTimeRange(
+                          h.previous_start_time,
+                          undefined,
+                          h.previous_date
+                        )}
                       </p>
                     </div>
                     {(reservation.reschedule_history?.length ?? 0) > 1 && (
@@ -1123,7 +1130,11 @@ export default function ReservationDetailsPage() {
                         </p>
                         <p className="text-orange-900">
                           {formatDisplayDate(h.new_date)} -{" "}
-                          {formatTimeRange(h.new_start_time)}
+                          {formatTimeRange(
+                            h.new_start_time,
+                            undefined,
+                            h.new_date
+                          )}
                         </p>
                       </div>
                     )}
@@ -1192,7 +1203,11 @@ export default function ReservationDetailsPage() {
                           </p>
                           <p className="text-orange-900">
                             {formatDisplayDate(reservation.original_date)} -{" "}
-                            {formatTimeRange(reservation.original_start_time)}
+                            {formatTimeRange(
+                              reservation.original_start_time,
+                              undefined,
+                              reservation.original_date ?? undefined
+                            )}
                           </p>
                         </div>
                       )}

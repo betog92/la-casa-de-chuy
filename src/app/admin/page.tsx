@@ -161,7 +161,8 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="text-right">
                   <p className="font-medium text-zinc-900">
-                    {formatDisplayDate(r.date)} · {formatTimeRange(r.start_time)}
+                    {formatDisplayDate(r.date)} ·{" "}
+                    {formatTimeRange(r.start_time, undefined, r.date)}
                   </p>
                   <p className="text-sm text-green-700">
                     {formatCurrency(r.price)}
