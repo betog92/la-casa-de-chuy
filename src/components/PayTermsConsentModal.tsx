@@ -18,18 +18,53 @@ export default function PayTermsConsentModal({
   onConfirm,
   onCancel,
 }: PayTermsConsentModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
 
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
     const t = window.setTimeout(() => {
       cancelButtonRef.current?.focus();
     }, 0);
 
+    const getFocusableElements = () => {
+      const dialogEl = dialogRef.current;
+      if (!dialogEl) return [] as HTMLElement[];
+      return Array.from(
+        dialogEl.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("disabled"));
+    };
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
+      if (e.key !== "Tab") return;
+
+      const focusableEls = getFocusableElements();
+      if (focusableEls.length === 0) {
+        e.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const firstEl = focusableEls[0];
+      const lastEl = focusableEls[focusableEls.length - 1];
+      const activeEl = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey) {
+        if (!activeEl || activeEl === firstEl || !dialogRef.current?.contains(activeEl)) {
+          e.preventDefault();
+          lastEl.focus();
+        }
+      } else if (!activeEl || activeEl === lastEl || !dialogRef.current?.contains(activeEl)) {
+        e.preventDefault();
+        firstEl.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
 
@@ -37,6 +72,7 @@ export default function PayTermsConsentModal({
       window.clearTimeout(t);
       document.body.style.overflow = "unset";
       document.removeEventListener("keydown", onKey);
+      previouslyFocusedRef.current?.focus();
     };
   }, [isOpen, onCancel]);
 
@@ -48,9 +84,11 @@ export default function PayTermsConsentModal({
       aria-hidden={false}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="pay-consent-title"
+        tabIndex={-1}
         className="flex max-h-[92vh] w-full min-w-0 max-w-7xl flex-col rounded-xl bg-white shadow-2xl ring-1 ring-black/5"
         onClick={(e) => e.stopPropagation()}
       >
