@@ -1,12 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { format, addDays, startOfMonth, endOfMonth } from "date-fns";
-import { es } from "date-fns/locale";
+import {
+  addMonths,
+  endOfMonth,
+  format,
+  isBefore,
+  isSameMonth,
+  startOfMonth,
+} from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+import MonthHeatmapCalendar from "@/components/MonthHeatmapCalendar";
+import DayAvailabilityPanel, {
+  type DayDetail,
+} from "@/components/admin/DayAvailabilityPanel";
 
-interface AvailabilityRow {
-  id: string;
+const getMonterreyToday = (): Date => {
+  const now = new Date();
+  const z = toZonedTime(now, "America/Monterrey");
+  z.setHours(0, 0, 0, 0);
+  return z;
+};
+
+interface OverrideRow {
   date: string;
   is_closed: boolean;
   is_holiday: boolean;
@@ -14,332 +31,306 @@ interface AvailabilityRow {
 }
 
 export default function AdminDisponibilidadPage() {
-  const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState(() => {
-    const start = startOfMonth(new Date());
-    const end = endOfMonth(addDays(new Date(), 60));
-    return {
-      from: format(start, "yyyy-MM-dd"),
-      to: format(end, "yyyy-MM-dd"),
-    };
-  });
-  const [newDate, setNewDate] = useState("");
-  const [newClosed, setNewClosed] = useState(false);
-  const [newHoliday, setNewHoliday] = useState(false);
-  const [newPrice, setNewPrice] = useState("");
+  const today = useMemo(() => getMonterreyToday(), []);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [activeMonth, setActiveMonth] = useState<Date>(startOfMonth(today));
+  const [dayDetail, setDayDetail] = useState<DayDetail | null>(null);
+  const [loadingDay, setLoadingDay] = useState(false);
+  const [dayError, setDayError] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<OverrideRow[]>([]);
+  const [overridesError, setOverridesError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchAvailability = async () => {
-    setLoading(true);
-    setError("");
+  const selectedDateString = selectedDate
+    ? format(selectedDate, "yyyy-MM-dd")
+    : null;
+
+  const closedDates = useMemo(
+    () => new Set(overrides.filter((o) => o.is_closed).map((o) => o.date)),
+    [overrides]
+  );
+  const customizedDates = useMemo(
+    () =>
+      new Set(
+        overrides
+          .filter(
+            (o) =>
+              o.is_closed || o.is_holiday || o.custom_price != null
+          )
+          .map((o) => o.date)
+      ),
+    [overrides]
+  );
+
+  const monthSummary = useMemo(() => {
+    const monthStr = format(activeMonth, "yyyy-MM");
+    const inMonth = overrides.filter((o) => o.date.startsWith(monthStr));
+    return {
+      total: inMonth.length,
+      closed: inMonth.filter((o) => o.is_closed).length,
+      holidays: inMonth.filter((o) => o.is_holiday).length,
+      customPriced: inMonth.filter((o) => o.custom_price != null).length,
+    };
+  }, [overrides, activeMonth]);
+
+  // Refs para descartar respuestas obsoletas si el usuario cambia rápido
+  // de mes o de día seleccionado.
+  const overridesReqRef = useRef(0);
+  const dayReqRef = useRef<{ id: number; date: string }>({ id: 0, date: "" });
+
+  const loadOverrides = useCallback(async (monthStart: Date) => {
+    const from = format(startOfMonth(monthStart), "yyyy-MM-dd");
+    const to = format(endOfMonth(monthStart), "yyyy-MM-dd");
+    const reqId = ++overridesReqRef.current;
     try {
       const res = await axios.get(
-        `/api/admin/availability?dateFrom=${dateRange.from}&dateTo=${dateRange.to}`
+        `/api/admin/availability?dateFrom=${from}&dateTo=${to}`
       );
-      if (res.data.success) {
-        setAvailability(res.data.availability ?? []);
+      if (reqId !== overridesReqRef.current) return;
+      if (res.data?.success) {
+        setOverrides(res.data.availability ?? []);
+        setOverridesError(null);
       } else {
-        setError(res.data.error || "Error al cargar");
+        setOverridesError(
+          res.data?.error || "No se pudo cargar la configuración del mes"
+        );
       }
     } catch (err) {
-      setError(
+      if (reqId !== overridesReqRef.current) return;
+      console.error("Error loading overrides:", err);
+      setOverridesError(
         axios.isAxiosError(err)
-          ? (err.response?.data?.error as string) || "Error"
-          : "Error al cargar disponibilidad"
+          ? (err.response?.data?.error as string) ||
+              "No se pudo cargar la configuración del mes"
+          : "No se pudo cargar la configuración del mes"
       );
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
+
+  const loadDay = useCallback(async (dateString: string) => {
+    const reqId = ++dayReqRef.current.id;
+    dayReqRef.current.date = dateString;
+    setLoadingDay(true);
+    setDayError(null);
+    try {
+      const res = await axios.get(
+        `/api/admin/availability/day?date=${encodeURIComponent(dateString)}`
+      );
+      if (
+        reqId !== dayReqRef.current.id ||
+        dateString !== dayReqRef.current.date
+      ) {
+        return;
+      }
+      if (!res.data?.success) {
+        setDayError(res.data?.error || "Error al cargar el día");
+        setDayDetail(null);
+        return;
+      }
+      setDayDetail({
+        date: res.data.date,
+        availability: res.data.availability ?? null,
+        slots: res.data.slots ?? [],
+      });
+    } catch (err) {
+      if (
+        reqId !== dayReqRef.current.id ||
+        dateString !== dayReqRef.current.date
+      ) {
+        return;
+      }
+      setDayError(
+        axios.isAxiosError(err)
+          ? (err.response?.data?.error as string) || "Error al cargar el día"
+          : "Error al cargar el día"
+      );
+      setDayDetail(null);
+    } finally {
+      if (
+        reqId === dayReqRef.current.id &&
+        dateString === dayReqRef.current.date
+      ) {
+        setLoadingDay(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    fetchAvailability();
-  }, [dateRange.from, dateRange.to]);
-
-  const saveRow = async (date: string, isClosed: boolean, isHoliday: boolean, customPrice: string) => {
-    setSaving(date);
-    try {
-      const res = await axios.post("/api/admin/availability", {
-        date,
-        isClosed,
-        isHoliday,
-        customPrice: customPrice ? parseFloat(customPrice) : null,
-      });
-      if (res.data.success) {
-        setAvailability((prev) => {
-          const existing = prev.find((a) => a.date === date);
-          if (existing) {
-            return prev.map((a) =>
-              a.date === date ? res.data.availability : a
-            );
-          }
-          return [...prev, res.data.availability].sort(
-            (a, b) => a.date.localeCompare(b.date)
-          );
-        });
-      }
-    } catch (err) {
-      console.error("Error saving:", err);
-    } finally {
-      setSaving(null);
+    if (selectedDateString) {
+      loadDay(selectedDateString);
     }
-  };
+  }, [selectedDateString, loadDay, refreshKey]);
 
-  const addNew = async () => {
-    if (!newDate) return;
-    setSaving("new");
-    try {
-      const res = await axios.post("/api/admin/availability", {
-        date: newDate,
-        isClosed: newClosed,
-        isHoliday: newHoliday,
-        customPrice: newPrice ? parseFloat(newPrice) : null,
-      });
-      if (res.data.success) {
-        setAvailability((prev) => {
-          const filtered = prev.filter((a) => a.date !== newDate);
-          return [...filtered, res.data.availability].sort(
-            (a, b) => a.date.localeCompare(b.date)
-          );
-        });
-        setNewDate("");
-        setNewClosed(false);
-        setNewHoliday(false);
-        setNewPrice("");
-      }
-    } catch (err) {
-      console.error("Error adding:", err);
-    } finally {
-      setSaving(null);
-    }
-  };
+  useEffect(() => {
+    loadOverrides(activeMonth);
+  }, [activeMonth, refreshKey, loadOverrides]);
 
-  const formatDisplayDate = (d: string) => {
-    try {
-      return format(new Date(d + "T12:00:00"), "EEEE d MMM", { locale: es });
-    } catch {
-      return d;
-    }
-  };
+  const handleMonthChange = useCallback((monthStart: Date) => {
+    setActiveMonth((prev) => (isSameMonth(prev, monthStart) ? prev : monthStart));
+  }, []);
+
+  const isPastSelected = selectedDate
+    ? isBefore(
+        new Date(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate()
+        ),
+        today
+      )
+    : false;
+
+  const triggerRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  const maxDate = useMemo(() => addMonths(today, 6), [today]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1
-          className="text-3xl font-bold text-[#103948]"
-          style={{ fontFamily: "var(--font-cormorant), serif" }}
-        >
-          Disponibilidad
-        </h1>
-        <p className="mt-1 text-zinc-600">
-          Configurar fechas cerradas, festivos y precios personalizados
-        </p>
-      </div>
-
-      {/* Rango de fechas */}
-      <div className="flex flex-wrap gap-4 rounded-lg border border-zinc-200 bg-white p-4">
+    <div className="container mx-auto space-y-6">
+      <div className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">
-            Desde
-          </label>
-          <input
-            type="date"
-            value={dateRange.from}
-            onChange={(e) =>
-              setDateRange((r) => ({ ...r, from: e.target.value }))
-            }
-            className="rounded border border-zinc-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">
-            Hasta
-          </label>
-          <input
-            type="date"
-            value={dateRange.to}
-            onChange={(e) =>
-              setDateRange((r) => ({ ...r, to: e.target.value }))
-            }
-            className="rounded border border-zinc-300 px-3 py-2 text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Agregar nueva fecha */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h3 className="mb-4 font-medium text-zinc-900">
-          Configurar una fecha
-        </h3>
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500">
-              Fecha
-            </label>
-            <input
-              type="date"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-              className="rounded border border-zinc-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={newClosed}
-              onChange={(e) => setNewClosed(e.target.checked)}
-              className="rounded border-zinc-300"
-            />
-            <span className="text-sm">Cerrado</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={newHoliday}
-              onChange={(e) => setNewHoliday(e.target.checked)}
-              className="rounded border-zinc-300"
-            />
-            <span className="text-sm">Festivo</span>
-          </label>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500">
-              Precio personalizado (opcional)
-            </label>
-            <input
-              type="number"
-              value={newPrice}
-              onChange={(e) => setNewPrice(e.target.value)}
-              placeholder="Ej: 2000"
-              min="0"
-              step="50"
-              className="w-28 rounded border border-zinc-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            onClick={addNew}
-            disabled={!newDate || saving === "new"}
-            className="rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2a35] disabled:opacity-50"
+          <h1
+            className="text-3xl font-bold text-[#103948]"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
           >
-            {saving === "new" ? "Guardando..." : "Guardar"}
-          </button>
+            Disponibilidad
+          </h1>
+          <p className="mt-1 text-zinc-600">
+            Configura días cerrados, festivos, precios y horarios
+            deshabilitados. Selecciona una fecha en el calendario para ver y
+            editar su configuración.
+          </p>
         </div>
-      </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-          {error}
+        {/* Tira de stats del mes activo */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat
+            label="Configurados"
+            value={monthSummary.total}
+            tooltip="Días del mes con alguna configuración manual: cerrados, festivos o con precio personalizado."
+          />
+          <Stat
+            label="Cerrados"
+            value={monthSummary.closed}
+            tooltip="Días marcados como cerrados (no aceptan reservas nuevas)."
+          />
+          <Stat
+            label="Festivos"
+            value={monthSummary.holidays}
+            tooltip="Días marcados como festivos por el admin (aplican tarifa de festivo)."
+          />
+          <Stat
+            label="Precio custom"
+            value={monthSummary.customPriced}
+            tooltip="Días con un precio personalizado guardado (anula la tarifa automática)."
+          />
         </div>
-      )}
 
-      {/* Lista de fechas configuradas */}
-      <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-        <div className="border-b border-zinc-200 px-4 py-3">
-          <h3 className="font-medium text-zinc-900">
-            Fechas con configuración especial
-          </h3>
-        </div>
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
-          </div>
-        ) : availability.length === 0 ? (
-          <div className="px-4 py-12 text-center text-zinc-500">
-            No hay fechas configuradas en el rango seleccionado
-          </div>
-        ) : (
-          <div className="divide-y divide-zinc-100">
-            {availability.map((row) => (
-              <AvailabilityEditRow
-                key={row.id}
-                row={row}
-                formatDisplayDate={formatDisplayDate}
-                saving={saving === row.date}
-                onSave={saveRow}
-              />
-            ))}
+        {overridesError && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <span>{overridesError}</span>
+            <button
+              type="button"
+              onClick={() => loadOverrides(activeMonth)}
+              className="rounded border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+            >
+              Reintentar
+            </button>
           </div>
         )}
+      </div>
+
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.3fr_1fr] xl:grid-cols-[1.7fr_1fr] 2xl:grid-cols-[2fr_1fr]">
+        {/* Calendario */}
+        <div className="flex flex-col rounded-lg border border-zinc-200 bg-white p-3 shadow-sm sm:p-5 h-fit">
+          <MonthHeatmapCalendar
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            closedDates={closedDates}
+            customizedDates={customizedDates}
+            mode="admin"
+            minDate={today}
+            maxDate={maxDate}
+            onMonthChange={handleMonthChange}
+            refreshKey={refreshKey}
+            compact={false}
+          />
+
+          {/* Leyenda */}
+          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-zinc-200 pt-3 text-xs text-zinc-600 sm:grid-cols-4">
+            <LegendChip
+              color="rgba(22, 163, 74, 0.38)"
+              label="Alta disponibilidad"
+            />
+            <LegendChip
+              color="rgba(234, 179, 8, 0.35)"
+              label="Poca disponibilidad"
+            />
+            <LegendChip color="#fef2f2" label="Cerrado / sin slots" />
+            <div className="flex items-center gap-2">
+              <span className="relative inline-block h-3 w-3 rounded border border-zinc-300">
+                <span className="absolute -right-0.5 -top-0.5 inline-block h-1.5 w-1.5 rounded-full bg-amber-500 ring-1 ring-white" />
+              </span>
+              Configuración manual
+            </div>
+          </div>
+        </div>
+
+        {/* Panel del día */}
+        <div className="space-y-3">
+          {dayError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {dayError}
+            </div>
+          )}
+          {selectedDateString ? (
+            <DayAvailabilityPanel
+              date={selectedDateString}
+              detail={dayDetail}
+              loading={loadingDay}
+              onChanged={triggerRefresh}
+              isPast={isPastSelected}
+            />
+          ) : (
+            <div className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">
+              Selecciona una fecha en el calendario para verla y editarla.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function AvailabilityEditRow({
-  row,
-  formatDisplayDate,
-  saving,
-  onSave,
+function Stat({
+  label,
+  value,
+  tooltip,
 }: {
-  row: AvailabilityRow;
-  formatDisplayDate: (d: string) => string;
-  saving: boolean;
-  onSave: (
-    date: string,
-    isClosed: boolean,
-    isHoliday: boolean,
-    customPrice: string
-  ) => void;
+  label: string;
+  value: number;
+  tooltip?: string;
 }) {
-  const [closed, setClosed] = useState(row.is_closed);
-  const [holiday, setHoliday] = useState(row.is_holiday);
-  const [price, setPrice] = useState(
-    row.custom_price != null ? String(row.custom_price) : ""
-  );
-
-  useEffect(() => {
-    setClosed(row.is_closed);
-    setHoliday(row.is_holiday);
-    setPrice(row.custom_price != null ? String(row.custom_price) : "");
-  }, [row.date, row.is_closed, row.is_holiday, row.custom_price]);
-
-  const hasChanges =
-    closed !== row.is_closed ||
-    holiday !== row.is_holiday ||
-    (price ? parseFloat(price) : null) !== row.custom_price;
-
   return (
-    <div className="flex flex-wrap items-center gap-4 px-4 py-3 hover:bg-zinc-50 sm:flex-nowrap">
-      <div className="w-40 font-medium text-zinc-900">
-        {formatDisplayDate(row.date)}
-      </div>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={closed}
-          onChange={(e) => setClosed(e.target.checked)}
-          className="rounded border-zinc-300"
-        />
-        <span className="text-sm">Cerrado</span>
-      </label>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={holiday}
-          onChange={(e) => setHoliday(e.target.checked)}
-          className="rounded border-zinc-300"
-        />
-        <span className="text-sm">Festivo</span>
-      </label>
-      <input
-        type="number"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        placeholder="Precio"
-        min="0"
-        step="50"
-        className="w-24 rounded border border-zinc-300 px-2 py-1.5 text-sm"
+    <div
+      className="rounded-lg border border-zinc-200 bg-white px-4 py-2.5"
+      title={tooltip}
+    >
+      <p className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-xl font-semibold text-[#103948]">{value}</p>
+    </div>
+  );
+}
+
+function LegendChip({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="inline-block h-3 w-3 rounded border border-zinc-300"
+        style={{ backgroundColor: color }}
       />
-      {hasChanges && (
-        <button
-          onClick={() => onSave(row.date, closed, holiday, price)}
-          disabled={saving}
-          className="rounded bg-[#103948] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#0d2a35] disabled:opacity-50"
-        >
-          {saving ? "..." : "Guardar"}
-        </button>
-      )}
+      {label}
     </div>
   );
 }

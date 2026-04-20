@@ -94,18 +94,25 @@ export function getDayType(date: Date): DayType {
  *
  * @param date - Fecha de la reserva
  * @param customPrice - Precio personalizado desde la BD (opcional)
+ * @param isHolidayOverride - Si el admin marcó este día como festivo en availability.is_holiday
  * @returns Precio calculado
  */
 export function calculatePrice(
   date: Date,
-  customPrice?: number | null
+  customPrice?: number | null,
+  isHolidayOverride?: boolean | null
 ): number {
   // Si hay precio personalizado, usarlo directamente
   if (customPrice !== undefined && customPrice !== null) {
     return customPrice;
   }
 
-  // Determinar tipo de día
+  // Si el día está marcado como festivo (por admin o por la lista oficial), usar tarifa de festivo
+  if (isHolidayOverride === true || isHoliday(date)) {
+    return PRICES.holiday;
+  }
+
+  // Determinar tipo de día (la lista oficial ya se considera arriba; aquí solo finde/domingo/normal)
   const dayType = getDayType(date);
 
   // Obtener precio según tipo de día
@@ -117,39 +124,58 @@ export function calculatePrice(
 // =====================================================
 
 /**
- * Obtiene precio personalizado desde la base de datos
- *
- * @param supabase - Cliente de Supabase
- * @param date - Fecha a consultar
- * @returns Precio personalizado o null si no existe
+ * Obtiene la configuración (override) de la fecha desde availability.
+ * Devuelve `null` si no hay override; en otro caso, los tres campos relevantes
+ * para el cálculo de precio y disponibilidad.
  */
-export async function getCustomPrice(
+export async function getDayOverride(
   supabase: SupabaseClient<Database>,
   date: Date
-): Promise<number | null> {
+): Promise<{
+  customPrice: number | null;
+  isHoliday: boolean;
+  isClosed: boolean;
+} | null> {
   const dateString = format(date, "yyyy-MM-dd");
 
   const { data, error } = await supabase
     .from("availability")
-    .select("custom_price")
+    .select("custom_price, is_holiday, is_closed")
     .eq("date", dateString)
-    .maybeSingle(); // Cambiar de .single() a .maybeSingle()
+    .maybeSingle();
 
   if (error || !data) {
     return null;
   }
 
-  const customPrice = (data as { custom_price: number | null }).custom_price;
-  if (!customPrice) {
-    return null;
-  }
+  const row = data as {
+    custom_price: number | null;
+    is_holiday: boolean | null;
+    is_closed: boolean | null;
+  };
 
-  // Retornar precio personalizado
-  return customPrice;
+  return {
+    customPrice: row.custom_price ?? null,
+    isHoliday: row.is_holiday === true,
+    isClosed: row.is_closed === true,
+  };
+}
+
+/**
+ * Obtiene precio personalizado desde la base de datos.
+ * @deprecated Usar `getDayOverride` para obtener también `is_holiday` e `is_closed`.
+ */
+export async function getCustomPrice(
+  supabase: SupabaseClient<Database>,
+  date: Date
+): Promise<number | null> {
+  const override = await getDayOverride(supabase, date);
+  return override?.customPrice ?? null;
 }
 
 /**
  * Calcula el precio final considerando precios personalizados de la BD
+ * y el flag `is_holiday` (festivo marcado por el admin).
  *
  * @param supabase - Cliente de Supabase
  * @param date - Fecha de la reserva
@@ -159,11 +185,13 @@ export async function calculatePriceWithCustom(
   supabase: SupabaseClient<Database>,
   date: Date
 ): Promise<number> {
-  // Intentar obtener precio personalizado
-  const customPrice = await getCustomPrice(supabase, date);
+  const override = await getDayOverride(supabase, date);
 
-  // Calcular precio (usa personalizado si existe)
-  return calculatePrice(date, customPrice);
+  return calculatePrice(
+    date,
+    override?.customPrice ?? null,
+    override?.isHoliday ?? null
+  );
 }
 
 // =====================================================

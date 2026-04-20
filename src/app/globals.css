@@ -157,6 +157,42 @@ html {
   transition: all 0.2s;
   font-weight: 500;
   font-size: 0.8125rem;
+  position: relative;
+}
+
+/* Badge de overrides admin (precio custom, festivo, slots deshabilitados, etc.) */
+.react-calendar__tile.has-override::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #f59e0b; /* amber-500 */
+  box-shadow: 0 0 0 1px white;
+  pointer-events: none;
+}
+
+/* Realzar el badge cuando el tile está activo/seleccionado (fondo oscuro) */
+.react-calendar__tile--active.has-override::after {
+  box-shadow: 0 0 0 1px #18181b;
+}
+
+/* Modo compacto: tiles más chatos para dashboards admin */
+.react-calendar.is-compact .react-calendar__tile {
+  aspect-ratio: 1.45;
+  padding: 0.4rem;
+  font-size: 0.8125rem;
+  border-radius: 0.375rem;
+}
+
+@media (min-width: 640px) {
+  .react-calendar.is-compact .react-calendar__tile {
+    aspect-ratio: 1.45;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
 }
 
 @media (min-width: 640px) {
