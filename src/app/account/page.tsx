@@ -263,10 +263,10 @@ export default function AccountPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-1 justify-center text-sm text-zinc-500">
                     <span
-                      title="Puntos disponibles (no revocados ni usados)."
+                      title="Monedas Chuy disponibles (no revocadas ni usadas). 1 Moneda Chuy = $1 MXN de descuento. No caducan."
                       className="cursor-help"
                     >
-                      Puntos de lealtad
+                      Monedas Chuy
                     </span>
                   </div>
                   <p className="text-xl font-semibold text-[#103948]">

@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   is_admin BOOLEAN DEFAULT FALSE,
   is_super_admin BOOLEAN DEFAULT FALSE,
+  -- Roles de fotógrafo/estudio (migración 30): habilita la vista
+  -- "Fotógrafos" en /admin/clientes y la lógica de transferencia
+  -- de Monedas Chuy.
+  is_photographer BOOLEAN NOT NULL DEFAULT FALSE,
+  studio_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -143,17 +148,31 @@ CREATE TABLE IF NOT EXISTS credits (
   source TEXT NOT NULL, -- 'referral', 'cancellation', etc.
   expires_at DATE NOT NULL,
   used BOOLEAN DEFAULT FALSE,
+  -- Asociación a reserva y revocación (migración 08): permite revocar
+  -- créditos al cancelar la reserva que los originó.
+  reservation_id INTEGER REFERENCES reservations(id),
+  revoked BOOLEAN DEFAULT FALSE,
+  revoked_at TIMESTAMPTZ,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- =====================================================
--- 6. TABLA DE PUNTOS DE FIDELIZACIÓN (FASE 2)
+-- 6. TABLA DE PUNTOS DE FIDELIZACIÓN ("Monedas Chuy" en la UI)
 -- =====================================================
+-- En base de datos sigue llamándose loyalty_points / points.
+-- En la UI se llama "Monedas Chuy" (1 Moneda = $1 MXN).
+-- expires_at NULL = "no caduca nunca" (política vigente desde abril 2026,
+-- migración 33). Antes caducaban a 1 año.
 CREATE TABLE IF NOT EXISTS loyalty_points (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   points INTEGER NOT NULL,
-  expires_at DATE NOT NULL,
+  expires_at DATE,
+  -- Asociación a reserva y revocación (migración 08)
+  reservation_id INTEGER REFERENCES reservations(id),
+  used BOOLEAN DEFAULT FALSE,
+  revoked BOOLEAN DEFAULT FALSE,
+  revoked_at TIMESTAMPTZ,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -170,6 +189,84 @@ CREATE TABLE IF NOT EXISTS referrals (
   credit_given BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- =====================================================
+-- 8. TABLA DE TRANSFERENCIAS DE BENEFICIOS (Monedas Chuy → fotógrafo)
+-- =====================================================
+-- Migraciones 31 + 32. Solo Monedas Chuy son transferibles
+-- (los créditos quedan SIEMPRE con el cliente). La transferencia se
+-- materializa después de que pasa la fecha de la sesión (cron job)
+-- para evitar conflictos con cancelaciones/reagendamientos.
+--
+-- Estados:
+--   pending        – creada por el cliente, fecha de sesión aún no pasa
+--   cancelled      – el cliente la canceló antes de materializar
+--   auto_credited  – materializada y acreditada (el fotógrafo ya tenía cuenta)
+--   pending_claim  – materializada con magic link enviado (sin cuenta)
+--   claimed        – el fotógrafo reclamó el magic link
+--   reverted       – la reserva se canceló o las Monedas caducaron sin reclamo
+CREATE TABLE IF NOT EXISTS benefit_transfers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+
+  from_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  from_email TEXT NOT NULL,
+
+  to_email TEXT NOT NULL,                                       -- normalizado a lowercase por la app
+  to_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL, -- se llena al materializar
+  to_studio_name TEXT,                                          -- opcional, lo escribe el cliente
+
+  -- Magic link de reclamo (solo si el fotógrafo no tenía cuenta al materializar)
+  claim_token UUID UNIQUE,
+  claim_token_sent_at TIMESTAMP WITH TIME ZONE,
+
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN (
+      'pending',
+      'cancelled',
+      'auto_credited',
+      'pending_claim',
+      'claimed',
+      'reverted'
+    )),
+
+  -- Snapshot de lo transferido (calculado al materializar)
+  transferred_points INTEGER DEFAULT 0,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  materialized_at TIMESTAMP WITH TIME ZONE,
+  claimed_at TIMESTAMP WITH TIME ZONE,
+  cancelled_at TIMESTAMP WITH TIME ZONE,
+  reverted_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_benefit_transfers_reservation_id
+  ON benefit_transfers(reservation_id);
+CREATE INDEX IF NOT EXISTS idx_benefit_transfers_from_user_id
+  ON benefit_transfers(from_user_id);
+CREATE INDEX IF NOT EXISTS idx_benefit_transfers_to_user_id
+  ON benefit_transfers(to_user_id) WHERE to_user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_benefit_transfers_to_email
+  ON benefit_transfers(to_email);
+CREATE INDEX IF NOT EXISTS idx_benefit_transfers_status
+  ON benefit_transfers(status);
+
+-- Garantiza una sola transferencia 'pending' por reserva
+-- (evita duplicados si el cliente la envía dos veces).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benefit_transfers_unique_pending
+  ON benefit_transfers(reservation_id)
+  WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_benefit_transfers_claim_token
+  ON benefit_transfers(claim_token) WHERE claim_token IS NOT NULL;
+
+COMMENT ON TABLE benefit_transfers IS
+  'Transferencias de Monedas Chuy (loyalty_points) del cliente al fotógrafo. Solo puntos: los créditos se quedan con el cliente. Se materializa al pasar la fecha de la sesión.';
+COMMENT ON COLUMN benefit_transfers.status IS
+  'pending | cancelled | auto_credited | pending_claim | claimed | reverted';
+COMMENT ON COLUMN benefit_transfers.claim_token IS
+  'UUID público usado en el magic link /fotografos/reclamar/[token]. NULL si se acreditó automáticamente.';
 
 -- =====================================================
 -- CALENDARIO DE RENTA DE VESTIDOS (copia desde Google)
@@ -202,6 +299,7 @@ COMMENT ON TABLE vestido_calendar_notes IS 'Título y descripción editados por 
 -- ÍNDICES BÁSICOS PARA MEJORAR PERFORMANCE
 -- =====================================================
 CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin) WHERE is_admin = TRUE;
+CREATE INDEX IF NOT EXISTS idx_users_is_photographer ON users(is_photographer) WHERE is_photographer = TRUE;
 CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date);
 CREATE INDEX IF NOT EXISTS idx_reservations_user_id ON reservations(user_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_email ON reservations(email);
@@ -209,7 +307,9 @@ CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);
 CREATE INDEX IF NOT EXISTS idx_time_slots_date ON time_slots(date);
 CREATE INDEX IF NOT EXISTS idx_availability_date ON availability(date);
 CREATE INDEX IF NOT EXISTS idx_credits_user_id ON credits(user_id);
+CREATE INDEX IF NOT EXISTS idx_credits_reservation_id ON credits(reservation_id, revoked, used);
 CREATE INDEX IF NOT EXISTS idx_loyalty_points_user_id ON loyalty_points(user_id);
+CREATE INDEX IF NOT EXISTS idx_loyalty_points_reservation_id ON loyalty_points(reservation_id, revoked, used);
 CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals(code);
 CREATE INDEX IF NOT EXISTS idx_vestido_calendar_events_date ON vestido_calendar_events(date);
@@ -290,6 +390,8 @@ DROP TRIGGER IF EXISTS update_time_slots_updated_at ON time_slots;
 CREATE TRIGGER update_time_slots_updated_at 
   BEFORE UPDATE ON time_slots
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Nota: benefit_transfers no usa trigger de updated_at; tiene timestamps
+-- específicos por estado (materialized_at, claimed_at, cancelled_at, etc.).
 
 -- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR IS_OCCUPIED AUTOMÁTICAMENTE
@@ -443,7 +545,7 @@ COMMENT ON TABLE users IS 'Usuarios del sistema (con cuenta o invitados)';
 COMMENT ON TABLE reservations IS 'Reservaciones realizadas';
 COMMENT ON TABLE availability IS 'Configuración de disponibilidad por fecha';
 COMMENT ON TABLE time_slots IS 'Horarios disponibles por fecha';
-COMMENT ON TABLE credits IS 'Créditos disponibles para usuarios (Fase 2)';
-COMMENT ON TABLE loyalty_points IS 'Puntos de fidelización (Fase 2)';
+COMMENT ON TABLE credits IS 'Créditos disponibles para usuarios (Fase 2). NO son transferibles a fotógrafos.';
+COMMENT ON TABLE loyalty_points IS 'Puntos de fidelización ("Monedas Chuy" en la UI). 1 punto = $1 MXN. No caducan (expires_at NULL).';
 COMMENT ON TABLE referrals IS 'Sistema de referidos (Fase 2)';
 

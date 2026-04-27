@@ -22,6 +22,7 @@ ALTER TABLE loyalty_points ENABLE ROW LEVEL SECURITY;
 ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discount_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discount_code_uses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE benefit_transfers ENABLE ROW LEVEL SECURITY;
 
 -- =====================================================
 -- 2. ELIMINAR POLÍTICAS EXISTENTES (si las hay)
@@ -46,6 +47,8 @@ DROP POLICY IF EXISTS "Anyone can delete time slots" ON time_slots;
 DROP POLICY IF EXISTS "Users can view own credits" ON credits;
 DROP POLICY IF EXISTS "Users can view own loyalty points" ON loyalty_points;
 DROP POLICY IF EXISTS "Users can view own referrals" ON referrals;
+DROP POLICY IF EXISTS "Users can view own outgoing transfers" ON benefit_transfers;
+DROP POLICY IF EXISTS "Photographers can view incoming transfers" ON benefit_transfers;
 
 -- =====================================================
 -- 3. POLÍTICAS RLS PARA USERS
@@ -165,6 +168,27 @@ CREATE POLICY "Users can view own loyalty points"
 CREATE POLICY "Users can view own referrals"
   ON referrals FOR SELECT
   USING (referrer_id IS NOT NULL AND (select auth.uid()) = referrer_id);
+
+-- =====================================================
+-- 10. POLÍTICAS RLS PARA BENEFIT_TRANSFERS (Monedas Chuy → fotógrafo)
+-- =====================================================
+-- Las APIs de admin y server-side usan Service Role Key (bypassan RLS),
+-- así que NO se definen políticas de INSERT/UPDATE/DELETE: solo el
+-- backend puede crear/modificar transferencias.
+
+-- El cliente que originó la transferencia puede verla
+CREATE POLICY "Users can view own outgoing transfers"
+  ON benefit_transfers FOR SELECT
+  USING (
+    from_user_id IS NOT NULL AND (select auth.uid()) = from_user_id
+  );
+
+-- El fotógrafo destinatario puede verla una vez vinculada
+CREATE POLICY "Photographers can view incoming transfers"
+  ON benefit_transfers FOR SELECT
+  USING (
+    to_user_id IS NOT NULL AND (select auth.uid()) = to_user_id
+  );
 
 -- =====================================================
 -- NOTAS IMPORTANTES

@@ -30,6 +30,7 @@ DROP FUNCTION IF EXISTS increment_discount_code_uses(UUID) CASCADE;
 -- 2. ELIMINAR TABLAS (orden por dependencias; CASCADE quita FKs)
 -- =====================================================
 
+DROP TABLE IF EXISTS benefit_transfers CASCADE;
 DROP TABLE IF EXISTS discount_code_uses CASCADE;
 DROP TABLE IF EXISTS discount_codes CASCADE;
 DROP TABLE IF EXISTS referrals CASCADE;
@@ -66,6 +67,14 @@ DROP INDEX IF EXISTS idx_discount_codes_code;
 DROP INDEX IF EXISTS idx_discount_codes_active;
 DROP INDEX IF EXISTS idx_loyalty_points_reservation_id;
 DROP INDEX IF EXISTS idx_credits_reservation_id;
+DROP INDEX IF EXISTS idx_users_is_photographer;
+DROP INDEX IF EXISTS idx_benefit_transfers_reservation_id;
+DROP INDEX IF EXISTS idx_benefit_transfers_from_user_id;
+DROP INDEX IF EXISTS idx_benefit_transfers_to_user_id;
+DROP INDEX IF EXISTS idx_benefit_transfers_to_email;
+DROP INDEX IF EXISTS idx_benefit_transfers_status;
+DROP INDEX IF EXISTS idx_benefit_transfers_unique_pending;
+DROP INDEX IF EXISTS idx_benefit_transfers_claim_token;
 
 -- =====================================================
 -- VERIFICACIÓN

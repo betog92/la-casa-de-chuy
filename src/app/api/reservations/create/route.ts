@@ -136,13 +136,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Una sola consulta: validar saldo y obtener filas para consumir después (si aplica)
-    type LoyaltyRowForConsumption = { id: string; points: number; expires_at: string };
+    type LoyaltyRowForConsumption = {
+      id: string;
+      points: number;
+      // Las Monedas Chuy ya no caducan: expires_at puede ser NULL.
+      expires_at: string | null;
+    };
     let loyaltyRowsForConsumption: LoyaltyRowForConsumption[] = [];
 
     if (userId && loyaltyPointsUsed > 0) {
       const pointsToUse = Math.floor(Number(loyaltyPointsUsed));
       if (pointsToUse <= 0) {
-        return validationErrorResponse("Cantidad de puntos de lealtad inválida");
+        return validationErrorResponse("Cantidad de Monedas Chuy inválida");
       }
       const { data: pointsRows, error: pointsError } = await supabase
         .from("loyalty_points")
@@ -155,7 +160,7 @@ export async function POST(request: NextRequest) {
       if (pointsError) {
         console.error("Error consultando puntos de lealtad:", pointsError);
         return errorResponse(
-          "No se pudo verificar el saldo de puntos. Intenta de nuevo.",
+          "No se pudo verificar el saldo de Monedas Chuy. Intenta de nuevo.",
           500
         );
       }
@@ -165,9 +170,9 @@ export async function POST(request: NextRequest) {
 
       if (availableSum < pointsToUse) {
         return validationErrorResponse(
-          "No tienes suficientes puntos de lealtad. Saldo disponible: " +
+          "No tienes suficientes Monedas Chuy. Saldo disponible: " +
             availableSum +
-            " puntos."
+            (availableSum === 1 ? " Moneda Chuy." : " Monedas Chuy.")
         );
       }
       loyaltyRowsForConsumption = rows;
@@ -283,7 +288,7 @@ export async function POST(request: NextRequest) {
             );
             await correctReservationLoyaltyPointsUsed(pointsToConsume - remaining);
             return errorResponse(
-              "Los puntos de lealtad ya no están disponibles (otra reserva los usó). La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+              "Las Monedas Chuy ya no están disponibles (otra reserva las usó). La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
               500
             );
           }
@@ -306,7 +311,7 @@ export async function POST(request: NextRequest) {
             );
             await correctReservationLoyaltyPointsUsed(pointsToConsume - remaining);
             return errorResponse(
-              "Los puntos de lealtad ya no están disponibles (otra reserva los usó). La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+              "Las Monedas Chuy ya no están disponibles (otra reserva las usó). La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
               500
             );
           }
@@ -329,7 +334,7 @@ export async function POST(request: NextRequest) {
             );
             await correctReservationLoyaltyPointsUsed(pointsToConsume - remaining);
             return errorResponse(
-              "Error al aplicar los puntos de lealtad. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+              "Error al aplicar las Monedas Chuy. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
               500
             );
           }
@@ -370,21 +375,21 @@ export async function POST(request: NextRequest) {
       postInsertTasks.push(
         (async () => {
           try {
-            const expiresAt = new Date();
-            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+            // Las Monedas Chuy no caducan (expires_at = NULL).
+            // Política vigente desde abril 2026 (ver migración 33).
             const { error: e } = await supabase.from("loyalty_points").insert({
               user_id: userId,
               points: pointsToGrant,
-              expires_at: expiresAt.toISOString().slice(0, 10),
+              expires_at: null,
               reservation_id: reservationId,
               used: false,
               revoked: false,
             } as never);
             if (e) {
-              console.error("Error otorgando puntos de lealtad:", e);
+              console.error("Error otorgando Monedas Chuy:", e);
             }
           } catch (err) {
-            console.error("Error inesperado otorgando puntos de lealtad:", err);
+            console.error("Error inesperado otorgando Monedas Chuy:", err);
           }
         })()
       );

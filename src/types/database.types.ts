@@ -18,6 +18,8 @@ export interface Database {
           password_hash: string | null;
           is_admin: boolean;
           is_super_admin: boolean;
+          is_photographer: boolean;
+          studio_name: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -29,6 +31,8 @@ export interface Database {
           password_hash?: string | null;
           is_admin?: boolean;
           is_super_admin?: boolean;
+          is_photographer?: boolean;
+          studio_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -40,6 +44,8 @@ export interface Database {
           password_hash?: string | null;
           is_admin?: boolean;
           is_super_admin?: boolean;
+          is_photographer?: boolean;
+          studio_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -393,7 +399,8 @@ export interface Database {
           id: string;
           user_id: string;
           points: number;
-          expires_at: string;
+          // expires_at NULL = "no caduca" (Monedas Chuy son perpetuas desde abril 2026)
+          expires_at: string | null;
           created_at: string;
           reservation_id?: number | null;
           used?: boolean;
@@ -404,7 +411,7 @@ export interface Database {
           id?: string;
           user_id: string;
           points: number;
-          expires_at: string;
+          expires_at?: string | null;
           created_at?: string;
           reservation_id?: number | null;
           used?: boolean;
@@ -415,7 +422,7 @@ export interface Database {
           id?: string;
           user_id?: string;
           points?: number;
-          expires_at?: string;
+          expires_at?: string | null;
           created_at?: string;
           reservation_id?: number | null;
           used?: boolean;
@@ -508,6 +515,80 @@ export interface Database {
           description_override?: string | null;
           last_edited_at?: string | null;
           last_edited_by_user_id?: string | null;
+        };
+      };
+      benefit_transfers: {
+        Row: {
+          id: string;
+          reservation_id: number;
+          from_user_id: string | null;
+          from_email: string;
+          to_email: string;
+          to_user_id: string | null;
+          to_studio_name: string | null;
+          claim_token: string | null;
+          claim_token_sent_at: string | null;
+          status:
+            | "pending"
+            | "cancelled"
+            | "auto_credited"
+            | "pending_claim"
+            | "claimed"
+            | "reverted";
+          transferred_points: number;
+          created_at: string;
+          materialized_at: string | null;
+          claimed_at: string | null;
+          cancelled_at: string | null;
+          reverted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          reservation_id: number;
+          from_user_id?: string | null;
+          from_email: string;
+          to_email: string;
+          to_user_id?: string | null;
+          to_studio_name?: string | null;
+          claim_token?: string | null;
+          claim_token_sent_at?: string | null;
+          status?:
+            | "pending"
+            | "cancelled"
+            | "auto_credited"
+            | "pending_claim"
+            | "claimed"
+            | "reverted";
+          transferred_points?: number;
+          created_at?: string;
+          materialized_at?: string | null;
+          claimed_at?: string | null;
+          cancelled_at?: string | null;
+          reverted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          reservation_id?: number;
+          from_user_id?: string | null;
+          from_email?: string;
+          to_email?: string;
+          to_user_id?: string | null;
+          to_studio_name?: string | null;
+          claim_token?: string | null;
+          claim_token_sent_at?: string | null;
+          status?:
+            | "pending"
+            | "cancelled"
+            | "auto_credited"
+            | "pending_claim"
+            | "claimed"
+            | "reverted";
+          transferred_points?: number;
+          created_at?: string;
+          materialized_at?: string | null;
+          claimed_at?: string | null;
+          cancelled_at?: string | null;
+          reverted_at?: string | null;
         };
       };
     };

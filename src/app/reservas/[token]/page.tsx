@@ -512,7 +512,7 @@ export default function GuestReservationPage() {
                       calculatePointsDiscount(reservation.loyalty_points_used)
                     ) && (
                       <DiscountRow
-                        label="Descuento por puntos de lealtad"
+                        label="Descuento con Monedas Chuy"
                         amount={
                           calculatePointsDiscount(
                             reservation.loyalty_points_used
@@ -922,7 +922,7 @@ export default function GuestReservationPage() {
               Crear cuenta
             </Link>
             <p className="mt-2 text-xs text-zinc-600">
-              Al crear cuenta disfruta de descuentos por fidelización, puntos de lealtad, créditos y más beneficios.
+              Al crear cuenta disfruta de descuentos por fidelización, Monedas Chuy, créditos y más beneficios.
             </p>
           </div>
         </div>

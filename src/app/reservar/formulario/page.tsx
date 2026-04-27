@@ -1032,12 +1032,12 @@ function FormularioReservaContent() {
                         </label>
                       </div>
 
-                      {/* Puntos de Lealtad */}
+                      {/* Monedas Chuy */}
                       <div className="flex items-center justify-between py-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-zinc-900">
-                              Puntos de lealtad
+                              Monedas Chuy
                             </span>
                             {useLoyaltyPoints > 0 && (
                               <svg
@@ -1057,17 +1057,17 @@ function FormularioReservaContent() {
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-xs text-zinc-500">
-                              {availablePoints} puntos disponibles
+                              {availablePoints} disponible{availablePoints === 1 ? "" : "s"}
                             </span>
                             {useLoyaltyPoints > 0 && (
                               <span className="text-xs font-medium text-green-600">
-                                • Usando {useLoyaltyPoints} puntos
+                                • Usando {useLoyaltyPoints}
                               </span>
                             )}
                           </div>
                           {availablePoints <= 0 && (
                             <p className="text-xs text-zinc-500 mt-0.5">
-                              Gana 1 punto por cada $10 gastados
+                              Gana 1 Moneda Chuy por cada $10 gastados
                             </p>
                           )}
                         </div>
@@ -1210,12 +1210,12 @@ function FormularioReservaContent() {
                           {priceCalculation.discounts.loyaltyPoints && (
                             <div className="flex justify-between text-green-600">
                               <span>
-                                Puntos aplicados (
+                                Monedas Chuy aplicadas (
                                 {
                                   priceCalculation.discounts.loyaltyPoints
                                     .points
-                                }{" "}
-                                pts)
+                                }
+                                )
                               </span>
                               <span>
                                 -$
@@ -1286,7 +1286,8 @@ function FormularioReservaContent() {
                           >
                             Inicia sesión
                           </Link>{" "}
-                          para disfrutar de descuentos, puntos y créditos.
+                          para disfrutar de descuentos, Monedas Chuy y
+                          créditos.
                         </span>
                       </div>
                     )}
@@ -1820,12 +1821,12 @@ function FormularioReservaContent() {
                   </label>
                 </div>
 
-                {/* Puntos de Lealtad */}
+                {/* Monedas Chuy */}
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-zinc-900">
-                        Puntos de lealtad
+                        Monedas Chuy
                       </span>
                       {useLoyaltyPoints > 0 && (
                         <svg
@@ -1845,17 +1846,17 @@ function FormularioReservaContent() {
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-xs text-zinc-500">
-                        {availablePoints} puntos disponibles
+                        {availablePoints} disponible{availablePoints === 1 ? "" : "s"}
                       </span>
                       {useLoyaltyPoints > 0 && (
                         <span className="text-xs font-medium text-green-600">
-                          • Usando {useLoyaltyPoints} puntos
+                          • Usando {useLoyaltyPoints}
                         </span>
                       )}
                     </div>
                     {availablePoints <= 0 && (
                       <p className="text-xs text-zinc-500 mt-0.5">
-                        Gana 1 punto por cada $10 gastados
+                        Gana 1 Moneda Chuy por cada $10 gastados
                       </p>
                     )}
                   </div>
@@ -1990,8 +1991,8 @@ function FormularioReservaContent() {
                     {priceCalculation.discounts.loyaltyPoints && (
                       <div className="flex justify-between text-green-600">
                         <span>
-                          Puntos aplicados (
-                          {priceCalculation.discounts.loyaltyPoints.points} pts)
+                          Monedas Chuy aplicadas (
+                          {priceCalculation.discounts.loyaltyPoints.points})
                         </span>
                         <span>
                           -$
@@ -2060,7 +2061,7 @@ function FormularioReservaContent() {
                     >
                       Inicia sesión
                     </Link>{" "}
-                    para disfrutar de descuentos, puntos y créditos.
+                    para disfrutar de descuentos, Monedas Chuy y créditos.
                   </span>
                 </div>
               )}

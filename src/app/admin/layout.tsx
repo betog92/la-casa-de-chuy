@@ -8,6 +8,7 @@ const navItems = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/calendario", label: "Calendario" },
   { href: "/admin/reservaciones", label: "Reservaciones" },
+  { href: "/admin/clientes", label: "Clientes" },
   { href: "/admin/disponibilidad", label: "Disponibilidad" },
   { href: "/admin/codigos", label: "Códigos de descuento" },
 ];

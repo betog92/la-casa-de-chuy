@@ -246,7 +246,10 @@ function ConfirmacionContent() {
         {(user || hasAccount) && rescheduled !== "true" && (
           <div className="mt-3 mb-4 inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 border border-green-200">
             <span className="font-semibold">🎉 ¡Felicidades!</span>
-            <span>Ganaste {pointsEarned} puntos de lealtad.</span>
+            <span>
+              Ganaste {pointsEarned}{" "}
+              {pointsEarned === 1 ? "Moneda Chuy" : "Monedas Chuy"}.
+            </span>
             {loyaltyLevelChanged && displayLoyaltyLevel && (
               <>
                 <span className="font-semibold">¡Subiste de nivel!</span>
@@ -489,8 +492,8 @@ function ConfirmacionContent() {
               ¿Quieres acceder a más beneficios?
             </h3>
             <p className="mb-4 text-sm text-zinc-700">
-              Crea una cuenta para acceder a descuentos por fidelización, puntos
-              de lealtad, créditos y más.
+              Crea una cuenta para acceder a descuentos por fidelización,
+              Monedas Chuy, créditos y más.
             </p>
             <Link
               href={`/auth/register?email=${encodeURIComponent(

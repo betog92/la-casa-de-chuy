@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import Calendar from "react-calendar";
 import {
@@ -111,12 +111,30 @@ const getStatusColor = (status: string, rescheduleCount?: number): string => {
 }
 
 export default function AdminReservacionesPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-zinc-500">Cargando…</div>}>
+      <AdminReservacionesPageInner />
+    </Suspense>
+  );
+}
+
+function AdminReservacionesPageInner() {
   const router = useRouter();
+  // Lee filtros iniciales del URL (?search=, ?email=, ?status=, ?dateFrom=, ?dateTo=)
+  // para que enlaces como /admin/reservaciones?search=foo@bar.com filtren al cargar.
+  const sp = useSearchParams();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "", search: "", paymentStatus: "" });
+  const [filters, setFilters] = useState(() => ({
+    dateFrom: sp.get("dateFrom") || "",
+    dateTo: sp.get("dateTo") || "",
+    status: sp.get("status") || "",
+    // Aceptamos ?search= o ?email= (alias para enlaces desde /admin/clientes)
+    search: sp.get("search") || sp.get("email") || "",
+    paymentStatus: sp.get("paymentStatus") || "",
+  }));
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero" | "renta_vestido";
