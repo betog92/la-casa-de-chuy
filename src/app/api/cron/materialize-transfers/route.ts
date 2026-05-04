@@ -16,6 +16,10 @@ import { isCronSecretAuthorized } from "@/utils/cron-auth";
 // =====================================================
 // /api/cron/materialize-transfers
 // =====================================================
+// Horario en vercel.json: `0 14 * * *` (UTC) ≈ 08:00 America/Monterrey
+// cuando México está en UTC−6 — “mañana” respecto al día de sesión
+// alinea con getMonterreyToday() usado abajo.
+//
 // Cron job diario que materializa transferencias de Monedas Chuy
 // cuya fecha de sesión ya pasó:
 //
