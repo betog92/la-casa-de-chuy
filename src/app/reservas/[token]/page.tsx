@@ -28,6 +28,7 @@ import {
 } from "@/utils/refunds";
 import { DiscountRow } from "@/components/DiscountRow";
 import RescheduleModal from "@/components/RescheduleModal";
+import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 
@@ -926,6 +927,18 @@ export default function GuestReservationPage() {
             </p>
           </div>
         </div>
+
+        {/* Regalar Monedas Chuy al fotógrafo: solo aplica cuando la reserva
+            ganó Monedas (caso "guest cuyo email ya tenía cuenta") y sigue
+            confirmada. El propio componente se oculta si no hay Monedas. */}
+        {reservation.status === "confirmed" && (
+          <div className="mt-6">
+            <TransferMonedasPanel
+              reservationId={reservation.id}
+              guestToken={token}
+            />
+          </div>
+        )}
       </div>
 
       {/* Modal de confirmación de cancelación */}

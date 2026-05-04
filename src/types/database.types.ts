@@ -536,6 +536,7 @@ export interface Database {
             | "claimed"
             | "reverted";
           transferred_points: number;
+          revoked_loyalty_point_ids: string[];
           created_at: string;
           materialized_at: string | null;
           claimed_at: string | null;
@@ -560,6 +561,7 @@ export interface Database {
             | "claimed"
             | "reverted";
           transferred_points?: number;
+          revoked_loyalty_point_ids?: string[];
           created_at?: string;
           materialized_at?: string | null;
           claimed_at?: string | null;
@@ -584,6 +586,7 @@ export interface Database {
             | "claimed"
             | "reverted";
           transferred_points?: number;
+          revoked_loyalty_point_ids?: string[];
           created_at?: string;
           materialized_at?: string | null;
           claimed_at?: string | null;

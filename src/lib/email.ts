@@ -296,3 +296,173 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+// =====================================================
+// EMAILS DE TRANSFERENCIA DE MONEDAS CHUY → FOTÓGRAFO
+// =====================================================
+
+export interface SendTransferReceivedParams {
+  /** Email del fotógrafo destinatario */
+  to: string;
+  /** Nombre del fotógrafo (si lo tenemos) */
+  recipientName: string | null;
+  /** Nombre del cliente que regaló (si lo tenemos) */
+  fromName: string | null;
+  /** Cantidad de Monedas Chuy acreditadas */
+  points: number;
+  /** Nombre del estudio (opcional, lo escribió el cliente) */
+  studioName: string | null;
+}
+
+/**
+ * Email enviado cuando un fotógrafo con cuenta existente recibe Monedas
+ * Chuy automáticamente (status=auto_credited) tras pasar la fecha de la sesión.
+ */
+export async function sendTransferReceived(
+  params: SendTransferReceivedParams,
+): Promise<{ ok: boolean; error?: string }> {
+  const resend = getResend();
+  if (!resend) return { ok: false, error: "RESEND_API_KEY no configurada" };
+  if (!params.to?.trim()) return { ok: false, error: "Destinatario faltante" };
+
+  const to = params.to.trim();
+  const { recipientName, fromName, points, studioName } = params;
+  const greetingName = (recipientName || studioName || "").trim() || "Hola";
+  const greeting = recipientName || studioName ? `Hola ${greetingName}` : "Hola";
+  const fromLabel = (fromName || "Un cliente").trim() || "Un cliente";
+  const pointsLabel = `${points} ${points === 1 ? "Moneda Chuy" : "Monedas Chuy"}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://lacasadechuyelrico.com";
+  const accountUrl = `${baseUrl}/account`;
+
+  const subject = `Recibiste ${pointsLabel}`;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
+  <div style="max-width:480px; margin:0 auto; padding:24px;">
+    <div style="background:#fff; border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08);">
+      <h1 style="margin:0 0 24px; font-size:1.25rem; color:#103948;">¡Recibiste ${escapeHtml(pointsLabel)}!</h1>
+
+      <p style="margin:0 0 16px; font-size:0.9375rem; line-height:1.5;">${escapeHtml(greeting)},</p>
+      <p style="margin:0 0 24px; font-size:0.9375rem; color:#3f3f46; line-height:1.5;">
+        ${escapeHtml(fromLabel)} te regaló <strong>${escapeHtml(pointsLabel)}</strong> tras su sesión en La Casa de Chuy el Rico.
+        Las Monedas ya están en tu cuenta y puedes usarlas en futuras reservas (1 Moneda = $1 MXN).
+        No caducan.
+      </p>
+
+      <p style="margin:0 0 28px;"><a href="${escapeHtml(accountUrl)}" style="display:inline-block; padding:14px 24px; background:#103948; color:#fff; text-decoration:none; border-radius:10px; font-size:0.9375rem; font-weight:500;">Ver mi cuenta</a></p>
+
+      <p style="margin:0; font-size:0.8125rem; color:#71717a;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
+    </div>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+  </div>
+</body>
+</html>
+`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: [to],
+      subject,
+      html,
+    });
+    if (error)
+      return { ok: false, error: error.message || "Error al enviar email" };
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error inesperado al enviar email",
+    };
+  }
+}
+
+export interface SendTransferClaimParams {
+  /** Email del fotógrafo destinatario */
+  to: string;
+  /** Nombre del cliente que regaló (si lo tenemos) */
+  fromName: string | null;
+  /** Cantidad de Monedas Chuy a reclamar */
+  points: number;
+  /** Nombre del estudio (opcional, lo escribió el cliente) */
+  studioName: string | null;
+  /** URL completa del magic link de reclamo */
+  claimUrl: string;
+}
+
+/**
+ * Email enviado cuando un fotógrafo SIN cuenta recibe el magic link
+ * para reclamar las Monedas Chuy (status=pending_claim).
+ */
+export async function sendTransferClaim(
+  params: SendTransferClaimParams,
+): Promise<{ ok: boolean; error?: string }> {
+  const resend = getResend();
+  if (!resend) return { ok: false, error: "RESEND_API_KEY no configurada" };
+  if (!params.to?.trim()) return { ok: false, error: "Destinatario faltante" };
+
+  const to = params.to.trim();
+  const { fromName, points, studioName, claimUrl } = params;
+  const greetingName = (studioName || "").trim();
+  const greeting = greetingName ? `Hola ${greetingName}` : "Hola";
+  const fromLabel = (fromName || "Un cliente").trim() || "Un cliente";
+  const pointsLabel = `${points} ${points === 1 ? "Moneda Chuy" : "Monedas Chuy"}`;
+
+  const subject = `Reclama ${pointsLabel}`;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
+  <div style="max-width:480px; margin:0 auto; padding:24px;">
+    <div style="background:#fff; border-radius:12px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08);">
+      <h1 style="margin:0 0 24px; font-size:1.25rem; color:#103948;">¡Te regalaron ${escapeHtml(pointsLabel)}!</h1>
+
+      <p style="margin:0 0 16px; font-size:0.9375rem; line-height:1.5;">${escapeHtml(greeting)},</p>
+      <p style="margin:0 0 16px; font-size:0.9375rem; color:#3f3f46; line-height:1.5;">
+        ${escapeHtml(fromLabel)} te regaló <strong>${escapeHtml(pointsLabel)}</strong> tras su sesión en La Casa de Chuy el Rico.
+      </p>
+      <p style="margin:0 0 24px; font-size:0.9375rem; color:#3f3f46; line-height:1.5;">
+        Para recibirlas, crea una cuenta o inicia sesión con este correo. Las Monedas (1 Moneda = $1 MXN) no caducan y podrás usarlas en futuras reservas.
+      </p>
+
+      <p style="margin:0 0 24px;"><a href="${escapeHtml(claimUrl)}" style="display:inline-block; padding:14px 24px; background:#103948; color:#fff; text-decoration:none; border-radius:10px; font-size:0.9375rem; font-weight:500;">Reclamar ${escapeHtml(pointsLabel)}</a></p>
+
+      <p style="margin:0 0 16px; font-size:0.8125rem; color:#71717a; line-height:1.5; word-break:break-all;">
+        Si el botón no funciona, copia este enlace en tu navegador:<br>
+        <span style="color:#3f3f46;">${escapeHtml(claimUrl)}</span>
+      </p>
+
+      <p style="margin:0; font-size:0.8125rem; color:#71717a;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
+    </div>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+  </div>
+</body>
+</html>
+`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: [to],
+      subject,
+      html,
+    });
+    if (error)
+      return { ok: false, error: error.message || "Error al enviar email" };
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error inesperado al enviar email",
+    };
+  }
+}

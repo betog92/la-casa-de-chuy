@@ -26,11 +26,14 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 interface RegisterFormProps {
   onSuccess?: () => void;
   redirectTo?: string;
+  /** Email a precargar (p.ej. cuando llegan desde un magic link). */
+  defaultEmail?: string;
 }
 
 export default function RegisterForm({
   onSuccess,
   redirectTo,
+  defaultEmail,
 }: RegisterFormProps) {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -45,6 +48,7 @@ export default function RegisterForm({
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+    defaultValues: defaultEmail ? { email: defaultEmail } : undefined,
   });
 
   const onSubmit = async (data: RegisterFormData) => {

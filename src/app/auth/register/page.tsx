@@ -1,9 +1,18 @@
-"use client";
-
 import RegisterForm from "@/components/auth/RegisterForm";
 import Link from "next/link";
 
-export default function RegisterPage() {
+interface PageProps {
+  searchParams: Promise<{ redirect?: string; email?: string }>;
+}
+
+export default async function RegisterPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const redirectTo = params.redirect ?? undefined;
+  const defaultEmail = params.email?.trim() || undefined;
+  const loginHref = redirectTo
+    ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}`
+    : "/auth/login";
+
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto">
@@ -20,13 +29,16 @@ export default function RegisterPage() {
         </div>
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-8">
-          <RegisterForm />
+          <RegisterForm
+            redirectTo={redirectTo}
+            defaultEmail={defaultEmail}
+          />
 
           <div className="mt-6 text-center">
             <p className="text-sm text-zinc-600">
               ¿Ya tienes una cuenta?{" "}
               <Link
-                href="/auth/login"
+                href={loginHref}
                 className="text-[#103948] hover:text-[#0d2d38] font-medium"
               >
                 Inicia sesión

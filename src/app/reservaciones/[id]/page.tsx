@@ -29,6 +29,7 @@ import {
 } from "@/utils/refunds";
 import { DiscountRow } from "@/components/DiscountRow";
 import RescheduleModal from "@/components/RescheduleModal";
+import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 
@@ -48,6 +49,8 @@ export default function ReservationDetailsPage() {
   const [rescheduling, setRescheduling] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  /** Evita mostrar el panel de Monedas como "cliente" antes de saber si es admin. */
+  const [adminMeResolved, setAdminMeResolved] = useState(false);
   const [validatingPayment, setValidatingPayment] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
@@ -73,18 +76,30 @@ export default function ReservationDetailsPage() {
     if (!user?.id) {
       setIsAdmin(false);
       setIsSuperAdmin(false);
+      setAdminMeResolved(true);
       return;
     }
+    setAdminMeResolved(false);
+    let cancelled = false;
     fetch("/api/admin/me")
       .then((res) => res.json())
       .then((data) => {
+        if (cancelled) return;
         setIsAdmin(data.success === true && data.isAdmin === true);
         setIsSuperAdmin(data.success === true && data.isSuperAdmin === true);
       })
       .catch(() => {
-        setIsAdmin(false);
-        setIsSuperAdmin(false);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setIsSuperAdmin(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAdminMeResolved(true);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   // Sincronizar formulario de edición con la reserva cargada
@@ -1443,6 +1458,16 @@ export default function ReservationDetailsPage() {
             </Link>
           </div>
         </div>
+
+        {/* Monedas Chuy: cliente puede regalar; admin ve historial / estado en solo lectura */}
+        {reservation.status === "confirmed" && adminMeResolved && (
+          <div className="mt-6">
+            <TransferMonedasPanel
+              reservationId={reservation.id}
+              adminReadOnly={isAdmin}
+            />
+          </div>
+        )}
       </div>
 
       {/* Modal de confirmación de cancelación */}

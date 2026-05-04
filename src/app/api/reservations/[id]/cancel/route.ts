@@ -246,6 +246,32 @@ export async function POST(
       console.error("Error revocando créditos:", revokeCreditsOut.error);
     }
 
+    // Cancelar transferencias de Monedas Chuy aún no acreditadas:
+    //   - pending: el cron aún no las procesó (las Monedas ya estaban
+    //     revocadas desde que se creó el pending; aquí simplemente
+    //     marcamos la transferencia como cancelada y NO restauramos
+    //     porque la reserva entera se cancela y el cliente pierde las
+    //     Monedas igualmente).
+    //   - pending_claim: cron generó magic link pero fotógrafo no
+    //     reclamó. Idéntico tratamiento: las Monedas se quedan
+    //     revocadas y la transferencia queda cancelada.
+    // Si ya están auto_credited / claimed, NO se tocan: el fotógrafo ya
+    // tiene las Monedas en su cuenta y no se le quitan por una cancelación.
+    const { error: cancelTransferError } = await supabase
+      .from("benefit_transfers")
+      .update({
+        status: "cancelled",
+        cancelled_at: revokeTimestamp,
+      } as never)
+      .eq("reservation_id", reservationId)
+      .in("status", ["pending", "pending_claim"]);
+    if (cancelTransferError) {
+      console.error(
+        "Error cancelando transferencia pendiente de Monedas Chuy:",
+        cancelTransferError,
+      );
+    }
+
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const manageUrl = guestToken

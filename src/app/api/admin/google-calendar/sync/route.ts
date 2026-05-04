@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth/admin";
 import { syncAppointlyEvents } from "@/lib/google-calendar-sync";
 import { successResponse, errorResponse, unauthorizedResponse } from "@/utils/api-response";
+import { isCronSecretAuthorized } from "@/utils/cron-auth";
 
 /**
  * POST /api/admin/google-calendar/sync
@@ -8,15 +9,10 @@ import { successResponse, errorResponse, unauthorizedResponse } from "@/utils/ap
  * Fase 1: Importa eventos de Appointly desde Google Calendar como reservas
  * en la base de datos. Idempotente: omite eventos ya importados.
  *
- * Solo accesible por admins (o por cron con x-cron-secret).
+ * Solo accesible por admins (o por cron con CRON_SECRET: Bearer o x-cron-secret).
  */
 export async function POST(request: Request) {
-  // Permitir acceso por cron secret además de sesión admin
-  const cronSecret = request.headers.get("x-cron-secret");
-  const validCronSecret =
-    cronSecret && cronSecret === process.env.CRON_SECRET;
-
-  if (!validCronSecret) {
+  if (!isCronSecretAuthorized(request)) {
     const { isAdmin } = await requireAdmin();
     if (!isAdmin) {
       return unauthorizedResponse("No tienes permisos de administrador");

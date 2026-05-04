@@ -10,6 +10,7 @@ import {
   formatReservationId,
 } from "@/utils/formatters";
 import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
+import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
@@ -523,6 +524,19 @@ function ConfirmacionContent() {
                 Gestionar mi reserva
               </Link>
             </div>
+          </div>
+        )}
+
+        {/* Panel: regalar Monedas Chuy al fotógrafo. Lo dejamos casi al final
+            para no competir con la confirmación principal: el cliente primero
+            ve el éxito, los detalles y el acceso a su cuenta; luego, si ganó
+            Monedas, le ofrecemos regalárselas al fotógrafo.
+            Solo se renderiza para usuarios logueados; los invitados verán el
+            CTA "Crear cuenta / Iniciar sesión" en los bloques de arriba y
+            podrán regalarlas desde /reservaciones/[id]. */}
+        {user && rescheduled !== "true" && (
+          <div className="mb-6">
+            <TransferMonedasPanel reservationId={reservation.id} />
           </div>
         )}
 

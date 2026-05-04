@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS benefit_transfers (
   -- Snapshot de lo transferido (calculado al materializar)
   transferred_points INTEGER DEFAULT 0,
 
+  -- IDs de loyalty_points revocados al crear el pending (para
+  -- restaurarlos exactamente si el cliente cancela la transferencia).
+  -- Vacío hasta que el flujo de pre-revoke los guarda.
+  revoked_loyalty_point_ids UUID[] NOT NULL DEFAULT '{}',
+
   -- Timestamps de cada transición
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   materialized_at TIMESTAMP WITH TIME ZONE,
@@ -69,6 +74,8 @@ COMMENT ON COLUMN benefit_transfers.status IS
   'pending | cancelled | auto_credited | pending_claim | claimed | reverted';
 COMMENT ON COLUMN benefit_transfers.claim_token IS
   'UUID público usado en el magic link /fotografos/reclamar/[token]. NULL si se acreditó automáticamente.';
+COMMENT ON COLUMN benefit_transfers.revoked_loyalty_point_ids IS
+  'IDs de loyalty_points revocadas al crear el pending. Se restauran al cancelar la transferencia (DELETE).';
 
 -- =====================================================
 -- ÍNDICES
