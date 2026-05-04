@@ -193,10 +193,11 @@ CREATE TABLE IF NOT EXISTS referrals (
 -- =====================================================
 -- 8. TABLA DE TRANSFERENCIAS DE BENEFICIOS (Monedas Chuy → fotógrafo)
 -- =====================================================
--- Migraciones 31 + 32. Solo Monedas Chuy son transferibles
--- (los créditos quedan SIEMPRE con el cliente). La transferencia se
--- materializa después de que pasa la fecha de la sesión (cron job)
--- para evitar conflictos con cancelaciones/reagendamientos.
+-- Migraciones 31–34 (resumen). Solo Monedas Chuy son transferibles
+-- (los créditos quedan SIEMPRE con el cliente). Al crear pending se
+-- revocan las filas de loyalty_points y se guardan sus IDs en
+-- revoked_loyalty_point_ids; la transferencia se materializa después
+-- de que pasa la fecha de la sesión (cron) para evitar conflictos.
 --
 -- Estados:
 --   pending        – creada por el cliente, fecha de sesión aún no pasa
@@ -231,8 +232,11 @@ CREATE TABLE IF NOT EXISTS benefit_transfers (
       'reverted'
     )),
 
-  -- Snapshot de lo transferido (calculado al materializar)
+  -- Snapshot de puntos al crear pending (earmark); se conserva al materializar
   transferred_points INTEGER DEFAULT 0,
+
+  -- IDs de loyalty_points revocadas al crear el pending (restaurar en DELETE transfer)
+  revoked_loyalty_point_ids UUID[] NOT NULL DEFAULT '{}',
 
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   materialized_at TIMESTAMP WITH TIME ZONE,
@@ -267,6 +271,8 @@ COMMENT ON COLUMN benefit_transfers.status IS
   'pending | cancelled | auto_credited | pending_claim | claimed | reverted';
 COMMENT ON COLUMN benefit_transfers.claim_token IS
   'UUID público usado en el magic link /fotografos/reclamar/[token]. NULL si se acreditó automáticamente.';
+COMMENT ON COLUMN benefit_transfers.revoked_loyalty_point_ids IS
+  'IDs de loyalty_points revocadas al crear el pending. Se restauran al cancelar la transferencia (DELETE).';
 
 -- =====================================================
 -- CALENDARIO DE RENTA DE VESTIDOS (copia desde Google)
