@@ -3,6 +3,7 @@ import {
   successResponse,
   unauthorizedResponse,
   forbiddenResponse,
+  errorResponse,
 } from "@/utils/api-response";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -23,7 +24,7 @@ export async function GET() {
 
   if (error) {
     console.error("[admin gallery GET]", error);
-    return successResponse({ images: [] as unknown[] });
+    return errorResponse("No se pudo cargar la galería", 500);
   }
 
   return successResponse({ images: data ?? [] });

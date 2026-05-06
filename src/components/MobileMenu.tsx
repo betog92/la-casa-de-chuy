@@ -3,16 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { ADMIN_NAV_ITEMS } from "@/constants/admin-nav";
 import { navigation } from "@/constants/navigation";
 import { useAuth } from "@/hooks/useAuth";
-
-const adminNavItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/calendario", label: "Calendario" },
-  { href: "/admin/reservaciones", label: "Reservaciones" },
-  { href: "/admin/disponibilidad", label: "Disponibilidad" },
-  { href: "/admin/codigos", label: "Códigos de descuento" },
-];
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -157,7 +150,7 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                     {isAdmin ? (
                       <>
                         <div className="border-t border-zinc-200 mt-2 pt-2" aria-hidden="true" />
-                        {adminNavItems.map((item) => {
+                        {ADMIN_NAV_ITEMS.map((item) => {
                           const isActive =
                             pathname === item.href ||
                             (item.href !== "/admin" && pathname.startsWith(item.href));

@@ -25,6 +25,7 @@
     "react-hook-form": "^7.67.0",
     "resend": "^6.8.0",
     "swiper": "^12.1.0",
+    "yet-another-react-lightbox": "^3.32.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {

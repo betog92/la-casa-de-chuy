@@ -8,6 +8,7 @@ import {
   errorResponse,
 } from "@/utils/api-response";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { bufferMatchesImageMime } from "@/utils/gallery-server";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED = new Set([
@@ -57,9 +58,15 @@ export async function POST(request: Request) {
     );
   }
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+  if (!bufferMatchesImageMime(buffer, mime)) {
+    return validationErrorResponse(
+      "El archivo no coincide con un formato de imagen válido.",
+    );
+  }
+
   const supabase = createServiceRoleClient();
   const path = `${randomUUID()}.${extFromMime(mime)}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error: upErr } = await supabase.storage
     .from("gallery")
@@ -77,27 +84,15 @@ export async function POST(request: Request) {
     data: { publicUrl },
   } = supabase.storage.from("gallery").getPublicUrl(path);
 
-  const { data: maxRows } = await supabase
-    .from("gallery_images")
-    .select("sort_order")
-    .order("sort_order", { ascending: false })
-    .limit(1);
+  const { data: rpcData, error: insErr } = await supabase.rpc(
+    "register_gallery_image",
+    {
+      p_storage_path: path,
+      p_public_url: publicUrl,
+    } as never,
+  );
 
-  const maxOrder =
-    maxRows && maxRows.length > 0
-      ? Number((maxRows[0] as { sort_order: number }).sort_order) || 0
-      : -1;
-  const sort_order = maxOrder + 1;
-
-  const { data: inserted, error: insErr } = await supabase
-    .from("gallery_images")
-    .insert({
-      storage_path: path,
-      public_url: publicUrl,
-      sort_order,
-    } as never)
-    .select("id, public_url, sort_order, caption, created_at")
-    .single();
+  const inserted = Array.isArray(rpcData) ? rpcData[0] : rpcData;
 
   if (insErr || !inserted) {
     console.error("[gallery upload insert]", insErr);

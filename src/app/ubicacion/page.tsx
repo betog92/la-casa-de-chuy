@@ -2,17 +2,37 @@ import {
   LOCATION_CONTENT_KEY,
   parseLocationContent,
 } from "@/lib/site-location";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createPublicReadonlyClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function UbicacionPage() {
-  const supabase = createServiceRoleClient();
-  const { data } = await supabase
+  const supabase = createPublicReadonlyClient();
+  const { data, error: queryError } = await supabase
     .from("site_content")
     .select("value")
     .eq("key", LOCATION_CONTENT_KEY)
     .maybeSingle();
+
+  if (queryError) {
+    console.error("[ubicacion page]", queryError);
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white">
+        <div className="container mx-auto max-w-3xl px-4 py-12 sm:py-16">
+          <h1
+            className="mb-4 text-center text-3xl font-bold text-zinc-900 sm:text-4xl"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            Ubicación
+          </h1>
+          <p className="mx-auto max-w-xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-800">
+            No pudimos cargar la información de ubicación. Vuelve a intentar más
+            tarde.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const loc = parseLocationContent(
     data ? (data as { value: unknown }).value : null,

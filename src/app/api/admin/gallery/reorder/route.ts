@@ -7,6 +7,7 @@ import {
   errorResponse,
 } from "@/utils/api-response";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { isUuidString } from "@/utils/uuid";
 
 /**
  * PATCH /api/admin/gallery/reorder — body: { orderedIds: string[] }
@@ -27,6 +28,9 @@ export async function PATCH(request: Request) {
   );
   if (orderedIds.length === 0) {
     return validationErrorResponse("orderedIds vacío");
+  }
+  if (orderedIds.some((id) => !isUuidString(id))) {
+    return validationErrorResponse("Cada ID debe ser un UUID válido");
   }
 
   const seen = new Set(orderedIds);
@@ -61,15 +65,33 @@ export async function PATCH(request: Request) {
     }
   }
 
-  for (let i = 0; i < orderedIds.length; i++) {
-    const { error } = await supabase
-      .from("gallery_images")
-      .update({ sort_order: i } as never)
-      .eq("id", orderedIds[i]);
-    if (error) {
-      console.error("[gallery reorder]", error);
-      return errorResponse("No se pudo guardar el orden", 500);
+  const { error: rpcErr } = await supabase.rpc(
+    "reorder_gallery_images",
+    { p_ordered_ids: orderedIds } as never,
+  );
+
+  if (rpcErr) {
+    console.error("[gallery reorder rpc]", rpcErr);
+    const msg = rpcErr.message || "";
+    const lower = msg.toLowerCase();
+    const looksLikeValidation =
+      msg.includes("coincide") ||
+      msg.includes("duplicados") ||
+      msg.includes("desconocido") ||
+      msg.includes("requerido") ||
+      lower.includes("duplicate") ||
+      lower.includes("unknown") ||
+      lower.includes("mismatch") ||
+      lower.includes("required") ||
+      lower.includes("invalid input");
+    if (looksLikeValidation) {
+      return validationErrorResponse(
+        msg.length > 0 && msg.length < 200
+          ? msg
+          : "No se pudo aplicar el orden indicado",
+      );
     }
+    return errorResponse("No se pudo guardar el orden", 500);
   }
 
   return successResponse({ message: "Orden actualizado" });

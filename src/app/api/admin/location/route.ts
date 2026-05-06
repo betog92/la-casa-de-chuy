@@ -13,6 +13,7 @@ import {
   parseLocationContent,
   type LocationContent,
 } from "@/lib/site-location";
+import { isAllowedMapsEmbedUrl } from "@/utils/maps-embed";
 
 /**
  * GET /api/admin/location — contenido actual (o valores por defecto).
@@ -62,6 +63,12 @@ export async function PUT(request: Request) {
     parkingNote:
       typeof body.parkingNote === "string" ? body.parkingNote : "",
   };
+
+  if (!isAllowedMapsEmbedUrl(merged.mapsEmbedUrl)) {
+    return validationErrorResponse(
+      "La URL del mapa debe ser HTTPS y de dominios permitidos (p. ej. Google Maps).",
+    );
+  }
 
   const supabase = createServiceRoleClient();
   const { error } = await supabase.from("site_content").upsert(

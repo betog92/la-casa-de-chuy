@@ -26,6 +26,24 @@ export function createServiceRoleClient() {
 }
 
 /**
+ * Cliente solo lectura con anon key (respeta RLS). Para páginas públicas que
+ * solo hacen SELECT con políticas abiertas — reduce riesgo vs. service role.
+ */
+export function createPublicReadonlyClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    throw new Error("Supabase public configuration missing");
+  }
+  return createClient<Database>(url, anon, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+/**
  * Crea un cliente de Supabase autenticado para uso en API routes
  * Este cliente respeta RLS y la autenticación del usuario
  *

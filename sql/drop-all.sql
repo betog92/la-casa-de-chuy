@@ -25,6 +25,8 @@ DROP FUNCTION IF EXISTS get_daily_occupancy(DATE) CASCADE;
 DROP FUNCTION IF EXISTS get_reservations_stats(DATE) CASCADE;
 DROP FUNCTION IF EXISTS get_month_availability(DATE, DATE) CASCADE;
 DROP FUNCTION IF EXISTS increment_discount_code_uses(UUID) CASCADE;
+DROP FUNCTION IF EXISTS reorder_gallery_images(UUID[]) CASCADE;
+DROP FUNCTION IF EXISTS register_gallery_image(TEXT, TEXT) CASCADE;
 
 -- =====================================================
 -- 2. ELIMINAR TABLAS (orden por dependencias; CASCADE quita FKs)

@@ -3,17 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/admin/AdminGuard";
-
-const navItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/calendario", label: "Calendario" },
-  { href: "/admin/reservaciones", label: "Reservaciones" },
-  { href: "/admin/clientes", label: "Clientes" },
-  { href: "/admin/disponibilidad", label: "Disponibilidad" },
-  { href: "/admin/codigos", label: "Códigos de descuento" },
-  { href: "/admin/galeria", label: "Galería" },
-  { href: "/admin/ubicacion", label: "Ubicación" },
-];
+import { ADMIN_NAV_ITEMS } from "@/constants/admin-nav";
 
 export default function AdminLayout({
   children,
@@ -29,7 +19,7 @@ export default function AdminLayout({
           {/* Sidebar: solo en desktop; en móvil se usa el menú principal del Header */}
           <aside className="hidden md:block w-56 shrink-0 border-r border-zinc-200 bg-white">
             <nav className="space-y-0.5 p-4">
-              {navItems.map((item) => {
+              {ADMIN_NAV_ITEMS.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   (item.href !== "/admin" && pathname.startsWith(item.href));

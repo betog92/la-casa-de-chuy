@@ -3,6 +3,89 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 
+const CAPTION_MAX = 500;
+
+function CaptionField({
+  id,
+  caption,
+  disabled,
+  saving,
+  onSave,
+}: {
+  id: string;
+  caption: string | null;
+  disabled: boolean;
+  saving: boolean;
+  onSave: (imageId: string, value: string) => void;
+}) {
+  const hasCaption = Boolean(caption?.trim());
+  const [expanded, setExpanded] = useState(hasCaption);
+  const [val, setVal] = useState(() => caption ?? "");
+
+  const unchanged = val === (caption ?? "");
+
+  if (!hasCaption && !expanded) {
+    return (
+      <div className="border-t border-zinc-100 px-2 py-1.5">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setExpanded(true)}
+          className="text-xs font-medium text-[#103948] underline decoration-[#103948]/40 underline-offset-2 hover:decoration-[#103948] disabled:opacity-40"
+        >
+          Añadir leyenda (opcional)
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-zinc-100 p-2">
+      <label htmlFor={`caption-${id}`} className="sr-only">
+        Leyenda de la imagen
+      </label>
+      <textarea
+        id={`caption-${id}`}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        rows={2}
+        maxLength={CAPTION_MAX}
+        disabled={disabled || saving}
+        className="w-full resize-y rounded border border-zinc-200 px-2 py-1.5 text-sm text-zinc-800 placeholder:text-zinc-400"
+        placeholder="Leyenda opcional (accesibilidad / pie de foto)"
+      />
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[10px] text-zinc-400">
+          {val.length}/{CAPTION_MAX}
+        </span>
+        <div className="flex gap-2">
+          {!hasCaption ? (
+            <button
+              type="button"
+              className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40"
+              disabled={disabled || saving}
+              onClick={() => {
+                setVal("");
+                setExpanded(false);
+              }}
+            >
+              Cancelar
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40"
+            disabled={disabled || saving || unchanged}
+            onClick={() => onSave(id, val)}
+          >
+            {saving ? "Guardando…" : "Guardar leyenda"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface GalleryRow {
   id: string;
   public_url: string;
@@ -18,6 +101,7 @@ export default function AdminGaleriaPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [savingCaptionId, setSavingCaptionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,6 +200,33 @@ export default function AdminGaleriaPage() {
     }
   };
 
+  const saveCaption = async (imageId: string, value: string) => {
+    setError(null);
+    setMessage(null);
+    setSavingCaptionId(imageId);
+    try {
+      const res = await fetch(`/api/admin/gallery/${imageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caption: value.trim() === "" ? null : value.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setError(json.error || "No se pudo guardar la leyenda");
+        return;
+      }
+      setMessage("Leyenda guardada");
+      await load();
+    } catch (err) {
+      console.error(err);
+      setError("Error al guardar la leyenda");
+    } finally {
+      setSavingCaptionId(null);
+    }
+  };
+
   const move = (index: number, delta: number) => {
     if (reordering) return;
     const next = index + delta;
@@ -169,11 +280,11 @@ export default function AdminGaleriaPage() {
       ) : images.length === 0 ? (
         <p className="mt-8 text-zinc-500">No hay imágenes aún.</p>
       ) : (
-        <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-8 grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {images.map((img, index) => (
             <li
               key={img.id}
-              className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
+              className="flex h-auto flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
             >
               <div className="relative aspect-[4/3] w-full bg-zinc-100">
                 <Image
@@ -188,6 +299,14 @@ export default function AdminGaleriaPage() {
                   sizes="280px"
                 />
               </div>
+              <CaptionField
+                key={`${img.id}:${img.caption ?? ""}`}
+                id={img.id}
+                caption={img.caption}
+                disabled={reordering}
+                saving={savingCaptionId === img.id}
+                onSave={(imageId, value) => void saveCaption(imageId, value)}
+              />
               <div className="flex flex-wrap gap-2 border-t border-zinc-100 p-2">
                 <button
                   type="button"

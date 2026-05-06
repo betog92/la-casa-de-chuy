@@ -328,6 +328,96 @@ CREATE POLICY "gallery_public_read_objects"
   TO public
   USING (bucket_id = 'gallery');
 
+-- Reordenar galería en una sola transacción (ver sql/36-migration-gallery-reorder-rpc.sql)
+CREATE OR REPLACE FUNCTION reorder_gallery_images(p_ordered_ids UUID[])
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  n int;
+  expected int;
+  distinct_n int;
+BEGIN
+  IF p_ordered_ids IS NULL THEN
+    RAISE EXCEPTION 'p_ordered_ids requerido';
+  END IF;
+
+  n := cardinality(p_ordered_ids);
+  SELECT COUNT(*)::int INTO expected FROM gallery_images;
+
+  IF n != expected THEN
+    RAISE EXCEPTION 'El número de IDs no coincide con la galería';
+  END IF;
+
+  IF n = 0 THEN
+    RETURN;
+  END IF;
+
+  SELECT COUNT(DISTINCT x)::int INTO distinct_n FROM unnest(p_ordered_ids) AS t(x);
+  IF distinct_n != n THEN
+    RAISE EXCEPTION 'IDs duplicados';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM unnest(p_ordered_ids) AS t(x)
+    WHERE NOT EXISTS (SELECT 1 FROM gallery_images g WHERE g.id = x)
+  ) THEN
+    RAISE EXCEPTION 'ID desconocido';
+  END IF;
+
+  UPDATE gallery_images AS g
+  SET sort_order = sub.ord_zero
+  FROM (
+    SELECT id, ordinality - 1 AS ord_zero
+    FROM unnest(p_ordered_ids) WITH ORDINALITY AS u(id, ordinality)
+  ) AS sub
+  WHERE g.id = sub.id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION reorder_gallery_images(UUID[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION reorder_gallery_images(UUID[]) TO service_role;
+GRANT EXECUTE ON FUNCTION reorder_gallery_images(UUID[]) TO authenticated;
+
+-- Insertar imagen con sort_order siguiente (ver sql/37-migration-gallery-register-image-rpc.sql)
+CREATE OR REPLACE FUNCTION register_gallery_image(
+  p_storage_path TEXT,
+  p_public_url TEXT
+)
+RETURNS gallery_images
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_sort int;
+  v_row gallery_images%ROWTYPE;
+BEGIN
+  IF p_storage_path IS NULL OR btrim(p_storage_path) = '' THEN
+    RAISE EXCEPTION 'storage_path requerido';
+  END IF;
+  IF p_public_url IS NULL OR btrim(p_public_url) = '' THEN
+    RAISE EXCEPTION 'public_url requerido';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(942001);
+
+  SELECT COALESCE(MAX(sort_order), -1) + 1 INTO v_sort FROM gallery_images;
+
+  INSERT INTO gallery_images (storage_path, public_url, sort_order)
+  VALUES (p_storage_path, p_public_url, v_sort)
+  RETURNING * INTO v_row;
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION register_gallery_image(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION register_gallery_image(TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION register_gallery_image(TEXT, TEXT) TO authenticated;
+
 -- =====================================================
 -- CALENDARIO DE RENTA DE VESTIDOS (copia desde Google)
 -- =====================================================

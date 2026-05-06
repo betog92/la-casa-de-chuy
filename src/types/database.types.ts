@@ -656,6 +656,26 @@ export interface Database {
         };
         Returns: boolean;
       };
+      reorder_gallery_images: {
+        Args: {
+          p_ordered_ids: string[];
+        };
+        Returns: void;
+      };
+      register_gallery_image: {
+        Args: {
+          p_storage_path: string;
+          p_public_url: string;
+        };
+        Returns: {
+          id: string;
+          storage_path: string;
+          public_url: string;
+          sort_order: number;
+          caption: string | null;
+          created_at: string;
+        };
+      };
     };
   };
 }
