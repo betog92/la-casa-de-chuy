@@ -11,6 +11,8 @@ const navItems = [
   { href: "/admin/clientes", label: "Clientes" },
   { href: "/admin/disponibilidad", label: "Disponibilidad" },
   { href: "/admin/codigos", label: "Códigos de descuento" },
+  { href: "/admin/galeria", label: "Galería" },
+  { href: "/admin/ubicacion", label: "Ubicación" },
 ];
 
 export default function AdminLayout({

@@ -517,6 +517,49 @@ export interface Database {
           last_edited_by_user_id?: string | null;
         };
       };
+      gallery_images: {
+        Row: {
+          id: string;
+          storage_path: string;
+          public_url: string;
+          sort_order: number;
+          caption: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          storage_path: string;
+          public_url: string;
+          sort_order?: number;
+          caption?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          storage_path?: string;
+          public_url?: string;
+          sort_order?: number;
+          caption?: string | null;
+          created_at?: string;
+        };
+      };
+      site_content: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          updated_at?: string;
+        };
+      };
       benefit_transfers: {
         Row: {
           id: string;
