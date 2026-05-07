@@ -8,10 +8,18 @@ export interface LocationContent {
   parkingNote: string;
 }
 
+/** Dirección física del negocio (fallback y base para PUT admin). */
+export const DEFAULT_LOCATION_ADDRESS =
+  "José María Arteaga #1111 Oriente, 64000 Monterrey, Nuevo León, México";
+
+/** Búsqueda en Google Maps (sin API key; iframe con output=embed). */
+export const DEFAULT_LOCATION_MAPS_EMBED_URL =
+  "https://www.google.com/maps?q=Jos%C3%A9%20Mar%C3%ADa%20Arteaga%20%231111%20Oriente%2C%2064000%20Monterrey%2C%20Nuevo%20Le%C3%B3n%2C%20M%C3%A9xico&hl=es&output=embed";
+
 export function defaultLocationContent(): LocationContent {
   return {
-    address: "",
-    mapsEmbedUrl: "",
+    address: DEFAULT_LOCATION_ADDRESS,
+    mapsEmbedUrl: DEFAULT_LOCATION_MAPS_EMBED_URL,
     directions: "",
     parkingNote: "",
   };

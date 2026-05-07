@@ -1,10 +1,19 @@
+import type { Metadata } from "next";
 import {
   LOCATION_CONTENT_KEY,
   parseLocationContent,
 } from "@/lib/site-location";
 import { createPublicReadonlyClient } from "@/lib/supabase/server";
+import { isAllowedMapsEmbedUrl } from "@/utils/maps-embed";
+import { UbicacionAddressActions } from "./UbicacionAddressActions";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Ubicación — La Casa de Chuy el Rico",
+  description:
+    "Dirección y mapa del estudio en Monterrey, Nuevo León. Cómo llegar a La Casa de Chuy el Rico.",
+};
 
 export default async function UbicacionPage() {
   const supabase = createPublicReadonlyClient();
@@ -43,6 +52,17 @@ export default async function UbicacionPage() {
     loc.directions.trim() ||
     loc.parkingNote.trim();
 
+  const mapsEmbedRaw = loc.mapsEmbedUrl.trim();
+  const mapsEmbedSafe =
+    mapsEmbedRaw && isAllowedMapsEmbedUrl(mapsEmbedRaw)
+      ? mapsEmbedRaw
+      : "";
+  if (mapsEmbedRaw && !mapsEmbedSafe) {
+    console.error(
+      "[ubicacion page] mapsEmbedUrl no permitida; no se muestra el iframe",
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white">
       <div className="container mx-auto max-w-3xl px-4 py-12 sm:py-16">
@@ -52,8 +72,9 @@ export default async function UbicacionPage() {
         >
           Ubicación
         </h1>
-        <p className="mb-10 text-center text-zinc-600">
-          Cómo llegar a La Casa de Chuy el Rico.
+        <p className="mx-auto mb-10 max-w-xl text-center text-zinc-600">
+          Dirección del estudio en Monterrey. Usa el mapa o abre la ruta en tu
+          celular con Google Maps o Waze.
         </p>
 
         {!hasContent ? (
@@ -64,31 +85,53 @@ export default async function UbicacionPage() {
         ) : (
           <div className="space-y-8">
             {loc.address.trim() ? (
-              <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 className="mb-2 text-lg font-semibold text-zinc-900">
+              <section
+                className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm"
+                aria-labelledby="ubicacion-direccion"
+              >
+                <h2
+                  id="ubicacion-direccion"
+                  className="mb-2 text-lg font-semibold text-zinc-900"
+                >
                   Dirección
                 </h2>
-                <p className="whitespace-pre-line text-zinc-700">
+                <address className="not-italic whitespace-pre-line text-zinc-700">
                   {loc.address}
-                </p>
+                </address>
+                <UbicacionAddressActions address={loc.address} />
               </section>
             ) : null}
 
-            {loc.mapsEmbedUrl.trim() ? (
-              <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-                <h2 className="border-b border-zinc-100 px-6 py-3 text-lg font-semibold text-zinc-900">
+            {mapsEmbedRaw ? (
+              <section
+                className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
+                aria-labelledby="ubicacion-mapa"
+              >
+                <h2
+                  id="ubicacion-mapa"
+                  className="border-b border-zinc-100 px-6 py-3 text-lg font-semibold text-zinc-900"
+                >
                   Mapa
                 </h2>
-                <div className="aspect-[16/10] w-full bg-zinc-100">
-                  <iframe
-                    title="Mapa del estudio"
-                    src={loc.mapsEmbedUrl.trim()}
-                    className="h-full w-full border-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    allowFullScreen
-                  />
-                </div>
+                {mapsEmbedSafe ? (
+                  <div className="aspect-[16/10] min-h-[220px] w-full bg-zinc-100 sm:min-h-0">
+                    <iframe
+                      title="Mapa del estudio"
+                      src={mapsEmbedSafe}
+                      className="h-full min-h-[220px] w-full border-0 sm:min-h-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <p className="px-6 py-4 text-sm text-amber-800">
+                    El mapa no está disponible por un problema de configuración.
+                    {loc.address.trim()
+                      ? " Usa la dirección y los enlaces a Google Maps o Waze en esta misma página."
+                      : " Busca la ubicación en Google Maps o contacta al estudio."}
+                  </p>
+                )}
               </section>
             ) : null}
 

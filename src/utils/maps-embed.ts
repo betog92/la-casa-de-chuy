@@ -1,7 +1,13 @@
 /**
- * Valida URL para iframe de Google Maps (embed).
- * Vacío = permitido (sin mapa).
+ * Valida URL para iframe de Google Maps (embed). Vacío = permitido (sin mapa).
+ * Hosts permitidos por sufijo estricto (evita `evil-googleapis.com`, etc.).
  */
+function hostIsOrUnder(host: string, base: string): boolean {
+  const h = host.toLowerCase();
+  const b = base.toLowerCase();
+  return h === b || h.endsWith(`.${b}`);
+}
+
 export function isAllowedMapsEmbedUrl(raw: string): boolean {
   const t = raw.trim();
   if (!t) return true;
@@ -14,11 +20,9 @@ export function isAllowedMapsEmbedUrl(raw: string): boolean {
   if (u.protocol !== "https:") return false;
   const h = u.hostname.toLowerCase();
   return (
-    h === "www.google.com" ||
-    h === "google.com" ||
-    h.endsWith(".google.com") ||
-    h.endsWith(".google.com.mx") ||
-    h.includes("googleapis.com") ||
-    h.includes("gstatic.com")
+    hostIsOrUnder(h, "google.com") ||
+    hostIsOrUnder(h, "google.com.mx") ||
+    hostIsOrUnder(h, "googleapis.com") ||
+    hostIsOrUnder(h, "gstatic.com")
   );
 }
