@@ -4,6 +4,7 @@ import {
   successResponse,
   errorResponse,
   unauthorizedResponse,
+  forbiddenResponse,
 } from "@/utils/api-response";
 import { format, subDays } from "date-fns";
 import { getMonterreyToday } from "@/utils/business-days";
@@ -12,9 +13,12 @@ import { getMonterreyToday } from "@/utils/business-days";
  * Obtiene estadísticas para el dashboard de admin.
  */
 export async function GET() {
-  const { isAdmin } = await requireAdmin();
+  const { user, isAdmin } = await requireAdmin();
+  if (!user) {
+    return unauthorizedResponse("Debes iniciar sesión");
+  }
   if (!isAdmin) {
-    return unauthorizedResponse("No tienes permisos de administrador");
+    return forbiddenResponse("No tienes permisos de administrador");
   }
 
   try {
@@ -25,9 +29,17 @@ export async function GET() {
     const weekAgoStr = format(weekAgo, "yyyy-MM-dd");
 
     // Stats del día (usando función SQL)
-    const { data: todayStats } = await supabase.rpc("get_reservations_stats", {
-      p_date: todayStr,
-    } as never);
+    const { data: todayStats, error: rpcStatsErr } = await supabase.rpc(
+      "get_reservations_stats",
+      {
+        p_date: todayStr,
+      } as never,
+    );
+
+    if (rpcStatsErr) {
+      console.error("[admin stats get_reservations_stats]", rpcStatsErr);
+      return errorResponse("No se pudieron cargar las estadísticas del día", 500);
+    }
 
     type StatsRow = {
       total_reservations: number;
@@ -40,23 +52,35 @@ export async function GET() {
     const statsArray = (todayStats ?? []) as StatsRow[];
     const stats = statsArray[0];
 
-    // Próximas reservas confirmadas (hoy en adelante)
-    const { data: upcoming } = await supabase
+    // Reservas recientes: por created_at; excluye null (en PG irían primero en DESC);
+    // id DESC desempata misma marca de tiempo.
+    const { data: recentReservations, error: recentErr } = await supabase
       .from("reservations")
-      .select("id, date, start_time, name, email, price, status")
-      .gte("date", todayStr)
-      .eq("status", "confirmed")
-      .order("date", { ascending: true })
-      .order("start_time", { ascending: true })
-      .limit(10);
+      .select(
+        "id, date, start_time, name, email, price, status, payment_status, created_at",
+      )
+      .not("created_at", "is", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(25);
 
-    // Ingresos de la última semana (reservas confirmadas)
-    const { data: weekRevenue } = await supabase
+    if (recentErr) {
+      console.error("[admin stats recentReservations]", recentErr);
+      return errorResponse("No se pudo cargar las reservas recientes", 500);
+    }
+
+    // Ingresos de la última semana (reservas confirmadas, por fecha de cita)
+    const { data: weekRevenue, error: weekErr } = await supabase
       .from("reservations")
       .select("price")
       .gte("date", weekAgoStr)
       .lte("date", todayStr)
       .eq("status", "confirmed");
+
+    if (weekErr) {
+      console.error("[admin stats weekRevenue]", weekErr);
+      return errorResponse("No se pudieron cargar los ingresos de la semana", 500);
+    }
 
     const weekTotal =
       (weekRevenue as { price: number }[] | null)?.reduce(
@@ -73,7 +97,7 @@ export async function GET() {
         revenue: Number(stats?.confirmed_revenue ?? 0),
       },
       weekRevenue: weekTotal,
-      upcoming: upcoming ?? [],
+      recentReservations: recentReservations ?? [],
     });
   } catch (error) {
     console.error("Error fetching admin stats:", error);
