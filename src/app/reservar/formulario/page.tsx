@@ -24,10 +24,7 @@ import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
 import { isSessionType } from "@/utils/session-type";
 import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
-import {
-  formatDisplayDate,
-  formatDisplayTimeInMonterrey,
-} from "@/utils/formatters";
+import { formatDisplayDate } from "@/utils/formatters";
 
 // Schema de validación
 const reservationFormSchema = z.object({
@@ -519,24 +516,31 @@ function FormularioReservaContent() {
         return;
       }
 
-      // Paso 2: Crear orden en Conekta (usando API route)
+      // Paso 2: Crear orden en Conekta (el servidor calcula el monto autoritativo
+      // y, ANTES de cobrar, valida disponibilidad del slot y datos requeridos
+      // para minimizar cobros que después haya que reembolsar).
       let orderId: string;
       try {
         const orderResponse = await axios.post("/api/conekta/create-order", {
+          intent: "reservation",
           token,
-          amount: priceCalculation?.finalPrice || reservationData.price,
-          currency: "MXN",
-          customerInfo: {
-            name: data.name,
-            email: data.email,
-            phone: data.phone,
+          reservation: {
+            date: reservationData.date,
+            startTime: reservationData.time,
+            contact: {
+              name: data.name,
+              email: data.email,
+              phone: data.phone,
+            },
+            sessionType: data.sessionType,
+            photographerStudio: data.photographerStudio.trim()
+              ? data.photographerStudio.trim()
+              : null,
+            useLoyaltyDiscount: useLoyaltyDiscount,
+            useLoyaltyPoints: useLoyaltyPoints || 0,
+            useCredits: useCredits || 0,
+            discountCode: appliedDiscountCode?.code ?? null,
           },
-          description: `Reserva - ${formatDisplayDate(
-            reservationData.date
-          )} ${formatDisplayTimeInMonterrey(
-            reservationData.time,
-            reservationData.date
-          )}`,
         });
 
         if (!orderResponse.data.success) {
@@ -555,7 +559,8 @@ function FormularioReservaContent() {
         return;
       }
 
-      // Paso 3: Crear reserva en Supabase (usando API route)
+      // Paso 3: Crear reserva en Supabase. El servidor reverifica el paymentId
+      // contra Conekta y recalcula el precio antes de guardar (anti-fraude).
       let reservationId: number;
       try {
         const reservationResponse = await axios.post(
@@ -566,28 +571,16 @@ function FormularioReservaContent() {
             phone: data.phone,
             date: reservationData.date,
             startTime: reservationData.time,
-            price: priceCalculation?.finalPrice || reservationData.price,
-            originalPrice:
-              priceCalculation?.originalPrice || reservationData.price,
             paymentId: orderId,
-            userId: user?.id || null,
-            discountAmount: priceCalculation?.totalDiscount || 0,
-            // Campos específicos de descuentos
-            lastMinuteDiscount:
-              priceCalculation?.discounts.lastMinute?.amount || 0,
-            loyaltyDiscount: priceCalculation?.discounts.loyalty?.amount || 0,
-            loyaltyPointsUsed:
-              priceCalculation?.discounts.loyaltyPoints?.points || 0,
-            creditsUsed: useCredits || 0,
-            referralDiscount: priceCalculation?.discounts.referral?.amount || 0,
-            // Código de descuento aplicado
-            discountCode: appliedDiscountCode?.code || null,
-            discountCodeDiscount:
-              priceCalculation?.discounts.discountCode?.amount || 0,
             sessionType: data.sessionType,
             photographerStudio: data.photographerStudio.trim()
               ? data.photographerStudio.trim()
               : null,
+            // Beneficios solicitados (el servidor revalida saldos y vigencia)
+            useLoyaltyDiscount: useLoyaltyDiscount,
+            useLoyaltyPoints: useLoyaltyPoints || 0,
+            useCredits: useCredits || 0,
+            discountCode: appliedDiscountCode?.code ?? null,
           }
         );
 

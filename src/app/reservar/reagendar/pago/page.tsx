@@ -141,21 +141,18 @@ function ReschedulePaymentContent() {
         return;
       }
 
-      // Paso 2: Crear orden en Conekta para el pago adicional
+      // Paso 2: Crear orden en Conekta (el servidor calcula el monto adicional autoritativo)
       let orderId: string;
       try {
         const orderResponse = await axios.post("/api/conekta/create-order", {
+          intent: "reschedule",
           token,
-          amount: additionalAmount,
-          currency: "MXN",
-          customerInfo: {
-            name: currentReservation.name,
-            email: currentReservation.email,
-            phone: currentReservation.phone,
+          reservation: {
+            id: Number(reservationId),
+            newDate,
+            newStartTime,
           },
-          description: `Pago adicional por reagendamiento - ${formatDisplayDate(
-            newDate
-          )} ${formatTimeRange(newStartTime, undefined, newDate ?? undefined)}`,
+          ...(guestToken && { guestToken }),
         });
 
         if (!orderResponse.data.success) {
@@ -172,7 +169,8 @@ function ReschedulePaymentContent() {
         return;
       }
 
-      // Paso 3: Completar el reagendamiento con el pago
+      // Paso 3: Completar el reagendamiento. El servidor reverifica el
+      // paymentId contra Conekta y recalcula el monto antes de guardar.
       try {
         const rescheduleResponse = await axios.post(
           `/api/reservations/${reservationId}/reschedule/complete`,
@@ -180,7 +178,6 @@ function ReschedulePaymentContent() {
             date: newDate,
             startTime: newStartTime,
             paymentId: orderId,
-            additionalAmount: additionalAmount,
             ...(guestToken && { token: guestToken }), // Incluir token si es invitado
           }
         );

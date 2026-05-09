@@ -498,6 +498,16 @@ CREATE INDEX IF NOT EXISTS idx_reservations_payment_status_pending
   ON reservations (payment_status)
   WHERE payment_status = 'pending';
 
+-- Una orden de Conekta sólo puede vincularse a UNA reserva (anti-fraude).
+-- Cierra la TOCTOU al verificar paymentId server-side: si dos requests
+-- concurrentes intentan usar el mismo paymentId, el segundo cae con 23505.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_reservations_payment_id
+  ON reservations (payment_id)
+  WHERE payment_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_reservations_additional_payment_id
+  ON reservations (additional_payment_id)
+  WHERE additional_payment_id IS NOT NULL;
+
 -- Índice compuesto para optimizar consultas de slots disponibles por fecha y hora
 -- Útil especialmente cuando se consulta la fecha actual y se filtra por hora
 CREATE INDEX IF NOT EXISTS idx_time_slots_date_start_time 

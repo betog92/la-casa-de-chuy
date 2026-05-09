@@ -8,7 +8,10 @@ import {
   formatTimeToSeconds,
   durationMinutesBetween,
 } from "@/utils/reservation-helpers";
+import { calculatePriceWithCustom } from "@/utils/pricing";
+import { parse } from "date-fns";
 import { DEFAULT_DURATION_MIN } from "@/utils/reservation-variants";
+import { validateDateFormat, validateTimeFormat } from "@/utils/validation";
 import {
   successResponse,
   errorResponse,
@@ -22,6 +25,12 @@ import {
 } from "@/lib/email";
 import { verifyGuestToken, generateGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
 import { requireAdmin } from "@/lib/auth/admin";
+import {
+  getConektaOrder,
+  findPaidCharge,
+  refundConektaCharge,
+  toCents,
+} from "@/lib/payments/conekta";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -31,6 +40,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Lo extraemos antes del try para poder reembolsar en el catch outer.
+  let paymentIdForRefund: string | null = null;
   try {
     const { id: rawId } = await params;
     const reservationId =
@@ -53,6 +64,10 @@ export async function POST(
       // Si no hay body o es inválido, body queda como objeto vacío
     }
     const { date, startTime, paymentId, additionalAmount, token: guestToken } = body;
+    paymentIdForRefund =
+      typeof paymentId === "string" && paymentId.trim() !== ""
+        ? paymentId
+        : null;
 
     // Obtener el usuario autenticado
     const cookieStore = await cookies();
@@ -81,9 +96,15 @@ export async function POST(
       isAdmin = adminCheck.isAdmin;
     }
 
-    // Validar campos requeridos
-    if (!date || !startTime || !paymentId) {
-      return validationErrorResponse("Fecha, hora y ID de pago son requeridos");
+    // Validar campos requeridos (paymentId se exige sólo si hay monto adicional)
+    if (!date || !startTime) {
+      return validationErrorResponse("Fecha y hora son requeridas");
+    }
+    if (!validateDateFormat(date)) {
+      return validationErrorResponse("Formato de fecha inválido (yyyy-MM-dd)");
+    }
+    if (!validateTimeFormat(startTime)) {
+      return validationErrorResponse("Formato de hora inválido (HH:mm)");
     }
 
     // Obtener la reserva
@@ -170,12 +191,82 @@ export async function POST(
       slotsCount,
     );
     if (!isAvailable) {
+      // Si el cliente ya pagó por adelantado y el slot acaba de ocuparse,
+      // reembolsamos automáticamente para no dejar dinero flotando.
+      if (paymentId) {
+        await safeRefundOrder(paymentId);
+      }
       return conflictResponse(
         slotsCount > 1
-          ? "Para reagendar esta cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). Elige otro horario."
-          : "El horario seleccionado ya no está disponible. Por favor selecciona otro horario.",
+          ? "Para reagendar esta cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). " +
+              (paymentId ? "El cargo adicional será reembolsado." : "Elige otro horario.")
+          : "El horario seleccionado ya no está disponible. " +
+              (paymentId ? "El cargo adicional será reembolsado." : "Por favor selecciona otro horario."),
       );
     }
+
+    // Recalcular el monto adicional autoritativo (precio nueva fecha − precio actual).
+    // `reservationRow.price` viene del driver como `number`, pero algunos
+    // entornos (p.ej. drivers de Postgres con NUMERIC sin cast) podrían
+    // devolverlo como string. `Number(...)` evita concatenaciones accidentales.
+    const parsedNewDate = parse(date, "yyyy-MM-dd", new Date());
+    const newPrice = await calculatePriceWithCustom(supabase, parsedNewDate);
+    const currentPrice = Number(reservationRow.price ?? 0);
+    if (!Number.isFinite(currentPrice)) {
+      return errorResponse(
+        "El precio actual de la reserva está corrupto. Contacta a soporte.",
+        500,
+      );
+    }
+    const serverAdditionalAmount =
+      Math.round((newPrice - currentPrice) * 100) / 100;
+
+    // Si hay monto adicional, exigir y verificar paymentId contra Conekta
+    if (serverAdditionalAmount > 0) {
+      if (!paymentId) {
+        return validationErrorResponse(
+          "Este reagendamiento requiere un pago adicional con tarjeta.",
+        );
+      }
+      const verifyError = await verifyConektaOrderForReschedule({
+        paymentId,
+        expectedAmount: serverAdditionalAmount,
+        expectedReservationId: reservationId,
+        expectedEmail: ((reservationRow.email as string) || "").toLowerCase().trim(),
+        supabase,
+      });
+      if (verifyError) {
+        // Inconsistencia "real" (monto distinto, Conekta inalcanzable):
+        // sí reembolsamos. Para sospecha (intent/email/reservation_id no
+        // coinciden) no reembolsamos: o no nos pertenece, o devolverlo
+        // perjudicaría a otra reserva que sí usa ese paymentId.
+        if (
+          verifyError.startsWith("El monto cobrado") ||
+          verifyError.startsWith("No se pudo verificar")
+        ) {
+          await safeRefundOrder(paymentId);
+          return errorResponse(
+            `${verifyError} Tu pago será reembolsado automáticamente.`,
+            400,
+          );
+        }
+        return errorResponse(verifyError, 400);
+      }
+    } else {
+      // No requiere pago adicional. Si el cliente envió paymentId, lo
+      // reembolsamos best-effort (probable race con cambio de tarifa) y
+      // pedimos recargar.
+      if (paymentId) {
+        await safeRefundOrder(paymentId);
+        return validationErrorResponse(
+          "Este reagendamiento no requiere pago adicional. Tu pago será reembolsado automáticamente. Recarga la página.",
+        );
+      }
+    }
+
+    // Si el cliente envió un additionalAmount manualmente, ignoramos el suyo
+    // y usamos el calculado por el servidor (no se cobra ni se guarda otra cosa).
+    void additionalAmount;
 
     const endTime = calculateEndTime(startTime, originalDurationMin);
 
@@ -184,19 +275,14 @@ export async function POST(
       date,
       start_time: formatTimeToSeconds(startTime),
       end_time: endTime,
-      additional_payment_id: paymentId, // Guardar el ID del pago adicional
       reschedule_count: (reservationRow.reschedule_count || 0) + 1,
     };
 
-    // Si hay monto adicional, guardarlo y actualizar el precio total acumulado (pago en línea = conekta)
-    if (
-      additionalAmount &&
-      typeof additionalAmount === "number" &&
-      additionalAmount > 0
-    ) {
-      updateData.additional_payment_amount = additionalAmount;
+    if (serverAdditionalAmount > 0 && paymentId) {
+      updateData.additional_payment_id = paymentId;
+      updateData.additional_payment_amount = serverAdditionalAmount;
       updateData.additional_payment_method = "conekta";
-      updateData.price = (reservationRow.price ?? 0) + additionalAmount;
+      updateData.price = currentPrice + serverAdditionalAmount;
     }
 
     // Si es la primera vez que se reagenda, guardar valores originales
@@ -223,29 +309,42 @@ export async function POST(
       const noRows =
         updateError.code === "PGRST116" ||
         String(updateError.message || "").includes("0 row");
+      // Si ya cobramos al cliente y la actualización falló, reembolsar para no
+      // dejar dinero flotando.
+      if (serverAdditionalAmount > 0 && paymentId) {
+        await safeRefundOrder(paymentId);
+      }
       if (noRows) {
         return conflictResponse(
-          "La reserva pudo haber cambiado. Intenta de nuevo."
+          "La reserva pudo haber cambiado. " +
+            (serverAdditionalAmount > 0
+              ? "El cargo adicional será reembolsado en breve."
+              : "Intenta de nuevo."),
         );
       }
       console.error("Error completing reschedule:", updateError);
-      return errorResponse("Error al completar el reagendamiento", 500);
+      return errorResponse(
+        "Error al completar el reagendamiento" +
+          (serverAdditionalAmount > 0
+            ? ". El cargo adicional será reembolsado."
+            : ""),
+        500,
+      );
     }
 
-    // Registrar en historial de reagendamientos (cliente, pago en línea)
-    const hasAdditional =
-      additionalAmount &&
-      typeof additionalAmount === "number" &&
-      additionalAmount > 0;
+    // Registrar en historial de reagendamientos (cliente, pago en línea).
+    // `rescheduled_by_user_id`: si hay usuario autenticado lo guardamos; si
+    // es invitado (guestToken), queda null porque no hay row en `users`.
+    const hasAdditional = serverAdditionalAmount > 0 && !!paymentId;
     const prevTime = String(reservationRow.start_time ?? "00:00").trim() || "00:00";
     await supabase.from("reservation_reschedule_history").insert({
       reservation_id: reservationId,
-      rescheduled_by_user_id: null,
+      rescheduled_by_user_id: user?.id ?? null,
       previous_date: reservationRow.date,
       previous_start_time: formatTimeToSeconds(prevTime),
       new_date: date,
       new_start_time: formatTimeToSeconds(startTime),
-      additional_payment_amount: hasAdditional ? additionalAmount : null,
+      additional_payment_amount: hasAdditional ? serverAdditionalAmount : null,
       additional_payment_method: hasAdditional ? "conekta" : null,
     } as never);
 
@@ -297,6 +396,129 @@ export async function POST(
         ? error.message
         : "Error al completar el reagendamiento";
     console.error("Error inesperado:", error);
+    // Excepción no controlada DESPUÉS de un cobro adicional: reembolso
+    // best-effort para no dejar al cliente cobrado sin reagendamiento.
+    if (paymentIdForRefund) {
+      console.error(
+        "[reschedule/complete] Excepción inesperada con paymentId presente; intentando reembolso:",
+        paymentIdForRefund,
+      );
+      await safeRefundOrder(paymentIdForRefund);
+      return errorResponse(
+        `${errorMessage}. Tu pago adicional será reembolsado automáticamente.`,
+        500,
+      );
+    }
     return errorResponse(errorMessage, 500);
+  }
+}
+
+// =====================================================
+// Helpers de verificación contra Conekta
+// =====================================================
+
+async function verifyConektaOrderForReschedule(args: {
+  paymentId: string;
+  expectedAmount: number;
+  expectedReservationId: number;
+  expectedEmail: string;
+  supabase: ReturnType<typeof createServiceRoleClient>;
+}): Promise<string | null> {
+  const {
+    paymentId,
+    expectedAmount,
+    expectedReservationId,
+    expectedEmail,
+    supabase,
+  } = args;
+
+  // 1. ¿Ya está usado en otra reserva como pago inicial o adicional?
+  const [{ data: usedAsPayment }, { data: usedAsAdditional }] = await Promise.all([
+    supabase
+      .from("reservations")
+      .select("id")
+      .eq("payment_id", paymentId)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("reservations")
+      .select("id")
+      .eq("additional_payment_id", paymentId)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (usedAsPayment || usedAsAdditional) {
+    return "Este pago ya fue utilizado en otra reserva.";
+  }
+
+  // 2. Consultar Conekta
+  let order;
+  try {
+    order = await getConektaOrder(paymentId);
+  } catch (err) {
+    console.error("Error consultando orden Conekta (reschedule):", err);
+    return "No se pudo verificar el pago con Conekta. Si fuiste cobrado, contacta a soporte.";
+  }
+
+  if (order.payment_status !== "paid") {
+    return `El pago no está confirmado por Conekta (status=${order.payment_status}).`;
+  }
+  const charge = findPaidCharge(order);
+  if (!charge) {
+    return "El pago no tiene un cargo confirmado.";
+  }
+
+  const meta = order.metadata ?? {};
+  const intent = String((meta as Record<string, unknown>).intent ?? "");
+  if (intent !== "reschedule") {
+    return "El pago corresponde a otro tipo de operación.";
+  }
+
+  const metaReservationId = Number(
+    (meta as Record<string, unknown>).reservation_id,
+  );
+  if (
+    !Number.isFinite(metaReservationId) ||
+    metaReservationId !== expectedReservationId
+  ) {
+    return "El pago no corresponde a esta reserva.";
+  }
+
+  // Defensa: nuestras órdenes SIEMPRE incluyen `email` en metadata. Si llega
+  // sin email pero con `intent` correcto, podría ser una orden creada por un
+  // path que ignoró nuestros validadores. Rechazamos por seguridad.
+  const metaEmail = String((meta as Record<string, unknown>).email ?? "")
+    .toLowerCase()
+    .trim();
+  if (!metaEmail) {
+    return "El pago no incluye email asociado. No se acepta.";
+  }
+  if (metaEmail !== expectedEmail) {
+    return "El email del pago no coincide con el de la reserva.";
+  }
+
+  const expectedCents = toCents(expectedAmount);
+  if (Math.abs(order.amount - expectedCents) > 1) {
+    return "El monto cobrado no coincide con el esperado. No se acepta el pago.";
+  }
+  return null;
+}
+
+/**
+ * Idempotency-Key estable: reintentos/llamadas concurrentes a Conekta
+ * para el mismo charge resuelven al mismo resultado.
+ */
+async function safeRefundOrder(paymentId: string): Promise<void> {
+  try {
+    const order = await getConektaOrder(paymentId);
+    const charge = findPaidCharge(order);
+    if (!charge) return;
+    await refundConektaCharge(
+      charge.id,
+      charge.amount,
+      `refund_${charge.id}`,
+    );
+  } catch (err) {
+    console.error("Reembolso automático falló para", paymentId, err);
   }
 }
