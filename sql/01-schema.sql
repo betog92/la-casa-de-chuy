@@ -551,101 +551,138 @@ CREATE TRIGGER update_time_slots_updated_at
 DROP TRIGGER IF EXISTS update_time_slot_count_on_reservation ON reservations;
 DROP FUNCTION IF EXISTS update_time_slot_reservations_count();
 
+-- Marca como ocupados/libres TODOS los time_slots cuyo start_time esté dentro
+-- del rango [reservation.start_time, reservation.end_time). Esto soporta
+-- reservas de 45 min (1 slot) y de 90 min como las citas Alvero (2 slots).
+-- Al LIBERAR (UPDATE/DELETE) se verifica con NOT EXISTS que ninguna otra
+-- reserva confirmada siga ocupando ese slot.
 CREATE OR REPLACE FUNCTION update_time_slot_occupied()
 RETURNS TRIGGER AS $$
 DECLARE
   old_date DATE;
   old_start_time TIME;
+  old_end_time TIME;
   old_status TEXT;
   new_date DATE;
   new_start_time TIME;
+  new_end_time TIME;
   new_status TEXT;
+  current_id INTEGER;
 BEGIN
-  -- Determinar valores según la operación
+  current_id := COALESCE(NEW.id, OLD.id);
+
   IF TG_OP = 'INSERT' THEN
-    -- NUEVA RESERVA: Si es confirmada, marcar el slot como ocupado
     new_date := NEW.date;
     new_start_time := NEW.start_time;
+    new_end_time := NEW.end_time;
     new_status := NEW.status;
-    
+
     IF new_status = 'confirmed' THEN
-      -- Actualizar solo el slot exacto de la reserva
       UPDATE time_slots
       SET is_occupied = TRUE,
           updated_at = NOW()
       WHERE date = new_date
-        AND start_time = new_start_time;
+        AND start_time >= new_start_time
+        AND start_time < new_end_time;
     END IF;
-    
+
   ELSIF TG_OP = 'UPDATE' THEN
-    -- ACTUALIZACIÓN: Manejar cambios de fecha, hora o status
     old_date := OLD.date;
     old_start_time := OLD.start_time;
+    old_end_time := OLD.end_time;
     old_status := OLD.status;
-    
+
     new_date := NEW.date;
     new_start_time := NEW.start_time;
+    new_end_time := NEW.end_time;
     new_status := NEW.status;
-    
-    -- Si cambió la fecha o la hora (re-agendamiento)
-    IF old_date != new_date OR old_start_time != new_start_time THEN
-      -- Desocupar el slot en la fecha/hora antigua (si estaba confirmada)
+
+    -- Reagendamiento o cambio de duración: liberar rango antiguo y ocupar el nuevo
+    IF old_date <> new_date
+       OR old_start_time <> new_start_time
+       OR old_end_time <> new_end_time THEN
       IF old_status = 'confirmed' THEN
-        UPDATE time_slots
+        UPDATE time_slots ts
         SET is_occupied = FALSE,
             updated_at = NOW()
-        WHERE date = old_date
-          AND start_time = old_start_time;
+        WHERE ts.date = old_date
+          AND ts.start_time >= old_start_time
+          AND ts.start_time < old_end_time
+          AND NOT EXISTS (
+            SELECT 1 FROM reservations r
+            WHERE r.id <> current_id
+              AND r.status = 'confirmed'
+              AND r.date = ts.date
+              AND ts.start_time >= r.start_time
+              AND ts.start_time < r.end_time
+          );
       END IF;
-      
-      -- Ocupar el slot en la fecha/hora nueva (si está confirmada)
+
       IF new_status = 'confirmed' THEN
         UPDATE time_slots
         SET is_occupied = TRUE,
             updated_at = NOW()
         WHERE date = new_date
-          AND start_time = new_start_time;
+          AND start_time >= new_start_time
+          AND start_time < new_end_time;
       END IF;
     END IF;
-    
-    -- Si solo cambió el status (misma fecha y hora)
-    IF old_date = new_date AND old_start_time = new_start_time THEN
-      -- Si cambió de NO confirmada a confirmada: ocupar
-      -- Esto cubre: 'pending'→'confirmed', 'cancelled'→'confirmed', 'completed'→'confirmed', etc.
-      IF old_status != 'confirmed' AND new_status = 'confirmed' THEN
+
+    -- Cambio de status sin cambio de fecha/hora/duración
+    IF old_date = new_date
+       AND old_start_time = new_start_time
+       AND old_end_time = new_end_time THEN
+      IF old_status <> 'confirmed' AND new_status = 'confirmed' THEN
         UPDATE time_slots
         SET is_occupied = TRUE,
             updated_at = NOW()
         WHERE date = new_date
-          AND start_time = new_start_time;
+          AND start_time >= new_start_time
+          AND start_time < new_end_time;
       END IF;
-      
-      -- Si cambió de confirmada a NO confirmada: desocupar
-      -- Esto cubre: 'confirmed'→'cancelled', 'confirmed'→'completed', 'confirmed'→'pending', etc.
-      IF old_status = 'confirmed' AND new_status != 'confirmed' THEN
-        UPDATE time_slots
+
+      IF old_status = 'confirmed' AND new_status <> 'confirmed' THEN
+        UPDATE time_slots ts
         SET is_occupied = FALSE,
             updated_at = NOW()
-        WHERE date = new_date
-          AND start_time = new_start_time;
+        WHERE ts.date = new_date
+          AND ts.start_time >= new_start_time
+          AND ts.start_time < new_end_time
+          AND NOT EXISTS (
+            SELECT 1 FROM reservations r
+            WHERE r.id <> current_id
+              AND r.status = 'confirmed'
+              AND r.date = ts.date
+              AND ts.start_time >= r.start_time
+              AND ts.start_time < r.end_time
+          );
       END IF;
     END IF;
-    
+
   ELSIF TG_OP = 'DELETE' THEN
-    -- ELIMINACIÓN: Si se elimina una reserva confirmada, desocupar el slot
     old_date := OLD.date;
     old_start_time := OLD.start_time;
+    old_end_time := OLD.end_time;
     old_status := OLD.status;
-    
+
     IF old_status = 'confirmed' THEN
-      UPDATE time_slots
+      UPDATE time_slots ts
       SET is_occupied = FALSE,
           updated_at = NOW()
-      WHERE date = old_date
-        AND start_time = old_start_time;
+      WHERE ts.date = old_date
+        AND ts.start_time >= old_start_time
+        AND ts.start_time < old_end_time
+        AND NOT EXISTS (
+          SELECT 1 FROM reservations r
+          WHERE r.id <> current_id
+            AND r.status = 'confirmed'
+            AND r.date = ts.date
+            AND ts.start_time >= r.start_time
+            AND ts.start_time < r.end_time
+        );
     END IF;
   END IF;
-  
+
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;

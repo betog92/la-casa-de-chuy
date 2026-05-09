@@ -23,6 +23,13 @@ import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
 import { calculatePriceWithCustom } from "@/utils/pricing";
 import type { TimeSlot } from "@/utils/availability";
+import {
+  ALVERO_DURATION_MIN,
+  DEFAULT_DURATION_MIN,
+  durationForVariant,
+  isAlveroVariant,
+} from "@/utils/reservation-variants";
+import { addMinutesToTime } from "@/utils/reservation-helpers";
 import "react-calendar/dist/Calendar.css";
 
 const WEEKDAY_SLOTS = [
@@ -239,13 +246,31 @@ function AdminReservacionesPageInner() {
   const timeAvailabilityMap = useMemo(() => {
     if (!pickerDate || availableSlots.length === 0) return new Map<string, boolean>();
     const times = new Set(availableSlots.map((s) => s.start_time.substring(0, 5)));
-    return new Map(getSlotsForDay(pickerDate).map((t) => [t, times.has(t)]));
-  }, [availableSlots, pickerDate]);
+    const isAlvero = isAlveroVariant(newForm.variant);
+    return new Map(
+      getSlotsForDay(pickerDate).map((t) => {
+        const baseAvailable = times.has(t);
+        if (!isAlvero) return [t, baseAvailable];
+        // Para Alvero: el slot solo es válido si el siguiente también lo está.
+        if (!baseAvailable) return [t, false];
+        const next = addMinutesToTime(t, DEFAULT_DURATION_MIN);
+        return [t, times.has(next)];
+      }),
+    );
+  }, [availableSlots, pickerDate, newForm.variant]);
 
   const isTimeAvailable = useCallback(
     (time: string) => timeAvailabilityMap.get(time) ?? false,
     [timeAvailabilityMap]
   );
+
+  useEffect(() => {
+    if (!pickerTime) return;
+    if (!timeAvailabilityMap.get(pickerTime)) {
+      setPickerTime(null);
+      setNewForm((f) => ({ ...f, startTime: "" }));
+    }
+  }, [timeAvailabilityMap, pickerTime]);
 
   const isMonthLoadedForDate = useCallback(
     (date: Date) => currentMonth !== null && isSameMonth(currentMonth, startOfMonth(date)),
@@ -753,33 +778,58 @@ function AdminReservacionesPageInner() {
                   ) : slotsLoading ? (
                     <div className="flex h-[200px] items-center justify-center text-sm text-zinc-500">Cargando horarios...</div>
                   ) : (
-                    <>
-                      <h3 className="mb-2 text-sm font-semibold text-zinc-800">Horarios disponibles</h3>
-                      <p className="mb-3 text-xs text-zinc-600">{format(pickerDate, "EEEE, d 'de' MMMM", { locale: es })}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {getSlotsForDay(pickerDate)
-                          .filter((t) => isTimeAvailable(t))
-                          .map((time) => (
-                            <button
-                              key={time}
-                              type="button"
-                              onClick={() => handleTimeSelect(time)}
-                              className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-medium ${
-                                pickerTime === time ? "border-[#103948] bg-[#103948] text-white" : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
-                              }`}
-                            >
-                              {formatTimeRange(
-                                time,
-                                undefined,
-                                format(pickerDate, "yyyy-MM-dd")
-                              )}
-                            </button>
-                          ))}
-                      </div>
-                      {newForm.variant === "cliente" && pickerPrice !== null && (
-                        <p className="mt-3 text-sm font-semibold text-zinc-900">Precio: {formatCurrency(pickerPrice)}</p>
-                      )}
-                    </>
+                    (() => {
+                      const slotsForDay = getSlotsForDay(pickerDate);
+                      const availableForDay = slotsForDay.filter((t) => isTimeAvailable(t));
+                      const isAlvero = isAlveroVariant(newForm.variant);
+                      return (
+                        <>
+                          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Horarios disponibles</h3>
+                          <p className="mb-3 text-xs text-zinc-600">{format(pickerDate, "EEEE, d 'de' MMMM", { locale: es })}</p>
+                          {isAlvero && availableForDay.length > 0 && (
+                            <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                              Las {newForm.variant === "cita_alvero" ? "citas" : "reservas"} Alvero ocupan <strong>2 bloques consecutivos</strong> (90 min). Solo se muestran horarios donde el siguiente bloque también está libre.
+                            </p>
+                          )}
+                          {availableForDay.length === 0 ? (
+                            <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+                              {isAlvero
+                                ? "No hay 2 bloques consecutivos disponibles este día. Elige otro día."
+                                : "No hay horarios disponibles este día."}
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              {availableForDay.map((time) => {
+                                const durationMin = durationForVariant(newForm.variant);
+                                const endHHmm =
+                                  durationMin === ALVERO_DURATION_MIN
+                                    ? addMinutesToTime(time, ALVERO_DURATION_MIN)
+                                    : undefined;
+                                return (
+                                  <button
+                                    key={time}
+                                    type="button"
+                                    onClick={() => handleTimeSelect(time)}
+                                    className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-medium ${
+                                      pickerTime === time ? "border-[#103948] bg-[#103948] text-white" : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
+                                    }`}
+                                  >
+                                    {formatTimeRange(
+                                      time,
+                                      endHHmm,
+                                      format(pickerDate, "yyyy-MM-dd")
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {newForm.variant === "cliente" && pickerPrice !== null && (
+                            <p className="mt-3 text-sm font-semibold text-zinc-900">Precio: {formatCurrency(pickerPrice)}</p>
+                          )}
+                        </>
+                      );
+                    })()
                   )}
                 </div>
               </div>

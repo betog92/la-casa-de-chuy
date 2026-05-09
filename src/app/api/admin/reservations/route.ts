@@ -3,9 +3,14 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   calculateEndTime,
-  validateSlotAvailability,
+  validateConsecutiveSlots,
   formatTimeToSeconds,
 } from "@/utils/reservation-helpers";
+import {
+  DEFAULT_DURATION_MIN,
+  durationForVariant,
+  isAlveroVariant,
+} from "@/utils/reservation-variants";
 import {
   successResponse,
   errorResponse,
@@ -233,14 +238,23 @@ export async function POST(request: NextRequest) {
     }
 
     const startTimeNorm = startTime.includes(":00:00") ? startTime.slice(0, 5) : startTime;
-    const isAvailable = await validateSlotAvailability(supabase, date, startTimeNorm);
+    const durationMin = durationForVariant(variant);
+    const slotsCount = Math.max(1, Math.round(durationMin / DEFAULT_DURATION_MIN));
+    const isAvailable = await validateConsecutiveSlots(
+      supabase,
+      date,
+      startTimeNorm,
+      slotsCount,
+    );
     if (!isAvailable) {
       return conflictResponse(
-        "El horario seleccionado ya no está disponible. Elige otro slot."
+        isAlveroVariant(variant)
+          ? "Para una cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). Elige otro horario."
+          : "El horario seleccionado ya no está disponible. Elige otro slot.",
       );
     }
 
-    const endTime = calculateEndTime(startTime);
+    const endTime = calculateEndTime(startTime, durationMin);
     const reservationData = {
       source: "admin" as const,
       import_type: importType,

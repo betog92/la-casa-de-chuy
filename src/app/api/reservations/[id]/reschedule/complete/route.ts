@@ -4,9 +4,11 @@ import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   calculateEndTime,
-  validateSlotAvailability,
+  validateConsecutiveSlots,
   formatTimeToSeconds,
+  durationMinutesBetween,
 } from "@/utils/reservation-helpers";
+import { DEFAULT_DURATION_MIN } from "@/utils/reservation-variants";
 import {
   successResponse,
   errorResponse,
@@ -89,7 +91,7 @@ export async function POST(
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
       .select(
-        "id, user_id, status, reschedule_count, date, start_time, payment_id, email, price"
+        "id, user_id, status, reschedule_count, date, start_time, end_time, payment_id, email, price"
       )
       .eq("id", reservationId)
       .single();
@@ -101,7 +103,7 @@ export async function POST(
     // Type assertion para ayudar a TypeScript
     const reservationRow = reservation as Pick<
       ReservationRow,
-      "id" | "user_id" | "status" | "reschedule_count" | "date" | "start_time" | "payment_id" | "email" | "price"
+      "id" | "user_id" | "status" | "reschedule_count" | "date" | "start_time" | "end_time" | "payment_id" | "email" | "price"
     >;
 
     // Validar autorización: usuario autenticado O token de invitado (admin puede completar cualquier reserva)
@@ -151,20 +153,31 @@ export async function POST(
       );
     }
 
-    // Validar que el nuevo slot esté disponible (evita race condition)
-    const isAvailable = await validateSlotAvailability(
+    // Preservar duración original (45 min normal, 90 min para citas Alvero)
+    const originalDurationMin = durationMinutesBetween(
+      String(reservationRow.start_time ?? ""),
+      String(reservationRow.end_time ?? ""),
+    );
+    const slotsCount = Math.max(
+      1,
+      Math.round(originalDurationMin / DEFAULT_DURATION_MIN),
+    );
+
+    const isAvailable = await validateConsecutiveSlots(
       supabase,
       date,
-      startTime
+      startTime,
+      slotsCount,
     );
     if (!isAvailable) {
       return conflictResponse(
-        "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
+        slotsCount > 1
+          ? "Para reagendar esta cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). Elige otro horario."
+          : "El horario seleccionado ya no está disponible. Por favor selecciona otro horario.",
       );
     }
 
-    // Calcular end_time
-    const endTime = calculateEndTime(startTime);
+    const endTime = calculateEndTime(startTime, originalDurationMin);
 
     // Guardar valores originales antes de actualizar (solo si es la primera vez que se reagenda)
     const updateData: ReservationUpdate = {

@@ -16,6 +16,8 @@ import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
 import { formatTimeRange } from "@/utils/formatters";
 import type { TimeSlot } from "@/utils/availability";
+import { addMinutesToTime } from "@/utils/reservation-helpers";
+import { DEFAULT_DURATION_MIN } from "@/utils/reservation-variants";
 import "react-calendar/dist/Calendar.css";
 
 export interface RescheduleModalProps {
@@ -29,6 +31,12 @@ export interface RescheduleModalProps {
   /** Paso admin: aviso de pago pendiente y confirmar */
   adminPaymentStep?: { date: string; startTime: string; additionalAmount: number } | null;
   onConfirmAdminPayment?: () => void;
+  /**
+   * Duración total de la reserva en minutos. Si es 90 (cita Alvero), el modal
+   * solo permite seleccionar slots cuyo bloque siguiente también esté libre.
+   * Default: 45 (1 bloque).
+   */
+  durationMinutes?: number;
 }
 
 // Horarios disponibles según día de la semana
@@ -82,7 +90,12 @@ export default function RescheduleModal({
   externalError = null,
   adminPaymentStep = null,
   onConfirmAdminPayment,
+  durationMinutes = DEFAULT_DURATION_MIN,
 }: RescheduleModalProps) {
+  const slotsCount = Math.max(
+    1,
+    Math.round(durationMinutes / DEFAULT_DURATION_MIN),
+  );
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
@@ -218,7 +231,9 @@ export default function RescheduleModal({
     fetchAvailability();
   }, [selectedDate, isOpen]);
 
-  // Memoizar la disponibilidad de todos los horarios
+  // Memoizar la disponibilidad de todos los horarios.
+  // Si la reserva dura más de un bloque (Alvero = 90 min), un slot solo es
+  // válido si TODOS los bloques siguientes también están libres.
   const timeAvailabilityMap = useMemo(() => {
     if (!selectedDate || availableSlots.length === 0) {
       return new Map<string, boolean>();
@@ -229,12 +244,16 @@ export default function RescheduleModal({
     );
 
     return new Map(
-      getSlotsForDay(selectedDate).map((time) => [
-        time,
-        availableTimes.has(time),
-      ])
+      getSlotsForDay(selectedDate).map((time) => {
+        if (!availableTimes.has(time)) return [time, false];
+        for (let i = 1; i < slotsCount; i++) {
+          const next = addMinutesToTime(time, i * DEFAULT_DURATION_MIN);
+          if (!availableTimes.has(next)) return [time, false];
+        }
+        return [time, true];
+      }),
     );
-  }, [availableSlots, selectedDate]);
+  }, [availableSlots, selectedDate, slotsCount]);
 
   const isTimeAvailable = useCallback(
     (time: string): boolean => {
@@ -511,11 +530,24 @@ export default function RescheduleModal({
                     {format(selectedDate, "EEEE, d 'de' MMMM", { locale: es })}
                   </p>
 
+                  {slotsCount > 1 && (
+                    <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      Esta cita ocupa <strong>{slotsCount} bloques consecutivos</strong> ({durationMinutes} min). Solo se muestran horarios donde todos los bloques siguientes están libres.
+                    </p>
+                  )}
+
                   <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
                     {getSlotsForDay(selectedDate)
                       .filter((time) => isTimeAvailable(time))
                       .map((time) => {
                         const isSelected = selectedTime === time;
+                        const endHHmm =
+                          slotsCount > 1
+                            ? addMinutesToTime(
+                                time,
+                                slotsCount * DEFAULT_DURATION_MIN,
+                              )
+                            : undefined;
 
                         return (
                           <button
@@ -530,7 +562,7 @@ export default function RescheduleModal({
                           >
                             {formatTimeRange(
                               time,
-                              undefined,
+                              endHHmm,
                               format(selectedDate, "yyyy-MM-dd")
                             )}
                           </button>
@@ -541,7 +573,11 @@ export default function RescheduleModal({
                       isTimeAvailable(time)
                     ).length === 0 && (
                       <div className="text-center py-8 text-zinc-500">
-                        <p>No hay horarios disponibles para esta fecha</p>
+                        <p>
+                          {slotsCount > 1
+                            ? "No hay bloques consecutivos disponibles para esta fecha"
+                            : "No hay horarios disponibles para esta fecha"}
+                        </p>
                       </div>
                     )}
                   </div>

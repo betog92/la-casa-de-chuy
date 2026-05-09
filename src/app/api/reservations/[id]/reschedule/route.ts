@@ -7,9 +7,11 @@ import { calculateBusinessDays, getMonterreyToday } from "@/utils/business-days"
 import { calculatePriceWithCustom } from "@/utils/pricing";
 import {
   calculateEndTime,
-  validateSlotAvailability,
+  validateConsecutiveSlots,
   formatTimeToSeconds,
+  durationMinutesBetween,
 } from "@/utils/reservation-helpers";
+import { DEFAULT_DURATION_MIN } from "@/utils/reservation-variants";
 import {
   successResponse,
   errorResponse,
@@ -103,7 +105,7 @@ export async function POST(
     const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
-      .select("id, user_id, status, date, start_time, reschedule_count, price, payment_id, email")
+      .select("id, user_id, status, date, start_time, end_time, reschedule_count, price, payment_id, email")
       .eq("id", reservationId)
       .single();
 
@@ -114,8 +116,21 @@ export async function POST(
     // Type assertion para ayudar a TypeScript
     const reservationRow = reservation as Pick<
       ReservationRow,
-      "id" | "user_id" | "status" | "date" | "start_time" | "reschedule_count" | "price" | "payment_id" | "email"
+      "id" | "user_id" | "status" | "date" | "start_time" | "end_time" | "reschedule_count" | "price" | "payment_id" | "email"
     >;
+
+    const originalDurationMin = durationMinutesBetween(
+      String(reservationRow.start_time ?? ""),
+      String(reservationRow.end_time ?? ""),
+    );
+    const slotsCount = Math.max(
+      1,
+      Math.round(originalDurationMin / DEFAULT_DURATION_MIN),
+    );
+    const consecutiveErrorMsg =
+      slotsCount > 1
+        ? "Para reagendar esta cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). Elige otro horario."
+        : "El horario seleccionado ya no está disponible. Por favor selecciona otro horario.";
 
     // Validar autorización: usuario autenticado O token de invitado válido (admin puede reagendar cualquier reserva)
     if (user) {
@@ -154,16 +169,14 @@ export async function POST(
 
     // Flujo admin: completar reagendo con pago adicional siempre como "pendiente" (no se suma a price hasta que se cobre)
     if (isAdmin && adminReschedule === true) {
-      const isAvailable = await validateSlotAvailability(supabase, date, startTime);
+      const isAvailable = await validateConsecutiveSlots(supabase, date, startTime, slotsCount);
       if (!isAvailable) {
-        return conflictResponse(
-          "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
-        );
+        return conflictResponse(consecutiveErrorMsg);
       }
       const newPrice = await calculatePriceWithCustom(supabase, newDate);
       const currentPrice = reservationRow.price;
       const additionalAmount = newPrice - currentPrice;
-      const endTime = calculateEndTime(startTime);
+      const endTime = calculateEndTime(startTime, originalDurationMin);
 
       // Siempre "pendiente": no actualizamos price para evitar reembolsar dinero no cobrado
       const updateData: ReservationUpdate = {
@@ -281,11 +294,9 @@ export async function POST(
     }
 
     // Validar que el nuevo slot esté disponible
-    const isAvailable = await validateSlotAvailability(supabase, date, startTime);
+    const isAvailable = await validateConsecutiveSlots(supabase, date, startTime, slotsCount);
     if (!isAvailable) {
-      return conflictResponse(
-        "El horario seleccionado ya no está disponible. Por favor selecciona otro horario."
-      );
+      return conflictResponse(consecutiveErrorMsg);
     }
 
     // Calcular el precio de la nueva fecha
@@ -306,8 +317,8 @@ export async function POST(
     }
 
     // No requiere pago adicional - proceder con el reagendamiento directamente
-    // Calcular end_time
-    const endTime = calculateEndTime(startTime);
+    // Calcular end_time preservando la duración original
+    const endTime = calculateEndTime(startTime, originalDurationMin);
 
     // Guardar valores originales antes de actualizar (solo si es la primera vez que se reagenda)
     const updateData: ReservationUpdate = {

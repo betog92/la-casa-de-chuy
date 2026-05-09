@@ -32,6 +32,7 @@ import RescheduleModal from "@/components/RescheduleModal";
 import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
+import { durationMinutesBetween } from "@/utils/reservation-helpers";
 
 export default function ReservationDetailsPage() {
   const params = useParams();
@@ -1546,6 +1547,10 @@ export default function ReservationDetailsPage() {
           onConfirm={handleReschedule}
           currentDate={reservation.date}
           currentStartTime={reservation.start_time}
+          durationMinutes={durationMinutesBetween(
+            reservation.start_time,
+            reservation.end_time,
+          )}
           isRescheduling={rescheduling}
           externalError={rescheduleError}
         />
