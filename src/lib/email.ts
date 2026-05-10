@@ -466,3 +466,151 @@ export async function sendTransferClaim(
     };
   }
 }
+
+// =====================================================
+// Alertas de pago a admin (huérfanos, refunds dashboard, chargebacks)
+// =====================================================
+
+export type AdminPaymentAlertType =
+  | "orphan_payment_refunded"
+  | "orphan_payment_recovered"
+  | "orphan_payment_refund_failed"
+  | "orphan_payment_no_snapshot"
+  | "orphan_cron_stale_heartbeat"
+  | "dashboard_refund_received"
+  | "chargeback_received";
+
+export interface AdminPaymentAlertParams {
+  type: AdminPaymentAlertType;
+  paymentId: string;
+  chargeId?: string | null;
+  customerEmail?: string | null;
+  amountMxn?: number | null;
+  reservationId?: number | null;
+  notes?: string | null;
+}
+
+const ALERT_TITLE_BY_TYPE: Record<AdminPaymentAlertType, string> = {
+  orphan_payment_refunded: "Pago huérfano reembolsado automáticamente",
+  orphan_payment_recovered: "Pago huérfano recuperado (reserva creada vía webhook)",
+  orphan_payment_refund_failed:
+    "Pago huérfano: REEMBOLSO AUTOMÁTICO FALLÓ — acción manual requerida",
+  orphan_payment_no_snapshot:
+    "Pago sin reserva ni snapshot — revisar en Conekta (no es fallo de reembolso)",
+  orphan_cron_stale_heartbeat:
+    "Cron de huérfanos sin señal de vida — revisa cron-job.org / Vercel",
+  dashboard_refund_received: "Reembolso registrado desde dashboard de Conekta",
+  chargeback_received: "Chargeback recibido — acción urgente requerida",
+};
+
+/**
+ * Notifica al admin de eventos de pago que requieren su atención (chargebacks,
+ * refunds desde dashboard, pagos huérfanos auto-reembolsados, etc.).
+ *
+ * Si `ADMIN_ALERT_EMAIL` no está configurado, no se envía y se loguea.
+ */
+export async function sendAdminPaymentAlert(
+  params: AdminPaymentAlertParams,
+): Promise<{ ok: boolean; error?: string }> {
+  const resend = getResend();
+  if (!resend) {
+    return { ok: false, error: "RESEND_API_KEY no configurada" };
+  }
+
+  const adminEmail =
+    process.env.ADMIN_ALERT_EMAIL?.trim() ||
+    process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim();
+  if (!adminEmail) {
+    console.warn(
+      "[email] ADMIN_ALERT_EMAIL no configurado: no se envía alerta",
+      params.type,
+      params.paymentId,
+    );
+    return { ok: false, error: "ADMIN_ALERT_EMAIL no configurado" };
+  }
+
+  const title = ALERT_TITLE_BY_TYPE[params.type];
+  const isUrgent =
+    params.type === "chargeback_received" ||
+    params.type === "orphan_payment_refund_failed" ||
+    params.type === "orphan_cron_stale_heartbeat";
+  const subject = `${isUrgent ? "[URGENTE] " : "[Conekta] "}${title}`;
+
+  const rows: Array<[string, string]> = [
+    ["Tipo de evento", params.type],
+  ];
+  if (params.type === "orphan_cron_stale_heartbeat") {
+    rows.push(["Job", params.paymentId]);
+  } else {
+    rows.push(["Order ID (Conekta)", params.paymentId]);
+  }
+  if (params.chargeId) rows.push(["Charge ID", params.chargeId]);
+  if (params.customerEmail) rows.push(["Cliente (email)", params.customerEmail]);
+  if (typeof params.amountMxn === "number") {
+    rows.push(["Monto", formatCurrency(params.amountMxn)]);
+  }
+  if (typeof params.reservationId === "number") {
+    rows.push(["Reserva ID", String(params.reservationId)]);
+  }
+  if (params.notes) rows.push(["Notas", params.notes]);
+
+  const tableHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px; color:#52525b; border-bottom:1px solid #e4e4e7;">${escapeHtml(
+          k,
+        )}</td><td style="padding:6px 12px; color:#18181b; border-bottom:1px solid #e4e4e7;">${escapeHtml(
+          v,
+        )}</td></tr>`,
+    )
+    .join("");
+
+  const subtitle =
+    params.type === "orphan_cron_stale_heartbeat"
+      ? "Monitor automático del cron de reembolso de pagos huérfanos."
+      : params.type === "orphan_payment_no_snapshot"
+        ? "Conekta notificó order.paid pero no hay fila en pending_reservations ni reserva con ese order_id."
+        : "Evento detectado en el sistema de pagos de Conekta.";
+
+  const footerHint =
+    params.type === "orphan_cron_stale_heartbeat"
+      ? "Revisa cron-job.org, Vercel (logs de /api/cron/refund-orphan-payments) y la tabla cron_job_heartbeats en Supabase."
+      : params.type === "orphan_payment_no_snapshot"
+        ? "Puede ser orden de prueba, API externa, o snapshot perdido. No implica que un reembolso automático haya fallado."
+        : "Revisa el panel de Conekta y la base de datos para confirmar el estado.";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0; padding:24px; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f5; color:#18181b;">
+  <div style="max-width:640px; margin:0 auto; background:#fff; border-radius:12px; padding:24px;">
+    <h2 style="margin:0 0 8px; color:${isUrgent ? "#b91c1c" : "#103948"};">${escapeHtml(title)}</h2>
+    <p style="margin:0 0 16px; color:#52525b;">${escapeHtml(subtitle)}</p>
+    <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
+      <tbody>${tableHtml}</tbody>
+    </table>
+    <p style="margin:16px 0 0; font-size:0.8125rem; color:#71717a;">
+      ${escapeHtml(footerHint)}
+    </p>
+  </div>
+</body>
+</html>
+`.trim();
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: [adminEmail],
+      subject,
+      html,
+    });
+    if (error)
+      return { ok: false, error: error.message || "Error al enviar email" };
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error inesperado al enviar email",
+    };
+  }
+}

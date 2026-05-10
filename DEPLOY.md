@@ -31,7 +31,39 @@ SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_supabase
 ```
 NEXT_PUBLIC_CONEKTA_PUBLIC_KEY=tu_public_key_conekta_prueba
 CONEKTA_PRIVATE_KEY=tu_private_key_conekta_prueba
+CONEKTA_WEBHOOK_SECRET=tu_secreto_compartido_para_webhooks
 ```
+
+**`CONEKTA_WEBHOOK_SECRET`:** se configura junto al endpoint del webhook en
+el dashboard de Conekta (sección **Webhooks > Crear Webhook**). Se firma cada
+payload con HMAC-SHA256 usando este secreto. Si la variable no está
+configurada, el endpoint `/api/conekta/webhook` rechaza todas las peticiones
+(fail-closed).
+
+**URL del webhook:** `https://[tu-dominio]/api/conekta/webhook`. Suscríbelo a
+los eventos: `order.paid`, `charge.created`, `charge.paid`, `charge.refunded`,
+`charge.chargeback.created`, `charge.chargeback.updated`,
+`charge.chargeback.lost`, `order.expired`, `order.canceled`.
+
+#### Variable de alertas a admin:
+```
+ADMIN_ALERT_EMAIL=email_destino_alertas_de_pago
+```
+
+**`ADMIN_ALERT_EMAIL`:** dirección a la que llegan alertas de pagos huérfanos
+auto-reembolsados, refunds hechos desde el dashboard de Conekta y
+chargebacks. Si no se configura, las alertas se loguean pero no se envían.
+
+#### Variable del cron job:
+```
+CRON_SECRET=secreto_para_proteger_endpoints_de_cron
+```
+
+Vercel envía este valor en `Authorization: Bearer ...` para los crons
+configurados en `vercel.json`. El cron externo de huérfanos (cron-job.org;
+ver sección 7.bis) usa el mismo header. Sin él, los endpoints `/api/cron/*`
+rechazan las llamadas.
+Generalo con `openssl rand -base64 32`.
 
 #### Variable de Autenticación:
 ```
@@ -132,6 +164,59 @@ Una vez que el dominio esté configurado y funcionando:
 - Verifica que el certificado SSL esté activo (debería mostrar el candado verde)
 - Prueba que las funcionalidades de la app funcionen correctamente con el nuevo dominio
 
+### 7.bis Cron de pagos huérfanos (cada 5 min) con cron-job.org
+
+El plan **Hobby de Vercel sólo permite crons diarios**, así que el job
+`refund-orphan-payments` (cada ~5 min) se dispara desde **cron-job.org** (o
+cualquier servicio similar) con un `POST` a tu dominio de producción.
+
+**Qué hace el endpoint:** detecta reservas en `pending_payment` demasiado
+antiguas sin reserva consumida y las reembolsa en Conekta. Debe llamarse con
+el mismo `Authorization: Bearer <CRON_SECRET>` que usaría Vercel en un cron
+nativo.
+
+**Configuración en cron-job.org (resumen):**
+
+1. Crea una cuenta en [cron-job.org](https://cron-job.org) y un **cron job** nuevo.
+2. **URL:** `https://<tu-dominio-prod>/api/cron/refund-orphan-payments`
+3. **Método:** POST.
+4. **Cabecera:** `Authorization` = `Bearer <CRON_SECRET>` (el mismo valor que
+   `CRON_SECRET` en Vercel; sin comillas en el valor del header).
+5. **Programación:** cada 5 minutos (o el intervalo que elijas; el código es
+   idempotente).
+6. Activa las **notificaciones de fallo** del job (email) para enterarte si
+   el `POST` devuelve 4xx/5xx o no responde.
+
+**Heartbeat y alerta por correo (opcional pero recomendado):**
+
+- Aplica la migración `sql/45-migration-cron-job-heartbeats.sql` en Supabase
+  (en instalaciones nuevas desde cero, la tabla también está en
+  `sql/01-schema.sql` y el RLS en `sql/03-security.sql`). Si ya habías
+  aplicado la 45 antes de existir el `INSERT` de semilla, ejecuta además
+  `sql/46-migration-cron-job-heartbeat-bootstrap.sql` (idempotente).
+- Tras cada corrida **exitosa** del cron, la app guarda `last_success_at` en
+  `cron_job_heartbeats`.
+- Tras un **webhook válido** de Conekta procesado con éxito, la app programa
+  (con `after()` de Next.js) una comprobación: si `last_success_at` tiene más
+  de **30 minutos** de antigüedad, reclama en BD el envío de alerta (un
+  `UPDATE` atómico, máximo **una vez cada 24 h**) y correo al admin con tipo
+  `orphan_cron_stale_heartbeat`. Así detectas el scheduler caído sin depender
+  solo del proveedor del cron.
+
+**Si algún día migras a Vercel Pro** y prefieres el cron en Vercel, agrega en
+`vercel.json`:
+
+```json
+{ "path": "/api/cron/refund-orphan-payments", "schedule": "*/5 * * * *" }
+```
+
+y desactiva o borra el job en cron-job.org para no duplicar llamadas.
+
+**Nota de frecuencia vs. `ORPHAN_TIMEOUT_MIN`:** si alargas mucho el intervalo
+del scheduler (por ejemplo cada 30 min), revisa que `ORPHAN_TIMEOUT_MIN` en
+`src/app/api/cron/refund-orphan-payments/route.ts` siga siendo coherente con
+cuánto quieres esperar antes de reembolsar automáticamente.
+
 ### 8. Testing en Producción
 
 Prueba las siguientes funcionalidades:
@@ -178,6 +263,44 @@ Prueba las siguientes funcionalidades:
 - Verifica que las keys de Conekta sean del modo correcto (prueba/producción)
 - Revisa que las keys no tengan espacios extra
 
+### Webhook de Conekta devuelve 401 "Invalid signature"
+- Verifica que `CONEKTA_WEBHOOK_SECRET` esté configurado en Vercel
+- Confirma que el secreto coincida exactamente con el del dashboard de Conekta
+- Conekta puede mandar la firma como `Digest`, `X-Conekta-Signature` o
+  `Conekta-Signature`. El endpoint los acepta todos automáticamente.
+
+### Webhook de Conekta no procesa eventos antiguos
+- La tabla `conekta_webhook_events` deduplica por `event_id`. Si un evento
+  ya tiene status `processed`, no se reprocesa. Para forzar, actualiza el
+  status manualmente desde Supabase y dispara un reintento desde el
+  dashboard de Conekta.
+
+### Cron `refund-orphan-payments` no corre
+- Por defecto se dispara desde **cron-job.org** (no en Vercel) cada ~5 min
+  para no requerir plan Pro de Vercel. Ver sección 7.bis.
+- Revisa en cron-job.org el historial de ejecuciones y las notificaciones de
+  fallo del job.
+- Confirma que la URL sea HTTPS de producción y que el header
+  `Authorization: Bearer …` use el mismo `CRON_SECRET` que en Vercel.
+- Si el endpoint devuelve 401, es problema de secret. Si devuelve 500,
+  revisa los logs de la función en Vercel.
+- Si aplicaste las migraciones 45/46 y recibes el correo
+  «Cron de huérfanos sin señal de vida», el scheduler o el deploy dejaron de
+  actualizar el heartbeat; revisa cron-job.org y los logs del endpoint.
+- Para diagnosticar manualmente:
+  ```bash
+  curl -X POST -H "Authorization: Bearer <CRON_SECRET>" \
+    "https://<tu-dominio>/api/cron/refund-orphan-payments"
+  ```
+
+### El cron y el webhook procesan el mismo pago al mismo tiempo
+- Aplicar la migración `sql/43-migration-pending-refund-in-progress.sql`
+  en Supabase. Agrega el estado `refund_in_progress` al CHECK constraint
+  de `pending_reservations` y permite el "claim atómico" del cron antes
+  de reembolsar (evita reservar y reembolsar simultáneamente).
+- Si la migración 41 ya está aplicada con el CHECK viejo, la 43 lo
+  recrea. Es idempotente.
+
 ## URLs Importantes
 
 - **Dashboard de Vercel:** https://vercel.com/dashboard
@@ -190,4 +313,7 @@ Prueba las siguientes funcionalidades:
 - Los deployments son automáticos con cada push a la rama `master`
 - Puedes crear preview deployments para otras ramas
 - Los logs están disponibles en tiempo real en el dashboard de Vercel
-- El plan gratuito de Vercel es suficiente para el volumen esperado del proyecto
+- El plan **Hobby (gratuito) de Vercel es suficiente** para este proyecto.
+  El cron de pagos huérfanos (cada ~5 min) se programa fuera de Vercel
+  (p. ej. cron-job.org), así que no se necesita Pro para esa frecuencia.
+  Ver sección 7.bis.

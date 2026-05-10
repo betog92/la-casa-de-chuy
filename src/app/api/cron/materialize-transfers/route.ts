@@ -401,3 +401,6 @@ async function handle(request: NextRequest) {
 export const dynamic = "force-dynamic";
 // Evitar que Next intente prerender este endpoint
 export const revalidate = 0;
+// Procesar muchas transferencias diarias puede tardar; declaramos el max
+// permitido en Hobby (300s = 5 min) para no depender de defaults de Vercel.
+export const maxDuration = 300;

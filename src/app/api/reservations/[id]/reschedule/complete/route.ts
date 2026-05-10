@@ -28,9 +28,9 @@ import { requireAdmin } from "@/lib/auth/admin";
 import {
   getConektaOrder,
   findPaidCharge,
-  refundConektaCharge,
   toCents,
 } from "@/lib/payments/conekta";
+import { safeRefundOrder } from "@/lib/payments/finalize-reservation";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -68,6 +68,33 @@ export async function POST(
       typeof paymentId === "string" && paymentId.trim() !== ""
         ? paymentId
         : null;
+
+    // Anti-race con el cron de huérfanos: si el cron ya tomó claim del pending
+    // (refund_in_progress) o ya lo procesó (refunded/failed), abortamos para
+    // no sobrescribir la reserva con un pago que está siendo reembolsado.
+    if (paymentIdForRefund) {
+      const supabaseEarly = createServiceRoleClient();
+      const { data: pendingState } = await supabaseEarly
+        .from("pending_reservations")
+        .select("status")
+        .eq("payment_id", paymentIdForRefund)
+        .maybeSingle();
+      const pendingStatus = (pendingState as { status?: string } | null)?.status;
+      if (
+        pendingStatus === "refund_in_progress" ||
+        pendingStatus === "refunded" ||
+        pendingStatus === "failed"
+      ) {
+        return errorResponse(
+          pendingStatus === "refund_in_progress"
+            ? "Tu pago está siendo reembolsado automáticamente porque tomó demasiado tiempo confirmar el reagendamiento."
+            : pendingStatus === "refunded"
+              ? "Tu pago ya fue reembolsado automáticamente. Si quieres reagendar, intenta de nuevo."
+              : "Este pago fue marcado como fallido y no puede aplicarse a un reagendamiento.",
+          409,
+        );
+      }
+    }
 
     // Obtener el usuario autenticado
     const cookieStore = await cookies();
@@ -193,15 +220,21 @@ export async function POST(
     if (!isAvailable) {
       // Si el cliente ya pagó por adelantado y el slot acaba de ocuparse,
       // reembolsamos automáticamente para no dejar dinero flotando.
+      let refundOk = false;
       if (paymentId) {
-        await safeRefundOrder(paymentId);
+        refundOk = await safeRefundOrder(paymentId);
       }
+      const refundSuffix = paymentId
+        ? refundOk
+          ? "El cargo adicional será reembolsado."
+          : "Si fuiste cobrado, el sistema lo reembolsará automáticamente en los próximos minutos."
+        : slotsCount > 1
+          ? "Elige otro horario."
+          : "Por favor selecciona otro horario.";
       return conflictResponse(
         slotsCount > 1
-          ? "Para reagendar esta cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). " +
-              (paymentId ? "El cargo adicional será reembolsado." : "Elige otro horario.")
-          : "El horario seleccionado ya no está disponible. " +
-              (paymentId ? "El cargo adicional será reembolsado." : "Por favor selecciona otro horario."),
+          ? `Para reagendar esta cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). ${refundSuffix}`
+          : `El horario seleccionado ya no está disponible. ${refundSuffix}`,
       );
     }
 
@@ -244,9 +277,13 @@ export async function POST(
           verifyError.startsWith("El monto cobrado") ||
           verifyError.startsWith("No se pudo verificar")
         ) {
-          await safeRefundOrder(paymentId);
+          const refundOk = await safeRefundOrder(paymentId);
           return errorResponse(
-            `${verifyError} Tu pago será reembolsado automáticamente.`,
+            `${verifyError} ${
+              refundOk
+                ? "Tu pago será reembolsado automáticamente."
+                : "Si fuiste cobrado, el sistema lo reembolsará en los próximos minutos."
+            }`,
             400,
           );
         }
@@ -257,9 +294,11 @@ export async function POST(
       // reembolsamos best-effort (probable race con cambio de tarifa) y
       // pedimos recargar.
       if (paymentId) {
-        await safeRefundOrder(paymentId);
+        const refundOk = await safeRefundOrder(paymentId);
         return validationErrorResponse(
-          "Este reagendamiento no requiere pago adicional. Tu pago será reembolsado automáticamente. Recarga la página.",
+          refundOk
+            ? "Este reagendamiento no requiere pago adicional. Tu pago será reembolsado automáticamente. Recarga la página."
+            : "Este reagendamiento no requiere pago adicional. Si fuiste cobrado, el sistema lo reembolsará en los próximos minutos. Recarga la página.",
         );
       }
     }
@@ -294,7 +333,9 @@ export async function POST(
       }
     }
 
-    // Actualizar la reserva (optimistic lock: solo si reschedule_count no cambió)
+    // Actualizar la reserva (optimistic lock: solo si reschedule_count no
+    // cambió Y el status sigue siendo 'confirmed'). Esto evita que un
+    // reschedule pise una reserva cancelada en el último segundo.
     const currentRescheduleCount = reservationRow.reschedule_count ?? 0;
     const { data: updatedReservation, error: updateError } = await supabase
       .from("reservations")
@@ -302,6 +343,7 @@ export async function POST(
       .update(updateData)
       .eq("id", reservationId)
       .eq("reschedule_count", currentRescheduleCount)
+      .eq("status", "confirmed")
       .select("email, name, date, start_time, additional_payment_amount")
       .single();
 
@@ -311,25 +353,43 @@ export async function POST(
         String(updateError.message || "").includes("0 row");
       // Si ya cobramos al cliente y la actualización falló, reembolsar para no
       // dejar dinero flotando.
+      let refundOk = false;
       if (serverAdditionalAmount > 0 && paymentId) {
-        await safeRefundOrder(paymentId);
+        refundOk = await safeRefundOrder(paymentId);
       }
+      const refundSuffix =
+        serverAdditionalAmount > 0
+          ? refundOk
+            ? "El cargo adicional será reembolsado."
+            : "Si fuiste cobrado, el sistema lo reembolsará en los próximos minutos."
+          : "Intenta de nuevo.";
       if (noRows) {
         return conflictResponse(
-          "La reserva pudo haber cambiado. " +
-            (serverAdditionalAmount > 0
-              ? "El cargo adicional será reembolsado en breve."
-              : "Intenta de nuevo."),
+          `La reserva pudo haber cambiado. ${refundSuffix}`,
         );
       }
       console.error("Error completing reschedule:", updateError);
       return errorResponse(
-        "Error al completar el reagendamiento" +
-          (serverAdditionalAmount > 0
-            ? ". El cargo adicional será reembolsado."
-            : ""),
+        serverAdditionalAmount > 0
+          ? `Error al completar el reagendamiento. ${refundSuffix}`
+          : "Error al completar el reagendamiento",
         500,
       );
+    }
+
+    // Marcar el snapshot pending_reservations correspondiente como consumido.
+    // Sólo afecta `pending_payment`: NO pisamos `refund_in_progress` (cron
+    // está reembolsando), `refunded`, `failed` ni `consumed` (idempotente).
+    if (paymentId) {
+      await supabase
+        .from("pending_reservations")
+        .update({
+          status: "consumed",
+          consumed_reservation_id: reservationId,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("payment_id", paymentId)
+        .eq("status", "pending_payment");
     }
 
     // Registrar en historial de reagendamientos (cliente, pago en línea).
@@ -403,9 +463,11 @@ export async function POST(
         "[reschedule/complete] Excepción inesperada con paymentId presente; intentando reembolso:",
         paymentIdForRefund,
       );
-      await safeRefundOrder(paymentIdForRefund);
+      const refundOk = await safeRefundOrder(paymentIdForRefund);
       return errorResponse(
-        `${errorMessage}. Tu pago adicional será reembolsado automáticamente.`,
+        refundOk
+          ? `${errorMessage}. Tu pago adicional será reembolsado automáticamente.`
+          : `${errorMessage}. Si fuiste cobrado, el sistema lo reembolsará en los próximos minutos.`,
         500,
       );
     }
@@ -504,21 +566,5 @@ async function verifyConektaOrderForReschedule(args: {
   return null;
 }
 
-/**
- * Idempotency-Key estable: reintentos/llamadas concurrentes a Conekta
- * para el mismo charge resuelven al mismo resultado.
- */
-async function safeRefundOrder(paymentId: string): Promise<void> {
-  try {
-    const order = await getConektaOrder(paymentId);
-    const charge = findPaidCharge(order);
-    if (!charge) return;
-    await refundConektaCharge(
-      charge.id,
-      charge.amount,
-      `refund_${charge.id}`,
-    );
-  } catch (err) {
-    console.error("Reembolso automático falló para", paymentId, err);
-  }
-}
+// `safeRefundOrder` se importa de `finalize-reservation` para evitar
+// duplicar la lógica (incluye marcar `pending_reservations` como refunded).

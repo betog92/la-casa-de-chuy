@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Cliente HTTP server-side para la API de Conekta.
@@ -225,6 +226,35 @@ export function findPaidCharge(order: ConektaOrder): ConektaCharge | null {
 }
 
 /**
+ * Detecta si un error de `refundConektaCharge` proviene de Conekta avisando
+ * que el cargo ya estaba reembolsado (race con cron, dashboard manual, o
+ * reintento de finalize tras un fallo previo). Devuelve `true` en ese caso
+ * para que el caller lo trate como éxito (idempotencia).
+ *
+ * Conekta responde 400/422 con `details[].message` o `message` que contiene
+ * "already refunded" o variantes en español. Hacemos un match laxo (any
+ * "already|ya" cerca de "refund|reembols") para sobrevivir cambios menores
+ * en la copy del API.
+ */
+export function isAlreadyRefundedError(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) return false;
+  const status = err.response?.status;
+  if (status !== 400 && status !== 422) return false;
+  const data = err.response?.data as
+    | { details?: Array<{ message?: string }>; message?: string }
+    | undefined;
+  const messages = [
+    data?.message ?? "",
+    ...(Array.isArray(data?.details)
+      ? data.details.map((d) => d?.message ?? "")
+      : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return /(already|ya).*(refund|reembols)/i.test(messages);
+}
+
+/**
  * Convierte cualquier error (axios u otro) en un mensaje amigable en español.
  * Devuelve también el status HTTP cuando aplica.
  */
@@ -294,4 +324,131 @@ export function formatConektaError(err: unknown): {
 /** Convierte un monto en MXN (con decimales) a centavos enteros. */
 export function toCents(amountMxn: number): number {
   return Math.round(Number(amountMxn) * 100);
+}
+
+// =====================================================
+// Webhooks
+// =====================================================
+
+/**
+ * Tipos de evento de webhook que nos interesan procesar.
+ * Conekta manda muchos más; los que no aparecen aquí los marcamos `ignored`.
+ */
+export type ConektaWebhookEventType =
+  | "order.paid"
+  | "order.expired"
+  | "order.canceled"
+  | "charge.created"
+  | "charge.paid"
+  | "charge.refunded"
+  | "charge.chargeback.created"
+  | "charge.chargeback.updated"
+  | "charge.chargeback.lost";
+
+export interface ConektaWebhookEvent {
+  id: string;
+  type: string;
+  data?: {
+    object?: {
+      id?: string;
+      object?: string;
+      payment_status?: string;
+      status?: string;
+      amount?: number;
+      order_id?: string;
+      metadata?: Record<string, string | number | boolean | null>;
+      charges?: { data?: ConektaCharge[] };
+      [key: string]: unknown;
+    };
+  };
+  livemode?: boolean;
+  created_at?: number;
+}
+
+/**
+ * Verifica la firma HMAC-SHA256 del webhook.
+ *
+ * Conekta firma los webhooks con un secreto compartido configurado en su
+ * dashboard. El header `Digest` (o `Conekta-Signature`/`X-Conekta-Signature`
+ * según versión) trae el HMAC del body raw codificado en hex o base64.
+ *
+ * IMPORTANTE: el body que se firma es el cuerpo BYTE A BYTE como llegó.
+ * No re-serialices el JSON: hazlo SIEMPRE con el body raw.
+ *
+ * Si `CONEKTA_WEBHOOK_SECRET` no está configurado, devuelve `false`
+ * (fail-closed). Nunca aceptes webhooks sin verificar firma en producción.
+ */
+export function verifyConektaWebhookSignature(
+  rawBody: string | Buffer,
+  signatureHeader: string | null | undefined,
+): boolean {
+  // `trim` defensivo: copiar/pegar desde el dashboard de Conekta suele
+  // arrastrar saltos de línea o espacios. Sin trim, el HMAC no coincide.
+  const secret = process.env.CONEKTA_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    console.error(
+      "[conekta-webhook] CONEKTA_WEBHOOK_SECRET no está configurado: rechazando webhook",
+    );
+    return false;
+  }
+  if (!signatureHeader || typeof signatureHeader !== "string") {
+    return false;
+  }
+
+  // El header puede venir como "sha256=<hex>" (estilo GitHub/Stripe),
+  // "SHA256=<base64>" (estilo Digest RFC 3230) o sólo "<hex>"/"<base64>".
+  // Normalizamos quitando prefijos conocidos y espacios.
+  const cleaned = signatureHeader
+    .replace(/^sha256=/i, "")
+    .replace(/^SHA-?256=/i, "")
+    .trim();
+  if (!cleaned) return false;
+
+  const bodyBuffer =
+    typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+
+  const expectedHex = createHmac("sha256", secret)
+    .update(bodyBuffer)
+    .digest("hex");
+  const expectedB64 = Buffer.from(expectedHex, "hex").toString("base64");
+
+  // Probamos contra hex y base64 con comparación timing-safe.
+  return (
+    safeStringEq(cleaned, expectedHex) || safeStringEq(cleaned, expectedB64)
+  );
+}
+
+function safeStringEq(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extrae los identificadores más útiles del payload de un evento Conekta
+ * para indexar en `conekta_webhook_events` (payment_id = orderId, charge_id).
+ */
+export function extractWebhookIds(event: ConektaWebhookEvent): {
+  paymentId: string | null;
+  chargeId: string | null;
+} {
+  const obj = event?.data?.object ?? {};
+  const objectType = String(obj.object ?? "").toLowerCase();
+
+  let paymentId: string | null = null;
+  let chargeId: string | null = null;
+
+  if (objectType === "order") {
+    paymentId = typeof obj.id === "string" ? obj.id : null;
+    const firstCharge = obj.charges?.data?.[0];
+    chargeId = firstCharge?.id ?? null;
+  } else if (objectType === "charge") {
+    chargeId = typeof obj.id === "string" ? obj.id : null;
+    paymentId = typeof obj.order_id === "string" ? obj.order_id : null;
+  }
+
+  return { paymentId, chargeId };
 }

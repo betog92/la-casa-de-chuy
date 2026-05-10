@@ -23,6 +23,9 @@ ALTER TABLE referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discount_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discount_code_uses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE benefit_transfers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pending_reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conekta_webhook_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cron_job_heartbeats ENABLE ROW LEVEL SECURITY;
 
 -- =====================================================
 -- 2. ELIMINAR POLÍTICAS EXISTENTES (si las hay)

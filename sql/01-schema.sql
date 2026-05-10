@@ -515,6 +515,83 @@ ON time_slots(date, start_time)
 WHERE available = TRUE AND is_occupied = FALSE;
 
 -- =====================================================
+-- TABLAS PARA WEBHOOKS DE CONEKTA Y RECUPERACIÓN DE PAGOS HUÉRFANOS
+-- =====================================================
+-- Snapshot de los datos de reserva ANTES de cobrar a Conekta. Permite que
+-- el webhook (`order.paid`) cree la reserva si el cliente cierra la
+-- pestaña tras pagar, y que el cron reembolse a los 10 min si nadie la
+-- consumió.
+CREATE TABLE IF NOT EXISTS pending_reservations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  attempt_id UUID NOT NULL UNIQUE,
+  payment_id TEXT,
+  intent TEXT NOT NULL CHECK (intent IN ('reservation', 'reschedule')),
+  status TEXT NOT NULL DEFAULT 'pending_payment'
+    CHECK (status IN ('pending_payment', 'refund_in_progress', 'consumed', 'refunded', 'failed')),
+  payload JSONB NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  email TEXT NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  consumed_reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL,
+  refunded_at TIMESTAMP WITH TIME ZONE,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_pending_reservations_payment_id
+  ON pending_reservations (payment_id)
+  WHERE payment_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_pending_reservations_pending_old
+  ON pending_reservations (created_at)
+  WHERE status = 'pending_payment';
+
+CREATE INDEX IF NOT EXISTS idx_pending_reservations_email
+  ON pending_reservations (email);
+
+-- Bitácora de webhooks Conekta. event_id da idempotencia (Conekta reintenta).
+CREATE TABLE IF NOT EXISTS conekta_webhook_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL,
+  payment_id TEXT,
+  charge_id TEXT,
+  raw_payload JSONB NOT NULL,
+  signature TEXT,
+  status TEXT NOT NULL DEFAULT 'received'
+    CHECK (status IN ('received', 'processed', 'ignored', 'failed')),
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  processed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_conekta_webhook_events_payment_id
+  ON conekta_webhook_events (payment_id)
+  WHERE payment_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_conekta_webhook_events_type
+  ON conekta_webhook_events (event_type);
+
+CREATE INDEX IF NOT EXISTS idx_conekta_webhook_events_created_at
+  ON conekta_webhook_events (created_at DESC);
+
+-- Heartbeat de jobs externos (cron-job.org, etc.). Ver migración 45.
+CREATE TABLE IF NOT EXISTS cron_job_heartbeats (
+  job_name TEXT PRIMARY KEY,
+  last_success_at TIMESTAMPTZ,
+  last_stale_alert_sent_at TIMESTAMPTZ
+);
+
+COMMENT ON TABLE cron_job_heartbeats IS
+  'Última ejecución exitosa de jobs externos (cron-job.org, etc.). RLS sin políticas: sólo service role.';
+
+INSERT INTO cron_job_heartbeats (job_name, last_success_at)
+VALUES ('refund-orphan-payments', NOW())
+ON CONFLICT (job_name) DO UPDATE SET
+  last_success_at = COALESCE(cron_job_heartbeats.last_success_at, EXCLUDED.last_success_at);
+
+-- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR updated_at AUTOMÁTICAMENTE
 -- =====================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -550,8 +627,19 @@ DROP TRIGGER IF EXISTS update_time_slots_updated_at ON time_slots;
 CREATE TRIGGER update_time_slots_updated_at 
   BEFORE UPDATE ON time_slots
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- pending_reservations: cada cambio de status debe actualizar updated_at.
+-- El código de la app ya lo setea explícitamente en cada UPDATE, pero el
+-- trigger es defensa por si una query directa olvida hacerlo.
+DROP TRIGGER IF EXISTS update_pending_reservations_updated_at ON pending_reservations;
+CREATE TRIGGER update_pending_reservations_updated_at
+  BEFORE UPDATE ON pending_reservations
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- Nota: benefit_transfers no usa trigger de updated_at; tiene timestamps
 -- específicos por estado (materialized_at, claimed_at, cancelled_at, etc.).
+-- Nota: conekta_webhook_events sólo se inserta una vez (idempotencia por
+-- event_id) y se actualiza una vez para marcar status final, no necesita
+-- trigger porque el código setea processed_at explícitamente.
 
 -- =====================================================
 -- FUNCIÓN PARA ACTUALIZAR IS_OCCUPIED AUTOMÁTICAMENTE

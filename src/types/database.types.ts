@@ -637,6 +637,129 @@ export interface Database {
           reverted_at?: string | null;
         };
       };
+      pending_reservations: {
+        Row: {
+          id: string;
+          attempt_id: string;
+          payment_id: string | null;
+          intent: "reservation" | "reschedule";
+          status:
+            | "pending_payment"
+            | "refund_in_progress"
+            | "consumed"
+            | "refunded"
+            | "failed";
+          payload: Json;
+          amount_cents: number;
+          email: string;
+          user_id: string | null;
+          consumed_reservation_id: number | null;
+          refunded_at: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          attempt_id: string;
+          payment_id?: string | null;
+          intent: "reservation" | "reschedule";
+          status?:
+            | "pending_payment"
+            | "refund_in_progress"
+            | "consumed"
+            | "refunded"
+            | "failed";
+          payload: Json;
+          amount_cents: number;
+          email: string;
+          user_id?: string | null;
+          consumed_reservation_id?: number | null;
+          refunded_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          attempt_id?: string;
+          payment_id?: string | null;
+          intent?: "reservation" | "reschedule";
+          status?:
+            | "pending_payment"
+            | "refund_in_progress"
+            | "consumed"
+            | "refunded"
+            | "failed";
+          payload?: Json;
+          amount_cents?: number;
+          email?: string;
+          user_id?: string | null;
+          consumed_reservation_id?: number | null;
+          refunded_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      cron_job_heartbeats: {
+        Row: {
+          job_name: string;
+          last_success_at: string | null;
+          last_stale_alert_sent_at: string | null;
+        };
+        Insert: {
+          job_name: string;
+          last_success_at?: string | null;
+          last_stale_alert_sent_at?: string | null;
+        };
+        Update: {
+          job_name?: string;
+          last_success_at?: string | null;
+          last_stale_alert_sent_at?: string | null;
+        };
+      };
+      conekta_webhook_events: {
+        Row: {
+          id: string;
+          event_id: string;
+          event_type: string;
+          payment_id: string | null;
+          charge_id: string | null;
+          raw_payload: Json;
+          signature: string | null;
+          status: "received" | "processed" | "ignored" | "failed";
+          error_message: string | null;
+          created_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          event_id: string;
+          event_type: string;
+          payment_id?: string | null;
+          charge_id?: string | null;
+          raw_payload: Json;
+          signature?: string | null;
+          status?: "received" | "processed" | "ignored" | "failed";
+          error_message?: string | null;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          event_id?: string;
+          event_type?: string;
+          payment_id?: string | null;
+          charge_id?: string | null;
+          raw_payload?: Json;
+          signature?: string | null;
+          status?: "received" | "processed" | "ignored" | "failed";
+          error_message?: string | null;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+      };
     };
     Functions: {
       get_available_slots: {

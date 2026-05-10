@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { parse, startOfDay } from "date-fns";
 import { randomUUID } from "crypto";
+import axios from "axios";
 
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { computeAuthoritativeReservationPrice } from "@/lib/payments/pricing-server";
@@ -12,6 +13,7 @@ import {
   formatConektaError,
   toCents,
 } from "@/lib/payments/conekta";
+import { sendAdminPaymentAlert } from "@/lib/email";
 import { calculatePriceWithCustom } from "@/utils/pricing";
 import {
   durationMinutesBetween,
@@ -234,6 +236,47 @@ async function handleReservationIntent(body: ReservationIntentBody) {
   )}`;
 
   const attemptId = randomUUID();
+
+  // 1) Insertar snapshot ANTES de cobrar. Si el cliente cierra la pestaña
+  //    tras cobrar, el webhook (`order.paid`) lee este snapshot y crea la
+  //    reserva. Si nadie la consume en 10 min, el cron reembolsa.
+  const pendingPayload = {
+    name: contact.name.trim(),
+    phone: contact.phone,
+    date,
+    startTime,
+    sessionType: sessionTypeNorm,
+    photographerStudio:
+      photographerStudio == null || photographerStudio === ""
+        ? null
+        : String(photographerStudio).trim().slice(0, PHOTOGRAPHER_STUDIO_MAX),
+    useLoyaltyDiscount: useLoyaltyDiscount === true,
+    useLoyaltyPoints: Number(useLoyaltyPoints) || 0,
+    useCredits: Number(useCredits) || 0,
+    discountCode: discountCode ?? null,
+  };
+  const { data: pendingRow, error: pendingErr } = await supabase
+    .from("pending_reservations")
+    .insert({
+      attempt_id: attemptId,
+      intent: "reservation",
+      status: "pending_payment",
+      payload: pendingPayload,
+      amount_cents: toCents(priceResult.finalPrice),
+      email: normalizedEmail,
+      user_id: authenticatedUserId,
+    } as never)
+    .select("id")
+    .single();
+  if (pendingErr || !pendingRow) {
+    console.error("Error guardando pending_reservations:", pendingErr);
+    return errorResponse(
+      "No se pudo iniciar el pago. Intenta nuevamente.",
+      500,
+    );
+  }
+  const pendingId = (pendingRow as { id: string }).id;
+
   try {
     const order = await createConektaOrder({
       amountMxn: priceResult.finalPrice,
@@ -248,6 +291,7 @@ async function handleReservationIntent(body: ReservationIntentBody) {
       metadata: {
         intent: "reservation",
         attempt_id: attemptId,
+        pending_id: pendingId,
         expected_amount_cents: toCents(priceResult.finalPrice),
         email: normalizedEmail,
         date,
@@ -257,6 +301,15 @@ async function handleReservationIntent(body: ReservationIntentBody) {
 
     const charge = findPaidCharge(order);
     if (!charge || order.payment_status !== "paid") {
+      // Cobro NO ocurrió: marcar pending como failed (no hay nada que reembolsar).
+      await supabase
+        .from("pending_reservations")
+        .update({
+          status: "failed",
+          notes: "Conekta no devolvió payment_status=paid",
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", pendingId);
       return errorResponse(
         charge?.failure_message ||
           charge?.failure_code ||
@@ -264,6 +317,15 @@ async function handleReservationIntent(body: ReservationIntentBody) {
         400,
       );
     }
+
+    // 2) Persistir el order.id en el snapshot (sirve al webhook y al cron).
+    await supabase
+      .from("pending_reservations")
+      .update({
+        payment_id: order.id,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", pendingId);
 
     return successResponse({
       orderId: order.id,
@@ -273,6 +335,15 @@ async function handleReservationIntent(body: ReservationIntentBody) {
     });
   } catch (err) {
     console.error("Error creando orden Conekta (reservation):", err);
+    // Conekta lanzó: probablemente no cobró, pero un 5xx/timeout puede
+    // significar que SÍ cobró y no nos devolvió el order.id. En ese caso
+    // alertamos al admin para revisión manual del dashboard.
+    await markPendingFailedAndMaybeAlert(supabase, pendingId, err, {
+      paymentId: null,
+      customerEmail: normalizedEmail,
+      attemptId,
+      context: "reservation",
+    });
     const { message, status } = formatConektaError(err);
     return errorResponse(message, status && status >= 400 && status < 500 ? 400 : 500);
   }
@@ -447,6 +518,36 @@ async function handleRescheduleIntent(body: RescheduleIntentBody) {
   const customerPhone = (reservationRow.phone || "").trim() || "0000000000";
   const attemptId = randomUUID();
 
+  // Snapshot del reagendamiento. Si /complete falla pero el cobro se hizo,
+  // el cron de huérfanos reembolsa a los 10 min.
+  const reschedulePayload = {
+    reservationId,
+    newDate,
+    newStartTime,
+    guestToken: invitedToken ?? null,
+  };
+  const { data: pendingRow, error: pendingErr } = await supabase
+    .from("pending_reservations")
+    .insert({
+      attempt_id: attemptId,
+      intent: "reschedule",
+      status: "pending_payment",
+      payload: reschedulePayload,
+      amount_cents: toCents(additionalAmount),
+      email: normalizedEmail,
+      user_id: userId,
+    } as never)
+    .select("id")
+    .single();
+  if (pendingErr || !pendingRow) {
+    console.error("Error guardando pending_reservations (reschedule):", pendingErr);
+    return errorResponse(
+      "No se pudo iniciar el pago. Intenta nuevamente.",
+      500,
+    );
+  }
+  const pendingId = (pendingRow as { id: string }).id;
+
   try {
     const order = await createConektaOrder({
       amountMxn: additionalAmount,
@@ -461,6 +562,7 @@ async function handleRescheduleIntent(body: RescheduleIntentBody) {
       metadata: {
         intent: "reschedule",
         attempt_id: attemptId,
+        pending_id: pendingId,
         reservation_id: reservationId,
         expected_amount_cents: toCents(additionalAmount),
         email: normalizedEmail,
@@ -471,6 +573,14 @@ async function handleRescheduleIntent(body: RescheduleIntentBody) {
 
     const charge = findPaidCharge(order);
     if (!charge || order.payment_status !== "paid") {
+      await supabase
+        .from("pending_reservations")
+        .update({
+          status: "failed",
+          notes: "Conekta no devolvió payment_status=paid",
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", pendingId);
       return errorResponse(
         charge?.failure_message ||
           charge?.failure_code ||
@@ -478,6 +588,14 @@ async function handleRescheduleIntent(body: RescheduleIntentBody) {
         400,
       );
     }
+
+    await supabase
+      .from("pending_reservations")
+      .update({
+        payment_id: order.id,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", pendingId);
 
     return successResponse({
       orderId: order.id,
@@ -487,6 +605,12 @@ async function handleRescheduleIntent(body: RescheduleIntentBody) {
     });
   } catch (err) {
     console.error("Error creando orden Conekta (reschedule):", err);
+    await markPendingFailedAndMaybeAlert(supabase, pendingId, err, {
+      paymentId: null,
+      customerEmail: normalizedEmail,
+      attemptId,
+      context: "reschedule",
+    });
     const { message, status } = formatConektaError(err);
     return errorResponse(message, status && status >= 400 && status < 500 ? 400 : 500);
   }
@@ -495,6 +619,58 @@ async function handleRescheduleIntent(body: RescheduleIntentBody) {
 // =====================================================
 // Helpers
 // =====================================================
+
+/**
+ * Marca el pending como `failed` y, si el error sugiere que Conekta pudo
+ * haber cobrado (5xx, timeout, error de red), avisa al admin para que
+ * revise el dashboard. Esto cubre el caso peligroso "Conekta cobra pero
+ * no devuelve order.id porque la conexión cayó".
+ */
+async function markPendingFailedAndMaybeAlert(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  pendingId: string,
+  err: unknown,
+  meta: {
+    paymentId: string | null;
+    customerEmail: string;
+    attemptId: string;
+    context: "reservation" | "reschedule";
+  },
+): Promise<void> {
+  const errMessage =
+    err instanceof Error ? err.message.slice(0, 500) : "exception";
+  await supabase
+    .from("pending_reservations")
+    .update({
+      status: "failed",
+      notes: errMessage,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", pendingId);
+
+  const possiblyCharged =
+    axios.isAxiosError(err) &&
+    (((err.response?.status ?? 0) >= 500) ||
+      err.code === "ECONNABORTED" ||
+      err.code === "ETIMEDOUT");
+  if (!possiblyCharged) return;
+
+  try {
+    await sendAdminPaymentAlert({
+      type: "orphan_payment_refund_failed",
+      paymentId: meta.paymentId ?? `(sin order.id; attempt_id=${meta.attemptId})`,
+      customerEmail: meta.customerEmail,
+      notes: `Conekta lanzó ${
+        axios.isAxiosError(err) ? err.response?.status ?? err.code : "error"
+      } al crear orden de ${meta.context}. Es POSIBLE que SÍ haya cobrado al cliente y no nos haya devuelto el order.id. Busca en el dashboard de Conekta órdenes con metadata.attempt_id=${meta.attemptId} y reembolsa manualmente si aplica.`,
+    });
+  } catch (alertErr) {
+    console.error(
+      "[create-order] No se pudo enviar alerta admin (posible cobro huérfano):",
+      alertErr,
+    );
+  }
+}
 
 async function getAuthenticatedUserId(): Promise<string | null> {
   try {
