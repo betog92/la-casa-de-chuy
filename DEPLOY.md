@@ -96,6 +96,20 @@ Vercel debería detectar automáticamente:
 
 No necesitas cambiar nada, solo verifica que esté correcto.
 
+### 4.bis Base de datos (Supabase): instalación nueva vs. entorno existente
+
+- **Base nueva desde cero:** ejecuta en orden `sql/01-schema.sql` y luego
+  `sql/03-security.sql`. El esquema base ya incluye lo que añadieron las
+  migraciones incrementales `40`–`46` (por ejemplo `pending_reservations`,
+  `conekta_webhook_events`, `cron_job_heartbeats`, índices únicos y RLS). No
+  vuelvas a aplicar manualmente `40-migration-*.sql` … `46-migration-*.sql`
+  sobre esa base salvo que sepas que falta algo puntual; el DDL duplicado
+  puede fallar con errores del tipo "already exists".
+
+- **Base ya en producción o staging:** aplica solo las migraciones
+  `sql/NN-migration-*.sql` que aún no hayas corrido (según tu checklist), en
+  orden numérico.
+
 ### 5. Realizar el Deploy
 
 1. Haz clic en **"Deploy"**

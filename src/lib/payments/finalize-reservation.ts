@@ -21,6 +21,11 @@ import {
   toCents,
 } from "@/lib/payments/conekta";
 
+/** Cliente service-role de Supabase (mismo tipo que `createServiceRoleClient`). */
+export type FinalizeReservationSupabase = ReturnType<
+  typeof createServiceRoleClient
+>;
+
 /**
  * Helper compartido entre `/api/reservations/create` (flujo normal del cliente)
  * y `/api/conekta/webhook` (flujo de recuperación cuando el cliente cierra la
@@ -64,6 +69,12 @@ export interface FinalizeReservationInput {
    * finalización va a consumir. Sirve para marcarla `consumed`.
    */
   pendingReservationId?: string | null;
+  /**
+   * Cliente Supabase opcional. Si el caller (webhook, `/reservations/create`)
+   * ya abrió un service-role client, pásalo aquí para evitar conexiones
+   * duplicadas en la misma request.
+   */
+  supabase?: FinalizeReservationSupabase;
 }
 
 export type FinalizeReservationResult =
@@ -98,7 +109,7 @@ export type FinalizeReservationResult =
 export async function finalizeReservationFromPayload(
   input: FinalizeReservationInput,
 ): Promise<FinalizeReservationResult> {
-  const supabase = createServiceRoleClient();
+  const supabase = input.supabase ?? createServiceRoleClient();
   const paymentId = input.paymentId;
 
   // Helper local: rechazo + reembolso si hay paymentId.
@@ -109,7 +120,7 @@ export async function finalizeReservationFromPayload(
     status: number,
   ): Promise<FinalizeReservationResult> => {
     if (paymentId) {
-      const refundOk = await safeRefundOrder(paymentId);
+      const refundOk = await safeRefundOrder(paymentId, supabase);
       return { ok: false, status, message, refunded: refundOk };
     }
     return { ok: false, status, message, refunded: false };
@@ -320,6 +331,7 @@ export async function finalizeReservationFromPayload(
         if (existing) {
           const existingId = (existing as { id: number }).id;
           const markResult = await markPendingConsumed(
+            supabase,
             input.pendingReservationId,
             existingId,
           );
@@ -360,6 +372,7 @@ export async function finalizeReservationFromPayload(
   // fallamos la request: la reserva ya está en BD; el cron reconciliará el
   // pending en ≤10 min gracias al doble recheck antes de reembolsar.
   const markResult = await markPendingConsumed(
+    supabase,
     input.pendingReservationId,
     reservationId,
   );
@@ -668,11 +681,11 @@ type MarkPendingConsumedResult = "consumed" | "already_terminal" | "error";
  * eficiencia (evitar trabajo innecesario al cron).
  */
 async function markPendingConsumed(
+  supabase: FinalizeReservationSupabase,
   pendingId: string | null | undefined,
   reservationId: number,
 ): Promise<MarkPendingConsumedResult> {
   if (!pendingId) return "consumed";
-  const supabase = createServiceRoleClient();
   try {
     const { data, error } = await supabase
       .from("pending_reservations")
@@ -706,7 +719,7 @@ async function verifyConektaOrderForReservation(args: {
   paymentId: string;
   expectedAmount: number;
   expectedEmail: string;
-  supabase: ReturnType<typeof createServiceRoleClient>;
+  supabase: FinalizeReservationSupabase;
 }): Promise<string | null> {
   const { paymentId, expectedAmount, expectedEmail, supabase } = args;
 
@@ -779,8 +792,15 @@ async function verifyConektaOrderForReservation(args: {
  * invocación), o si no había nada que reembolsar porque no hay charge pagado.
  * Devuelve `false` si Conekta lanzó cualquier otro error, en cuyo caso el
  * cron de huérfanos lo reintentará.
+ *
+ * @param db Cliente opcional; si no se pasa, se crea uno (útil en catch
+ * globales donde no hay instancia compartida).
  */
-export async function safeRefundOrder(paymentId: string): Promise<boolean> {
+export async function safeRefundOrder(
+  paymentId: string,
+  db?: FinalizeReservationSupabase,
+): Promise<boolean> {
+  const supabase = db ?? createServiceRoleClient();
   let charge: Awaited<ReturnType<typeof findPaidCharge>> = null;
   try {
     const order = await getConektaOrder(paymentId);
@@ -802,7 +822,6 @@ export async function safeRefundOrder(paymentId: string): Promise<boolean> {
     }
   }
   try {
-    const supabase = createServiceRoleClient();
     await supabase
       .from("pending_reservations")
       .update({

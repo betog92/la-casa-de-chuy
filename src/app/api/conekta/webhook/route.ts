@@ -209,6 +209,8 @@ export async function POST(request: NextRequest) {
       dispatchResult.status,
       dispatchResult.errorMessage,
     );
+    // Heartbeat: vigila que el cron externo siga corriendo; no depende del
+    // resultado del dispatch (processed / ignored / failed).
     after(() => {
       void runRefundCronStaleCheck(supabase).catch((err) => {
         console.error("[cron-heartbeat] runRefundCronStaleCheck falló:", err);
@@ -291,7 +293,8 @@ async function handleOrderPaid(
     const reservationId = existingReservation.row.id;
     // Sólo marcamos consumed si el pending sigue en `pending_payment`. No
     // pisamos `refund_in_progress` (cron está reembolsando), `refunded`,
-    // `failed` ni `consumed` (idempotente).
+    // `failed` ni `consumed` (idempotente). `consumed_reservation_id` queda
+    // alineado con el cron cuando reconcilia por `payment_id`.
     await supabase
       .from("pending_reservations")
       .update({
@@ -381,6 +384,7 @@ async function handleOrderPaid(
       typeof payload.discountCode === "string" ? payload.discountCode : null,
     authenticatedUserId: pending.user_id,
     pendingReservationId: pending.id,
+    supabase,
   });
 
   if (result.ok) {

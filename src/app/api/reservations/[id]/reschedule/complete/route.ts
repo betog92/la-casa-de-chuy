@@ -42,6 +42,7 @@ export async function POST(
 ) {
   // Lo extraemos antes del try para poder reembolsar en el catch outer.
   let paymentIdForRefund: string | null = null;
+  const supabase = createServiceRoleClient();
   try {
     const { id: rawId } = await params;
     const reservationId =
@@ -73,8 +74,7 @@ export async function POST(
     // (refund_in_progress) o ya lo procesó (refunded/failed), abortamos para
     // no sobrescribir la reserva con un pago que está siendo reembolsado.
     if (paymentIdForRefund) {
-      const supabaseEarly = createServiceRoleClient();
-      const { data: pendingState } = await supabaseEarly
+      const { data: pendingState } = await supabase
         .from("pending_reservations")
         .select("status")
         .eq("payment_id", paymentIdForRefund)
@@ -135,7 +135,6 @@ export async function POST(
     }
 
     // Obtener la reserva
-    const supabase = createServiceRoleClient();
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
       .select(
@@ -222,7 +221,7 @@ export async function POST(
       // reembolsamos automáticamente para no dejar dinero flotando.
       let refundOk = false;
       if (paymentId) {
-        refundOk = await safeRefundOrder(paymentId);
+        refundOk = await safeRefundOrder(paymentId, supabase);
       }
       const refundSuffix = paymentId
         ? refundOk
@@ -277,7 +276,7 @@ export async function POST(
           verifyError.startsWith("El monto cobrado") ||
           verifyError.startsWith("No se pudo verificar")
         ) {
-          const refundOk = await safeRefundOrder(paymentId);
+          const refundOk = await safeRefundOrder(paymentId, supabase);
           return errorResponse(
             `${verifyError} ${
               refundOk
@@ -294,7 +293,7 @@ export async function POST(
       // reembolsamos best-effort (probable race con cambio de tarifa) y
       // pedimos recargar.
       if (paymentId) {
-        const refundOk = await safeRefundOrder(paymentId);
+        const refundOk = await safeRefundOrder(paymentId, supabase);
         return validationErrorResponse(
           refundOk
             ? "Este reagendamiento no requiere pago adicional. Tu pago será reembolsado automáticamente. Recarga la página."
@@ -355,7 +354,7 @@ export async function POST(
       // dejar dinero flotando.
       let refundOk = false;
       if (serverAdditionalAmount > 0 && paymentId) {
-        refundOk = await safeRefundOrder(paymentId);
+        refundOk = await safeRefundOrder(paymentId, supabase);
       }
       const refundSuffix =
         serverAdditionalAmount > 0
@@ -463,7 +462,7 @@ export async function POST(
         "[reschedule/complete] Excepción inesperada con paymentId presente; intentando reembolso:",
         paymentIdForRefund,
       );
-      const refundOk = await safeRefundOrder(paymentIdForRefund);
+      const refundOk = await safeRefundOrder(paymentIdForRefund, supabase);
       return errorResponse(
         refundOk
           ? `${errorMessage}. Tu pago adicional será reembolsado automáticamente.`

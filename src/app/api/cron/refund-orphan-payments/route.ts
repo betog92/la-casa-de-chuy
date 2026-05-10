@@ -125,8 +125,12 @@ async function runCron(request: NextRequest) {
       summary.errors += 1;
       console.error(
         "[cron/refund-orphan] Excepción procesando",
-        row.payment_id,
-        err,
+        {
+          pendingId: row.id,
+          intent: row.intent,
+          paymentId: row.payment_id,
+          err,
+        },
       );
     }
   }
@@ -194,8 +198,7 @@ async function processOne(
 
     console.error(
       "[cron/refund-orphan] No se pudo consultar Conekta para",
-      paymentId,
-      err,
+      { pendingId: row.id, intent: row.intent, paymentId, err },
     );
     // 5xx/red: blip transitorio. Reintentamos en la siguiente corrida.
     // Sólo alertamos UNA vez (cuando lleva > 60 min) para no hacer spam.
@@ -363,8 +366,7 @@ async function processOne(
     } else {
       console.error(
         "[cron/refund-orphan] Reembolso falló para",
-        paymentId,
-        err,
+        { pendingId: row.id, intent: row.intent, paymentId, err },
       );
     }
   }

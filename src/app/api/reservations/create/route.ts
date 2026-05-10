@@ -47,6 +47,7 @@ interface CreateReservationBody {
 
 export async function POST(request: NextRequest) {
   let paymentId: string | null = null;
+  const supabase = createServiceRoleClient();
   try {
     const authenticatedUserId = await getAuthenticatedUserId();
 
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     // helper inserte la reserva. Es opcional: si no hay snapshot (request
     // viejo, o un cliente directo), simplemente no lo marcamos.
     const pendingId = paymentId
-      ? await resolvePendingIdByPaymentId(paymentId)
+      ? await resolvePendingIdByPaymentId(supabase, paymentId)
       : null;
 
     const result = await finalizeReservationFromPayload({
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
       discountCode: body.discountCode ?? null,
       authenticatedUserId,
       pendingReservationId: pendingId,
+      supabase,
     });
 
     if (!result.ok) {
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
         "[reservations/create] Excepción inesperada con paymentId presente; intentando reembolso:",
         paymentId,
       );
-      const refundOk = await safeRefundOrder(paymentId);
+      const refundOk = await safeRefundOrder(paymentId, supabase);
       return errorResponse(
         refundOk
           ? `${errorMessage}. Tu pago será reembolsado automáticamente.`
@@ -157,10 +159,10 @@ async function getAuthenticatedUserId(): Promise<string | null> {
 }
 
 async function resolvePendingIdByPaymentId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
   paymentId: string,
 ): Promise<string | null> {
   try {
-    const supabase = createServiceRoleClient();
     const { data } = await supabase
       .from("pending_reservations")
       .select("id, status")
