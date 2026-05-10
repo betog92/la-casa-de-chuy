@@ -319,7 +319,19 @@ export async function finalizeReservationFromPayload(
           .maybeSingle();
         if (existing) {
           const existingId = (existing as { id: number }).id;
-          await markPendingConsumed(input.pendingReservationId, existingId);
+          const markResult = await markPendingConsumed(
+            input.pendingReservationId,
+            existingId,
+          );
+          if (markResult === "error") {
+            // No fallamos la respuesta del cliente: la reserva ya está creada
+            // (es race con webhook/otra request). El cron reconciliará el
+            // pending en su próxima corrida (≤10 min) gracias al doble recheck.
+            console.error(
+              "[finalize-reservation] markPendingConsumed=error tras race con UNIQUE; cron reconciliará.",
+              { pendingId: input.pendingReservationId, reservationId: existingId, paymentId },
+            );
+          }
           return {
             ok: true,
             reservationId: existingId,
@@ -342,8 +354,25 @@ export async function finalizeReservationFromPayload(
     return rejectAndRefund("No se pudo obtener el ID de la reserva creada", 500);
   }
 
-  // Marcamos pending consumed lo antes posible para que el cron no la reembolse.
-  await markPendingConsumed(input.pendingReservationId, reservationId);
+  // Marcamos pending consumed lo antes posible para que el cron no haga
+  // trabajo innecesario. Si falla con error real (no con `already_terminal`,
+  // que sería una race normal), lo loggeamos para tener observabilidad. NO
+  // fallamos la request: la reserva ya está en BD; el cron reconciliará el
+  // pending en ≤10 min gracias al doble recheck antes de reembolsar.
+  const markResult = await markPendingConsumed(
+    input.pendingReservationId,
+    reservationId,
+  );
+  if (markResult === "error") {
+    console.error(
+      "[finalize-reservation] markPendingConsumed=error tras INSERT exitoso; reserva creada, cron reconciliará pending.",
+      {
+        pendingId: input.pendingReservationId,
+        reservationId,
+        paymentId,
+      },
+    );
+  }
 
   // 8. Consumo atómico de Monedas Chuy.
   if (userId && pointsToConsume > 0 && loyaltyRowsForConsumption.length > 0) {
@@ -612,22 +641,40 @@ export async function finalizeReservationFromPayload(
 // =====================================================
 
 /**
+ * Resultado de `markPendingConsumed`:
+ * - `consumed`: el UPDATE pegó y la fila quedó como `consumed`.
+ * - `already_terminal`: el pending ya no estaba en `pending_payment`
+ *   (lo dejó otro proceso: cron en `refund_in_progress`/`refunded`/`failed`,
+ *   o webhook en `consumed`). Es estado terminal esperado, no es error.
+ * - `error`: hubo error de DB (network, timeout, RLS, schema mismatch).
+ *   El caller debe loggear con contexto para que sea visible.
+ */
+type MarkPendingConsumedResult = "consumed" | "already_terminal" | "error";
+
+/**
  * Marca un pending como `consumed`. Sólo afecta filas en `pending_payment`
  * para no pisar `refund_in_progress` (cron está reembolsando), `refunded`
  * (ya reembolsado), `failed` (Conekta no pagó) ni `consumed` (idempotente).
  *
- * Devuelve `true` si la fila fue actualizada (la reserva está ahora
- * "anclada" al pending). `false` si nada cambió porque el pending ya estaba
- * en otro estado terminal.
+ * Devuelve un resultado tipado para que el caller distinga el caso normal
+ * (`already_terminal`, p. ej. otro proceso ya lo marcó) del caso anómalo
+ * (`error`, problema de BD que requiere observabilidad).
+ *
+ * Importante: aunque este UPDATE falle silenciosamente, NUNCA causa un
+ * reembolso incorrecto: el cron `refund-orphan-payments` hace doble recheck
+ * contra `reservations` (por `payment_id` y `additional_payment_id`) antes
+ * de reembolsar, así que si la reserva existe la detecta y reconcilia el
+ * pending. Lo único en juego aquí es la consistencia inmediata y la
+ * eficiencia (evitar trabajo innecesario al cron).
  */
 async function markPendingConsumed(
   pendingId: string | null | undefined,
   reservationId: number,
-): Promise<boolean> {
-  if (!pendingId) return true;
+): Promise<MarkPendingConsumedResult> {
+  if (!pendingId) return "consumed";
   const supabase = createServiceRoleClient();
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("pending_reservations")
       .update({
         status: "consumed",
@@ -638,10 +685,20 @@ async function markPendingConsumed(
       .eq("status", "pending_payment")
       .select("id")
       .maybeSingle();
-    return !!data;
+    if (error) {
+      console.error(
+        "[finalize-reservation] DB error marcando pending consumed:",
+        { pendingId, reservationId, error },
+      );
+      return "error";
+    }
+    return data ? "consumed" : "already_terminal";
   } catch (err) {
-    console.error("[finalize-reservation] No se pudo marcar pending consumed:", err);
-    return false;
+    console.error(
+      "[finalize-reservation] Excepción marcando pending consumed:",
+      { pendingId, reservationId, err },
+    );
+    return "error";
   }
 }
 
