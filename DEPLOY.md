@@ -31,14 +31,17 @@ SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_supabase
 ```
 NEXT_PUBLIC_CONEKTA_PUBLIC_KEY=tu_public_key_conekta_prueba
 CONEKTA_PRIVATE_KEY=tu_private_key_conekta_prueba
-CONEKTA_WEBHOOK_SECRET=tu_secreto_compartido_para_webhooks
+CONEKTA_WEBHOOK_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----...-----END PUBLIC KEY-----
 ```
 
-**`CONEKTA_WEBHOOK_SECRET`:** se configura junto al endpoint del webhook en
-el dashboard de Conekta (sección **Webhooks > Crear Webhook**). Se firma cada
-payload con HMAC-SHA256 usando este secreto. Si la variable no está
-configurada, el endpoint `/api/conekta/webhook` rechaza todas las peticiones
-(fail-closed).
+**`CONEKTA_WEBHOOK_PUBLIC_KEY`:** Conekta firma cada notificación con su
+llave privada RSA y nosotros verificamos con la pública (header `Digest`,
+RSA-SHA256, base64). La generas en el dashboard de Conekta (**Webhooks >
+Genera tu llave para descifrar las firmas**) o vía
+`POST https://api.conekta.io/webhook_keys`. Pega la PEM completa
+(`-----BEGIN PUBLIC KEY-----...-----END PUBLIC KEY-----`) en una sola línea
+o con `\n` literales; el código la normaliza. Si la variable no está
+configurada, `/api/conekta/webhook` rechaza todas las peticiones (fail-closed).
 
 **URL del webhook:** `https://[tu-dominio]/api/conekta/webhook`. Suscríbelo a
 los eventos: `order.paid`, `charge.created`, `charge.paid`, `charge.refunded`,
@@ -264,8 +267,10 @@ Prueba las siguientes funcionalidades:
 - Revisa que las keys no tengan espacios extra
 
 ### Webhook de Conekta devuelve 401 "Invalid signature"
-- Verifica que `CONEKTA_WEBHOOK_SECRET` esté configurado en Vercel
-- Confirma que el secreto coincida exactamente con el del dashboard de Conekta
+- Verifica que `CONEKTA_WEBHOOK_PUBLIC_KEY` esté configurado en Vercel.
+- La PEM debe ser la **public key** que devolvió Conekta al crear la webhook
+  key (empieza con `-----BEGIN PUBLIC KEY-----`). No es un secreto compartido
+  ni la API key, es la llave pública RSA de la firma.
 - Conekta puede mandar la firma como `Digest`, `X-Conekta-Signature` o
   `Conekta-Signature`. El endpoint los acepta todos automáticamente.
 

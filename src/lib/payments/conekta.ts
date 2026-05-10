@@ -1,5 +1,5 @@
 import axios, { AxiosError } from "axios";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createPublicKey, createVerify } from "node:crypto";
 
 /**
  * Cliente HTTP server-side para la API de Conekta.
@@ -366,28 +366,38 @@ export interface ConektaWebhookEvent {
 }
 
 /**
- * Verifica la firma HMAC-SHA256 del webhook.
+ * Verifica la firma RSA-SHA256 del webhook de Conekta.
  *
- * Conekta firma los webhooks con un secreto compartido configurado en su
- * dashboard. El header `Digest` (o `Conekta-Signature`/`X-Conekta-Signature`
- * según versión) trae el HMAC del body raw codificado en hex o base64.
+ * Modelo de firma de Conekta (v2.1+):
+ * - Conekta tiene un par RSA. Te da la clave PÚBLICA (PEM) cuando creas
+ *   tu webhook key vía POST /webhook_keys o desde el dashboard.
+ * - En cada notificación firma el body raw con su clave PRIVADA y manda la
+ *   firma en el header `Digest` codificada en base64.
+ * - Nosotros verificamos `verify(SHA256, body, signature, publicKey)` con la
+ *   pública.
  *
- * IMPORTANTE: el body que se firma es el cuerpo BYTE A BYTE como llegó.
+ * IMPORTANTE: el body que se verifica es el cuerpo BYTE A BYTE como llegó.
  * No re-serialices el JSON: hazlo SIEMPRE con el body raw.
  *
- * Si `CONEKTA_WEBHOOK_SECRET` no está configurado, devuelve `false`
- * (fail-closed). Nunca aceptes webhooks sin verificar firma en producción.
+ * Si `CONEKTA_WEBHOOK_PUBLIC_KEY` no está configurado o el header no viene,
+ * devuelve `false` (fail-closed). Nunca aceptes webhooks sin verificar firma
+ * en producción.
+ *
+ * Notas operativas:
+ * - La env var puede contener la PEM con saltos `\n` literales (Vercel/UI no
+ *   acepta multilínea fácilmente) o ya formateada con saltos reales. La
+ *   función normaliza ambos casos.
+ * - Aceptamos prefijos `sha256=` o `SHA256=` por defensa, aunque Conekta
+ *   manda la firma en el header `Digest` sin prefijo.
  */
 export function verifyConektaWebhookSignature(
   rawBody: string | Buffer,
   signatureHeader: string | null | undefined,
 ): boolean {
-  // `trim` defensivo: copiar/pegar desde el dashboard de Conekta suele
-  // arrastrar saltos de línea o espacios. Sin trim, el HMAC no coincide.
-  const secret = process.env.CONEKTA_WEBHOOK_SECRET?.trim();
-  if (!secret) {
+  const rawKey = process.env.CONEKTA_WEBHOOK_PUBLIC_KEY?.trim();
+  if (!rawKey) {
     console.error(
-      "[conekta-webhook] CONEKTA_WEBHOOK_SECRET no está configurado: rechazando webhook",
+      "[conekta-webhook] CONEKTA_WEBHOOK_PUBLIC_KEY no está configurado: rechazando webhook",
     );
     return false;
   }
@@ -395,36 +405,68 @@ export function verifyConektaWebhookSignature(
     return false;
   }
 
-  // El header puede venir como "sha256=<hex>" (estilo GitHub/Stripe),
-  // "SHA256=<base64>" (estilo Digest RFC 3230) o sólo "<hex>"/"<base64>".
-  // Normalizamos quitando prefijos conocidos y espacios.
+  // Defensivo: copiar/pegar desde el dashboard de Conekta suele arrastrar
+  // espacios o saltos. Quitamos prefijos opcionales y trim.
   const cleaned = signatureHeader
     .replace(/^sha256=/i, "")
     .replace(/^SHA-?256=/i, "")
     .trim();
   if (!cleaned) return false;
 
-  const bodyBuffer =
-    typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
-
-  const expectedHex = createHmac("sha256", secret)
-    .update(bodyBuffer)
-    .digest("hex");
-  const expectedB64 = Buffer.from(expectedHex, "hex").toString("base64");
-
-  // Probamos contra hex y base64 con comparación timing-safe.
-  return (
-    safeStringEq(cleaned, expectedHex) || safeStringEq(cleaned, expectedB64)
-  );
-}
-
-function safeStringEq(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+  let signatureBuffer: Buffer;
   try {
-    return timingSafeEqual(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+    signatureBuffer = Buffer.from(cleaned, "base64");
   } catch {
     return false;
   }
+  if (signatureBuffer.length === 0) return false;
+
+  const bodyBuffer =
+    typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+
+  const pem = normalizePemPublicKey(rawKey);
+
+  try {
+    const publicKey = createPublicKey({ key: pem, format: "pem" });
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(bodyBuffer);
+    verifier.end();
+    return verifier.verify(publicKey, signatureBuffer);
+  } catch (err) {
+    console.error("[conekta-webhook] Error verificando firma RSA:", err);
+    return false;
+  }
+}
+
+/**
+ * Normaliza una PEM de clave pública. Acepta:
+ *  - PEM "real" con saltos de línea reales.
+ *  - PEM con `\n` literales (caso típico al guardar en env vars).
+ *  - PEM en una sola línea (sin saltos), reformateando body en bloques de 64.
+ */
+function normalizePemPublicKey(input: string): string {
+  let pem = input.replace(/\\n/g, "\n").trim();
+
+  const beginRe = /-----BEGIN [A-Z ]*PUBLIC KEY-----/;
+  const endRe = /-----END [A-Z ]*PUBLIC KEY-----/;
+  const beginMatch = pem.match(beginRe);
+  const endMatch = pem.match(endRe);
+  if (!beginMatch || !endMatch) return pem;
+
+  const begin = beginMatch[0];
+  const end = endMatch[0];
+
+  // Si ya tiene saltos correctos, regresar tal cual.
+  if (pem.includes("\n")) return pem;
+
+  // PEM en una sola línea: extraer body y reformatear.
+  const beginIdx = pem.indexOf(begin);
+  const endIdx = pem.indexOf(end);
+  const body = pem
+    .slice(beginIdx + begin.length, endIdx)
+    .replace(/\s+/g, "");
+  const wrapped = body.match(/.{1,64}/g)?.join("\n") ?? body;
+  return `${begin}\n${wrapped}\n${end}\n`;
 }
 
 /**

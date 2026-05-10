@@ -27,7 +27,7 @@ export const maxDuration = 120;
  *
  * Responsabilidades:
  *
- * 1. Verificar la firma HMAC del request (`CONEKTA_WEBHOOK_SECRET`).
+ * 1. Verificar la firma RSA-SHA256 del request (`CONEKTA_WEBHOOK_PUBLIC_KEY`).
  * 2. Persistir el evento en `conekta_webhook_events` (idempotencia por
  *    `event_id`: si ya terminó, 200 deduplicated; si sigue en `received`
  *    hace poco, 200 in_progress; si quedó `received` demasiado tiempo,
@@ -684,6 +684,6 @@ function pickFirstHeader(
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    info: "Conekta webhook endpoint activo. Configura el secreto en CONEKTA_WEBHOOK_SECRET.",
+    info: "Conekta webhook endpoint activo. Configura la clave pública RSA en CONEKTA_WEBHOOK_PUBLIC_KEY.",
   });
 }
