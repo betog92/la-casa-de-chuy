@@ -369,21 +369,34 @@ export default function ReservationDetailsPage() {
         { method: "POST" },
       );
       const data = await res.json();
-      if (!data.success) {
-        setRetryRefundError(data.error || "Error al reintentar el reembolso");
+      if (!res.ok || !data.success) {
+        setRetryRefundError(
+          data.error || `Error del servidor (${res.status})`,
+        );
         return;
       }
       const processed = Number(data.processed ?? 0);
       const pending = Number(data.pending ?? 0);
       const failed = Number(data.failed ?? 0);
       const reset = Number(data.reset ?? 0);
-      if (reset === 0) {
+      const forced = Number(data.forced ?? 0);
+      // Si reabrimos algo pero al procesar ya no quedaba nada pending
+      // (cron/webhook se adelantó), el servidor manda un `message`
+      // explicativo. Lo preferimos sobre el armado por contadores.
+      const noOpReset =
+        reset > 0 && forced === 0 && processed === 0 && pending === 0 && failed === 0;
+      if (noOpReset && typeof data.message === "string" && data.message) {
+        setRetryRefundMessage(data.message);
+      } else if (reset === 0 && forced === 0) {
         setRetryRefundMessage(
-          "No había reembolsos en estado fallido para reintentar.",
+          "No había reembolsos en estado fallido o pendiente para reintentar.",
         );
       } else {
+        const acciones: string[] = [];
+        if (reset > 0) acciones.push(`${reset} reabierto(s)`);
+        if (forced > 0) acciones.push(`${forced} forzado(s)`);
         setRetryRefundMessage(
-          `Reintento ejecutado: ${processed} procesado(s), ${pending} pendiente(s), ${failed} fallido(s).`,
+          `${acciones.join(", ")}. Resultado: ${processed} procesado(s), ${pending} pendiente(s), ${failed} fallido(s).`,
         );
       }
       setReservation((prev) =>
@@ -1402,36 +1415,40 @@ export default function ReservationDetailsPage() {
                     </div>
                   </div>
                 )}
-                {isAdmin && reservation.refund_status === "failed" && (
-                  <div className="mt-4 pt-3 border-t border-red-200 space-y-2">
-                    <p className="text-xs text-red-800">
-                      <strong>Acción de administrador:</strong> reabre los
-                      intentos de reembolso a Conekta y los procesa
-                      inmediatamente. Útil tras corregir credenciales, fondos o
-                      el cargo en el dashboard de Conekta.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleRetryRefund}
-                      disabled={retryingRefund}
-                      className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {retryingRefund
-                        ? "Reintentando…"
-                        : "Reintentar reembolso"}
-                    </button>
-                    {retryRefundMessage && (
+                {isAdmin &&
+                  (reservation.refund_status === "failed" ||
+                    reservation.refund_status === "pending") && (
+                    <div className="mt-4 pt-3 border-t border-red-200 space-y-2">
                       <p className="text-xs text-red-800">
-                        {retryRefundMessage}
+                        <strong>Acción de administrador:</strong>{" "}
+                        {reservation.refund_status === "failed"
+                          ? "reabre los intentos de reembolso a Conekta y los procesa inmediatamente. Útil tras corregir credenciales, fondos o el cargo en el dashboard de Conekta."
+                          : "fuerza el procesamiento ahora del reembolso pendiente, sin esperar al siguiente intento programado. Útil cuando la fila quedó esperando un backoff y quieres feedback inmediato."}
                       </p>
-                    )}
-                    {retryRefundError && (
-                      <p className="text-xs font-medium text-red-900">
-                        {retryRefundError}
-                      </p>
-                    )}
-                  </div>
-                )}
+                      <button
+                        type="button"
+                        onClick={handleRetryRefund}
+                        disabled={retryingRefund}
+                        className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {retryingRefund
+                          ? "Procesando…"
+                          : reservation.refund_status === "failed"
+                            ? "Reintentar reembolso"
+                            : "Procesar reembolso ahora"}
+                      </button>
+                      {retryRefundMessage && (
+                        <p className="text-xs text-red-800">
+                          {retryRefundMessage}
+                        </p>
+                      )}
+                      {retryRefundError && (
+                        <p className="text-xs font-medium text-red-900">
+                          {retryRefundError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 {reservation.cancelled_by && (
                   <p className="mt-3 text-sm text-red-800 font-semibold pt-2 border-t border-red-200">
                     Cancelado por:{" "}
