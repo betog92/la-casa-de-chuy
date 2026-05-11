@@ -169,6 +169,24 @@ function AdminReservacionesPageInner() {
   const [pickerDate, setPickerDate] = useState<Date | null>(null);
   const [pickerTime, setPickerTime] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+  // Espacios "reservado_alvero" (manual_available) del día.
+  // Solo se cargan cuando variant es `cita_alvero`. Al seleccionarlos,
+  // el slot YA está ocupado por ese row y la submit hará UPDATE en sitio
+  // (promoción) en lugar de INSERT.
+  interface AlveroReservedSlot {
+    id: number;
+    date: string;
+    start_time: string;
+    end_time: string;
+  }
+  const [alveroReservedSlots, setAlveroReservedSlots] = useState<
+    AlveroReservedSlot[]
+  >([]);
+  // Si la selección actual viene de un "Espacio reservado", aquí va su id.
+  // Si es null, es un slot libre normal (INSERT).
+  const [selectedReplacesId, setSelectedReplacesId] = useState<number | null>(
+    null,
+  );
   const [pickerPrice, setPickerPrice] = useState<number | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [closedDates, setClosedDates] = useState<Set<string>>(new Set());
@@ -176,6 +194,8 @@ function AdminReservacionesPageInner() {
   const [currentMonth, setCurrentMonth] = useState<Date | null>(null);
   const loadingMonthRef = useRef<Date | null>(null);
   const closedDatesLoadedRef = useRef(false);
+  /** Evita que una respuesta lenta de otra fecha/variant pise slots actuales. */
+  const availabilityRequestIdRef = useRef(0);
 
   const minDate = useMemo(() => getMonterreyDate(), []);
   const maxDate = useMemo(() => {
@@ -219,29 +239,80 @@ function AdminReservacionesPageInner() {
   }, [fetchReservations]);
 
   useEffect(() => {
+    if (!showNewModal) {
+      availabilityRequestIdRef.current += 1;
+      setSlotsLoading(false);
+      return;
+    }
     if (!pickerDate) {
+      availabilityRequestIdRef.current += 1;
       setAvailableSlots([]);
       setPickerPrice(null);
+      setAlveroReservedSlots([]);
       return;
     }
     const fetchAvailability = async () => {
+      const requestId = ++availabilityRequestIdRef.current;
       setSlotsLoading(true);
       try {
         const supabase = createClient();
-        const [slots, price] = await Promise.all([
+        const dateStr = format(pickerDate, "yyyy-MM-dd");
+        // Solo pedimos espacios reservados de Alvero cuando la variante
+        // es cita_alvero (es el único caso en que se pueden promover).
+        const reservedFetch =
+          newForm.variant === "cita_alvero"
+            ? axios.get(
+                `/api/admin/alvero-reserved-slots?date=${encodeURIComponent(dateStr)}`,
+              )
+            : Promise.resolve(null);
+        // allSettled: si falla un fetch (e.g. reservados), no perdemos los
+        // otros (slots libres, precio) que sí resolvieron.
+        const [slotsRes, priceRes, reservedSettled] = await Promise.allSettled([
           getAvailableSlots(supabase, pickerDate),
           calculatePriceWithCustom(supabase, pickerDate),
+          reservedFetch,
         ]);
-        setAvailableSlots(slots);
-        setPickerPrice(price);
-      } catch (err) {
-        console.error(err);
+        if (requestId !== availabilityRequestIdRef.current) return;
+        if (slotsRes.status === "fulfilled") {
+          setAvailableSlots(slotsRes.value);
+        } else {
+          console.error("Error cargando slots libres:", slotsRes.reason);
+          setAvailableSlots([]);
+        }
+        if (priceRes.status === "fulfilled") {
+          setPickerPrice(priceRes.value);
+        } else {
+          console.error("Error cargando precio:", priceRes.reason);
+          setPickerPrice(null);
+        }
+        if (
+          reservedSettled.status === "fulfilled" &&
+          reservedSettled.value &&
+          (reservedSettled.value as { data?: { success?: boolean; slots?: AlveroReservedSlot[] } })
+            .data?.success
+        ) {
+          setAlveroReservedSlots(
+            ((reservedSettled.value as { data: { slots?: AlveroReservedSlot[] } })
+              .data.slots ?? []) as AlveroReservedSlot[],
+          );
+        } else {
+          if (reservedSettled.status === "rejected") {
+            console.error("Error cargando reservados Alvero:", reservedSettled.reason);
+          }
+          setAlveroReservedSlots([]);
+        }
       } finally {
-        setSlotsLoading(false);
+        if (requestId === availabilityRequestIdRef.current) {
+          setSlotsLoading(false);
+        }
       }
     };
     fetchAvailability();
-  }, [pickerDate]);
+    // newForm.variant en deps: si el admin cambia variant mientras
+    // tiene pickerDate, refrescamos para mostrar/ocultar reservados.
+    // showNewModal: no pedir slots con el modal cerrado (ahorra RPC y
+    // evita dejar `slotsLoading` colgado si se cierra a mitad de carga).
+  }, [showNewModal, pickerDate, newForm.variant]);
 
   const timeAvailabilityMap = useMemo(() => {
     if (!pickerDate || availableSlots.length === 0) return new Map<string, boolean>();
@@ -266,11 +337,40 @@ function AdminReservacionesPageInner() {
 
   useEffect(() => {
     if (!pickerTime) return;
+    // Si la selección viene de un "Espacio reservado" (promoción),
+    // validamos contra `alveroReservedSlots`; no debe limpiarse aunque
+    // no esté en `timeAvailabilityMap` (que solo contiene slots libres).
+    if (selectedReplacesId !== null) {
+      const stillExists = alveroReservedSlots.some(
+        (s) =>
+          s.id === selectedReplacesId &&
+          s.start_time.slice(0, 5) === pickerTime,
+      );
+      if (!stillExists) {
+        setPickerTime(null);
+        setSelectedReplacesId(null);
+        setNewForm((f) => ({ ...f, startTime: "" }));
+      }
+      return;
+    }
     if (!timeAvailabilityMap.get(pickerTime)) {
       setPickerTime(null);
       setNewForm((f) => ({ ...f, startTime: "" }));
     }
-  }, [timeAvailabilityMap, pickerTime]);
+  }, [
+    timeAvailabilityMap,
+    pickerTime,
+    selectedReplacesId,
+    alveroReservedSlots,
+  ]);
+
+  // Al cambiar variant o fecha, una selección previa de "promoción"
+  // deja de tener sentido (los ids cambian, o el variant ya no soporta
+  // promoción). Limpiamos para evitar enviar `replaces_reservation_id`
+  // con un valor obsoleto.
+  useEffect(() => {
+    setSelectedReplacesId(null);
+  }, [newForm.variant, pickerDate]);
 
   const isMonthLoadedForDate = useCallback(
     (date: Date) => currentMonth !== null && isSameMonth(currentMonth, startOfMonth(date)),
@@ -323,6 +423,8 @@ function AdminReservacionesPageInner() {
 
   const handleTimeSelect = useCallback((time: string) => {
     setPickerTime(time);
+    // Selección de slot libre: nunca es promoción, limpia el id.
+    setSelectedReplacesId(null);
     if (pickerDate && pickerPrice !== null) {
       setNewForm((f) => ({
         ...f,
@@ -332,6 +434,26 @@ function AdminReservacionesPageInner() {
       }));
     }
   }, [pickerDate, pickerPrice]);
+
+  // Selección de un "Espacio reservado para Alvero" → promoción en sitio.
+  // Solo aplica para variant `cita_alvero`. No tocamos `price`: el admin
+  // puede dejarlo en 0 o ingresarlo manualmente como en cualquier
+  // cita_alvero.
+  const handleReservedSlotSelect = useCallback(
+    (slot: AlveroReservedSlot) => {
+      const time = slot.start_time.slice(0, 5);
+      setPickerTime(time);
+      setSelectedReplacesId(slot.id);
+      if (pickerDate) {
+        setNewForm((f) => ({
+          ...f,
+          date: format(pickerDate, "yyyy-MM-dd"),
+          startTime: time,
+        }));
+      }
+    },
+    [pickerDate],
+  );
 
   const tileDisabled = useCallback(
     ({ date, view }: { date: Date; view: string }) => {
@@ -343,11 +465,17 @@ function AdminReservacionesPageInner() {
       const isMonthLoaded = isMonthLoadedForDate(date);
       const slots = monthAvailability.get(dateStr);
       // Misma regla para todas las variantes (incl. renta de vestidos): hoy sin cupos queda deshabilitado, etc.
+      // Excepción para `cita_alvero`: los días pueden tener 0 slots libres
+      // y sin embargo tener "espacios reservados para Alvero" promocionables.
+      // Permitimos seleccionarlos; el panel lateral mostrará los reservados
+      // o un mensaje claro si tampoco hay reservados.
+      const isCitaAlvero = newForm.variant === "cita_alvero";
       if (!isMonthLoaded && future && checkDate <= maxDate) return true;
       const hasNoSlots = isMonthLoaded && (slots === undefined || slots === 0);
-      return checkDate < today || checkDate > maxDate || closedDates.has(dateStr) || (hasNoSlots && future);
+      const blockNoSlots = hasNoSlots && future && !isCitaAlvero;
+      return checkDate < today || checkDate > maxDate || closedDates.has(dateStr) || blockNoSlots;
     },
-    [maxDate, closedDates, monthAvailability, isMonthLoadedForDate]
+    [maxDate, closedDates, monthAvailability, isMonthLoadedForDate, newForm.variant]
   );
 
   const tileClassName = useCallback(
@@ -364,7 +492,11 @@ function AdminReservacionesPageInner() {
       if (!isMonthLoaded && future) return "";
       const avail = slots ?? 0;
       if (isToday && avail === 0) return "";
-      if ((isClosed || avail === 0) && future && checkDate <= maxDate && !isToday) return "heatmap-closed-or-unavailable";
+      // Para cita_alvero, días con avail===0 pueden tener reservados
+      // promocionables, así que no los marcamos como "cerrados".
+      const isCitaAlvero = newForm.variant === "cita_alvero";
+      const markClosed = isClosed || (avail === 0 && !isCitaAlvero);
+      if (markClosed && future && checkDate <= maxDate && !isToday) return "heatmap-closed-or-unavailable";
       if (avail > 0) {
         const maxSlots = date.getDay() === 0 ? 7 : 11;
         const pct = (avail / maxSlots) * 100;
@@ -375,7 +507,7 @@ function AdminReservacionesPageInner() {
       }
       return "";
     },
-    [closedDates, monthAvailability, maxDate, isMonthLoadedForDate]
+    [closedDates, monthAvailability, maxDate, isMonthLoadedForDate, newForm.variant]
   );
 
   const openNewModal = () => {
@@ -398,6 +530,7 @@ function AdminReservacionesPageInner() {
     });
     setPickerDate(tomorrow);
     setPickerTime(null);
+    setSelectedReplacesId(null);
     setCreateError("");
     setShowNewModal(true);
   };
@@ -524,6 +657,11 @@ function AdminReservacionesPageInner() {
         if (email?.trim()) payload.email = email.trim();
         if (phone?.trim()) payload.phone = phone.trim();
         if (price > 0) payload.price = price;
+        // Promoción "en sitio" de un Espacio reservado para Alvero a
+        // cita_alvero (UPDATE del row existente, no INSERT nuevo).
+        if (selectedReplacesId !== null) {
+          payload.replaces_reservation_id = selectedReplacesId;
+        }
       }
       const res = await axios.post("/api/admin/reservations", payload);
       if (res.data.success && res.data.reservationId) {
@@ -782,22 +920,90 @@ function AdminReservacionesPageInner() {
                       const slotsForDay = getSlotsForDay(pickerDate);
                       const availableForDay = slotsForDay.filter((t) => isTimeAvailable(t));
                       const isAlvero = isAlveroVariant(newForm.variant);
+                      // Promoción: solo aplica a cita_alvero. Los slots
+                      // reservados ya están ocupados por un row
+                      // `manual_available` y elegirlos hará UPDATE en sitio.
+                      const reservedForDay =
+                        newForm.variant === "cita_alvero"
+                          ? alveroReservedSlots
+                          : [];
+                      const dateStr = format(pickerDate, "yyyy-MM-dd");
                       return (
                         <>
-                          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Horarios disponibles</h3>
+                          <h3 className="mb-2 text-sm font-semibold text-zinc-800">Horarios</h3>
                           <p className="mb-3 text-xs text-zinc-600">{format(pickerDate, "EEEE, d 'de' MMMM", { locale: es })}</p>
-                          {isAlvero && availableForDay.length > 0 && (
+                          {isAlvero && (availableForDay.length > 0 || reservedForDay.length > 0) && (
                             <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                               Las {newForm.variant === "cita_alvero" ? "citas" : "reservas"} Alvero ocupan <strong>2 bloques consecutivos</strong> (90 min). Solo se muestran horarios donde el siguiente bloque también está libre.
                             </p>
                           )}
-                          {availableForDay.length === 0 ? (
+
+                          {reservedForDay.length > 0 && (
+                            <div className="mb-4">
+                              <div className="mb-2 flex items-center gap-2">
+                                <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                                  Espacios reservados disponibles
+                                </h4>
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900 ring-1 ring-amber-200">
+                                  {reservedForDay.length}
+                                </span>
+                              </div>
+                              <p className="mb-2 text-xs text-amber-900">
+                                Bloques ya reservados para Alvero (sin cliente). Selecciónalos para asignarlos a esta cita.
+                              </p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {reservedForDay.map((slot) => {
+                                  const time = slot.start_time.slice(0, 5);
+                                  const endHHmm = addMinutesToTime(
+                                    time,
+                                    ALVERO_DURATION_MIN,
+                                  );
+                                  const isSelected =
+                                    selectedReplacesId === slot.id;
+                                  return (
+                                    <button
+                                      key={slot.id}
+                                      type="button"
+                                      onClick={() =>
+                                        handleReservedSlotSelect(slot)
+                                      }
+                                      className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-medium ${
+                                        isSelected
+                                          ? "border-amber-700 bg-amber-700 text-white"
+                                          : "border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-500 hover:bg-amber-100"
+                                      }`}
+                                    >
+                                      {formatTimeRange(time, endHHmm, dateStr)}
+                                      <span
+                                        className={`mt-0.5 block text-[10px] font-normal ${
+                                          isSelected
+                                            ? "text-amber-100"
+                                            : "text-amber-700"
+                                        }`}
+                                      >
+                                        Reservado #{slot.id}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {availableForDay.length > 0 && (
+                            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                              {reservedForDay.length > 0
+                                ? "Horarios libres"
+                                : "Horarios disponibles"}
+                            </h4>
+                          )}
+                          {availableForDay.length === 0 && reservedForDay.length === 0 ? (
                             <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
                               {isAlvero
                                 ? "No hay 2 bloques consecutivos disponibles este día. Elige otro día."
                                 : "No hay horarios disponibles este día."}
                             </p>
-                          ) : (
+                          ) : availableForDay.length === 0 ? null : (
                             <div className="grid grid-cols-2 gap-2">
                               {availableForDay.map((time) => {
                                 const durationMin = durationForVariant(newForm.variant);
@@ -805,19 +1011,22 @@ function AdminReservacionesPageInner() {
                                   durationMin === ALVERO_DURATION_MIN
                                     ? addMinutesToTime(time, ALVERO_DURATION_MIN)
                                     : undefined;
+                                const isSelected =
+                                  pickerTime === time &&
+                                  selectedReplacesId === null;
                                 return (
                                   <button
                                     key={time}
                                     type="button"
                                     onClick={() => handleTimeSelect(time)}
                                     className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-medium ${
-                                      pickerTime === time ? "border-[#103948] bg-[#103948] text-white" : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
+                                      isSelected ? "border-[#103948] bg-[#103948] text-white" : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
                                     }`}
                                   >
                                     {formatTimeRange(
                                       time,
                                       endHHmm,
-                                      format(pickerDate, "yyyy-MM-dd")
+                                      dateStr,
                                     )}
                                   </button>
                                 );

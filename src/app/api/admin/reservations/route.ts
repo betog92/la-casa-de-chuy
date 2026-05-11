@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
       payment_status: bodyPaymentStatus,
       sendEmail,
       order_number,
+      replaces_reservation_id: bodyReplacesId,
     } = body;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -166,6 +167,24 @@ export async function POST(request: NextRequest) {
     }
     if (!startTime || !/^\d{2}:\d{2}$/.test(startTime)) {
       return validationErrorResponse("Horario inválido (use HH:mm)");
+    }
+
+    // Promover un `reservado_alvero` existente a `cita_alvero` (en sitio,
+    // mismo id). Solo aplica para variant `cita_alvero`.
+    let replacesReservationId: number | null = null;
+    if (bodyReplacesId !== undefined && bodyReplacesId !== null) {
+      const parsed = Number(bodyReplacesId);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return validationErrorResponse(
+          "replaces_reservation_id inválido (debe ser un entero positivo)",
+        );
+      }
+      if (variant !== "cita_alvero") {
+        return validationErrorResponse(
+          "replaces_reservation_id solo aplica para variant 'cita_alvero'",
+        );
+      }
+      replacesReservationId = parsed;
     }
 
     let finalName: string;
@@ -239,19 +258,76 @@ export async function POST(request: NextRequest) {
 
     const startTimeNorm = startTime.includes(":00:00") ? startTime.slice(0, 5) : startTime;
     const durationMin = durationForVariant(variant);
-    const slotsCount = Math.max(1, Math.round(durationMin / DEFAULT_DURATION_MIN));
-    const isAvailable = await validateConsecutiveSlots(
-      supabase,
-      date,
-      startTimeNorm,
-      slotsCount,
-    );
-    if (!isAvailable) {
-      return conflictResponse(
-        isAlveroVariant(variant)
-          ? "Para una cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). Elige otro horario."
-          : "El horario seleccionado ya no está disponible. Elige otro slot.",
+
+    // Caso especial: promoción de `reservado_alvero` -> `cita_alvero`.
+    // El slot YA está ocupado por ese row; `validateConsecutiveSlots`
+    // daría false. Validamos por separado que el row existente sea
+    // promocionable y saltamos la validación de slots libres.
+    let originalCreatedByUserId: string | null = adminUser?.id ?? null;
+    if (replacesReservationId !== null) {
+      const { data: existingRow, error: existingErr } = await supabase
+        .from("reservations")
+        .select(
+          "id, date, start_time, end_time, status, source, import_type, created_by_user_id",
+        )
+        .eq("id", replacesReservationId)
+        .maybeSingle();
+
+      if (existingErr) {
+        console.error("[admin reservations] error leyendo replaces:", existingErr);
+        return errorResponse("Error al verificar el espacio reservado", 500);
+      }
+      if (!existingRow) {
+        return validationErrorResponse(
+          "El espacio reservado no existe (replaces_reservation_id)",
+        );
+      }
+      const r = existingRow as {
+        id: number;
+        date: string;
+        start_time: string;
+        end_time: string;
+        status: string;
+        source: string;
+        import_type: string | null;
+        created_by_user_id: string | null;
+      };
+      if (
+        r.source !== "admin" ||
+        r.import_type !== "manual_available" ||
+        r.status !== "confirmed"
+      ) {
+        return validationErrorResponse(
+          "Esta reserva no es un 'Espacio reservado para Alvero' promocionable",
+        );
+      }
+      // Defensa: cliente envió date/startTime; deben coincidir con el row.
+      const startTimeRow = String(r.start_time).slice(0, 5);
+      if (r.date !== date || startTimeRow !== startTimeNorm) {
+        return validationErrorResponse(
+          "Fecha u horario no coinciden con el espacio reservado",
+        );
+      }
+      // Conservamos el created_by_user_id original para auditoría
+      // (quién dejó el espacio reservado). El nuevo admin queda en
+      // un campo separado vía updated_at; el "promovido por" se puede
+      // inferir cruzando con logs o agregando un campo en el futuro.
+      originalCreatedByUserId = r.created_by_user_id;
+    } else {
+      const slotsCount = Math.max(1, Math.round(durationMin / DEFAULT_DURATION_MIN));
+      const isAvailable = await validateConsecutiveSlots(
+        supabase,
+        date,
+        startTimeNorm,
+        slotsCount,
       );
+      if (!isAvailable) {
+        return conflictResponse(
+          isAlveroVariant(variant)
+            ? "Para una cita Alvero se necesitan 2 bloques consecutivos disponibles (90 min). Elige otro horario."
+            : "El horario seleccionado ya no está disponible. Elige otro slot.",
+        );
+      }
     }
 
     const endTime = calculateEndTime(startTime, durationMin);
@@ -272,7 +348,7 @@ export async function POST(request: NextRequest) {
       payment_status: paymentStatus,
       status: "confirmed" as const,
       user_id: userId,
-      created_by_user_id: adminUser?.id ?? null,
+      created_by_user_id: originalCreatedByUserId,
       discount_amount: 0,
       last_minute_discount: 0,
       loyalty_discount: 0,
@@ -283,28 +359,70 @@ export async function POST(request: NextRequest) {
       discount_code_discount: 0,
     };
 
-    const { data, error } = await supabase
-      .from("reservations")
-      .insert(reservationData as never)
-      .select("id")
-      .single();
+    let reservationId: number;
 
-    if (error) {
-      console.error("Error al crear reserva manual:", error);
-      if (error.code === "23505" || error.message?.includes("UNIQUE")) {
-        return conflictResponse(
-          "El horario fue reservado por otro usuario. Elige otro slot."
+    if (replacesReservationId !== null) {
+      // UPDATE en sitio: el row existente cambia de 'manual_available'
+      // (espacio reservado) a 'manual_client' (cita Alvero asignada).
+      const { data: updatedRow, error: updateError } = await supabase
+        .from("reservations")
+        .update(reservationData as never)
+        .eq("id", replacesReservationId)
+        .eq("import_type", "manual_available")
+        .select("id")
+        .single();
+
+      if (updateError) {
+        // `.single()` con 0 filas (otro admin ya promovió, o el row cambió).
+        const code =
+          typeof updateError === "object" &&
+          updateError !== null &&
+          "code" in updateError
+            ? String((updateError as { code?: string }).code)
+            : "";
+        if (code === "PGRST116") {
+          return conflictResponse(
+            "El espacio reservado ya no estaba disponible para promoción (puede haberlo tomado otro admin).",
+          );
+        }
+        console.error("Error al promover reservado_alvero:", updateError);
+        return errorResponse(
+          updateError.message || "Error al promover el espacio reservado",
+          500,
         );
       }
-      return errorResponse(
-        error.message || "Error al crear la reserva",
-        500
-      );
-    }
+      const updatedId = (updatedRow as { id: number } | null)?.id;
+      if (updatedId == null || typeof updatedId !== "number") {
+        return conflictResponse(
+          "El espacio reservado ya no estaba disponible para promoción (puede haberlo tomado otro admin).",
+        );
+      }
+      reservationId = updatedId;
+    } else {
+      const { data, error } = await supabase
+        .from("reservations")
+        .insert(reservationData as never)
+        .select("id")
+        .single();
 
-    const reservationId = (data as { id: number } | null)?.id;
-    if (reservationId == null || typeof reservationId !== "number") {
-      return errorResponse("No se pudo obtener el ID de la reserva", 500);
+      if (error) {
+        console.error("Error al crear reserva manual:", error);
+        if (error.code === "23505" || error.message?.includes("UNIQUE")) {
+          return conflictResponse(
+            "El horario fue reservado por otro usuario. Elige otro slot."
+          );
+        }
+        return errorResponse(
+          error.message || "Error al crear la reserva",
+          500
+        );
+      }
+
+      const inserted = (data as { id: number } | null)?.id;
+      if (inserted == null || typeof inserted !== "number") {
+        return errorResponse("No se pudo obtener el ID de la reserva", 500);
+      }
+      reservationId = inserted;
     }
 
     if (shouldSendEmail && finalEmail && finalEmail !== PLACEHOLDER_EMAIL) {
