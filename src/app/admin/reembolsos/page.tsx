@@ -88,6 +88,29 @@ function formatRelative(iso: string | null): string {
   }
 }
 
+/**
+ * Devuelve el texto + bandera `overdue` para una fecha. Útil cuando
+ * representa un "próximo evento" pero la fecha ya pasó (admin debería
+ * leerlo como "atrasado", no como "hace X tiempo").
+ */
+function formatNextRetry(
+  iso: string | null,
+): { text: string; overdue: boolean } {
+  if (!iso) return { text: "—", overdue: false };
+  try {
+    const d = parseISO(iso);
+    if (Number.isNaN(d.getTime())) return { text: "—", overdue: false };
+    const overdue = d.getTime() < Date.now();
+    const relative = formatDistanceToNow(d, { addSuffix: !overdue, locale: es });
+    return {
+      text: overdue ? `atrasado ${relative}` : relative,
+      overdue,
+    };
+  } catch {
+    return { text: "—", overdue: false };
+  }
+}
+
 function formatAbsolute(iso: string | null): string {
   if (!iso) return "";
   try {
@@ -115,6 +138,14 @@ export default function AdminRefundsPage() {
   // Tracker para descartar respuestas obsoletas si el admin cambia filtros
   // antes de que el fetch previo responda.
   const requestIdRef = useRef(0);
+  // mountedRef: evita setState tras unmount en `handleRetry` (que no usa
+  // AbortSignal porque su fetchRefunds final no recibe uno).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -199,6 +230,7 @@ export default function AdminRefundsPage() {
       const res = await axios.post(
         `/api/admin/reservations/${row.reservation_id}/refund/retry`,
       );
+      if (!mountedRef.current) return;
       const data = res.data ?? {};
       if (!data.success) {
         setRowFeedback((prev) => ({
@@ -226,8 +258,9 @@ export default function AdminRefundsPage() {
         ...prev,
         [row.id]: { type: "ok", message: summary },
       }));
-      await fetchRefunds();
+      if (mountedRef.current) await fetchRefunds();
     } catch (err) {
+      if (!mountedRef.current) return;
       setRowFeedback((prev) => ({
         ...prev,
         [row.id]: {
@@ -238,7 +271,7 @@ export default function AdminRefundsPage() {
         },
       }));
     } finally {
-      setBusyRowId(null);
+      if (mountedRef.current) setBusyRowId(null);
     }
   };
 
@@ -270,24 +303,28 @@ export default function AdminRefundsPage() {
           <p className="mt-1 text-2xl font-bold text-amber-700">
             {totalsByStatus.pending}
           </p>
+          <p className="text-xs text-zinc-400">en vista actual</p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">Fallidos</p>
           <p className="mt-1 text-2xl font-bold text-red-600">
             {totalsByStatus.failed}
           </p>
+          <p className="text-xs text-zinc-400">en vista actual</p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">Procesados</p>
           <p className="mt-1 text-2xl font-bold text-emerald-700">
             {totalsByStatus.processed}
           </p>
+          <p className="text-xs text-zinc-400">en vista actual</p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">Cancelados</p>
           <p className="mt-1 text-2xl font-bold text-zinc-600">
             {totalsByStatus.cancelled}
           </p>
+          <p className="text-xs text-zinc-400">en vista actual</p>
         </div>
       </div>
 
@@ -464,17 +501,28 @@ export default function AdminRefundsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-zinc-700 sm:px-5">
-                        {row.status === "pending" ? (
-                          <>
-                            <div>{formatRelative(row.next_retry_at)}</div>
-                            <div
-                              className="text-xs text-zinc-500"
-                              title={formatAbsolute(row.next_retry_at)}
-                            >
-                              {formatAbsolute(row.next_retry_at)}
-                            </div>
-                          </>
-                        ) : row.status === "processed" && row.processed_at ? (
+                        {row.status === "pending" ? (() => {
+                          const next = formatNextRetry(row.next_retry_at);
+                          return (
+                            <>
+                              <div
+                                className={
+                                  next.overdue
+                                    ? "font-medium text-amber-700"
+                                    : ""
+                                }
+                              >
+                                {next.text}
+                              </div>
+                              <div
+                                className="text-xs text-zinc-500"
+                                title={formatAbsolute(row.next_retry_at)}
+                              >
+                                {formatAbsolute(row.next_retry_at)}
+                              </div>
+                            </>
+                          );
+                        })() : row.status === "processed" && row.processed_at ? (
                           <div className="text-zinc-500">
                             Procesado {formatRelative(row.processed_at)}
                           </div>
@@ -487,7 +535,7 @@ export default function AdminRefundsPage() {
                           <button
                             type="button"
                             onClick={() => void handleRetry(row)}
-                            disabled={busyRowId === row.id}
+                            disabled={busyRowId !== null}
                             className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {busyRowId === row.id
