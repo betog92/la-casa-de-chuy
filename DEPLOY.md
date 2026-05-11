@@ -259,10 +259,22 @@ Si Conekta falla (red, 5xx, etc.), las filas quedan en `pending` con
    `runRetryFailedRefundsCronStaleCheck` (misma lógica de 30 min / 24 h que el
    cron de huérfanos, correo `retry_refunds_cron_stale_heartbeat`).
 
-**Reintento manual (admin):** si una fila llegó a `failed` tras agotar
-intentos, un admin puede llamar
-`POST /api/admin/reservations/<id>/refund/retry` (sesión admin) para volver a
-`pending` y que el cron reintente.
+**Reintento manual (admin):** un admin puede llamar
+`POST /api/admin/reservations/<id>/refund/retry` (sesión admin) para forzar
+el procesamiento inmediato del reembolso. Cubre dos casos:
+
+- Filas en `failed` (agotaron intentos): se reabren a `pending` con
+  `attempts = 0` y `next_retry_at = now`.
+- Filas ya en `pending` (esperando backoff/cron): se empujan con
+  `attempts = 0` y `next_retry_at = now` para que el budget de intentos
+  automáticos no se consuma con los clicks del admin.
+
+En ambos casos las filas se procesan inline contra Conekta antes de
+responder. Si vuelven a fallar, el cron las recoge según el nuevo
+`next_retry_at`. El mismo endpoint está disponible desde el detalle de la
+reserva (`/reservaciones/[id]`) en una sesión admin: aparece como
+"Reintentar reembolso" si el estado es `failed` o "Procesar reembolso
+ahora" si está `pending`.
 
 ### 8. Testing en Producción
 

@@ -594,7 +594,7 @@ export async function sendAdminPaymentAlert(
         : params.type === "orphan_payment_no_snapshot"
         ? "Puede ser orden de prueba, API externa, o snapshot perdido. No implica que un reembolso automático haya fallado."
         : params.type === "cancellation_refund_failed"
-          ? "Revisa Conekta, la tabla reservation_refunds y /api/cron/retry-failed-refunds. Puedes usar POST /api/admin/reservations/[id]/refund/retry para reabrir reintentos."
+          ? "Revisa Conekta, la tabla reservation_refunds y /api/cron/retry-failed-refunds. Puedes usar POST /api/admin/reservations/[id]/refund/retry (o el botón en /reservaciones/[id]) para reabrir filas en failed o forzar el procesamiento de pending sin esperar al cron."
           : "Revisa el panel de Conekta y la base de datos para confirmar el estado.";
 
   const html = `
