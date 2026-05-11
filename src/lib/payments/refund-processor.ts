@@ -202,12 +202,16 @@ export async function processRefundRow(
       amountCents: refundCents,
       idempotencyKey: `cancel_${r.id}`,
     });
+    // `result.id` puede venir vacío si Conekta procesó el refund pero la
+    // respuesta no incluyó `refund.id` reconocible. Guardamos `null` y dejamos
+    // que el webhook `charge.refunded` haga el backfill.
+    const refundIdToStore = result.id?.trim() ? result.id : null;
     await supabase
       .from("reservation_refunds")
       .update({
         status: "processed",
         charge_id: chargeId,
-        refund_id: result.id,
+        refund_id: refundIdToStore,
         processed_at: now,
         last_error_message: null,
         last_error_at: null,

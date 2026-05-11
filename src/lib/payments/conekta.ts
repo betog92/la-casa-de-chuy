@@ -198,19 +198,40 @@ export interface RefundResult {
 }
 
 /**
- * Último `refund.id` asociado al cargo indicado en la orden devuelta por
- * `POST /orders/{id}/refunds` (Conekta agrega el refund al final de la lista).
+ * Extrae el `refund.id` correspondiente a la operación recién creada en la
+ * respuesta de `POST /orders/{id}/refunds`.
+ *
+ * Estrategia:
+ * 1. Busca el cargo por `c.id === chargeId`. Si no aparece, recorre todos los
+ *    cargos (defensivo ante diferencias de formato en el id).
+ * 2. Prefiere el refund cuyo `amount` sea `-expectedAmountCents` (Conekta los
+ *    guarda negativos). Esto es robusto cuando el cargo tiene más de un refund.
+ * 3. Si no hay match por monto, devuelve el último de la lista (orden
+ *    cronológico ascendente según docs).
  */
 function extractRefundIdFromOrderRefundResponse(
   order: ConektaOrder,
   chargeId: string,
+  expectedAmountCents: number,
 ): string | null {
   const charges = order.charges?.data ?? [];
-  const ch = charges.find((c) => c.id === chargeId);
-  const rows = ch?.refunds?.data ?? [];
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const id = rows[i]?.id;
-    if (typeof id === "string" && id.length > 0) return id;
+  const candidates = charges.filter((c) => c.id === chargeId);
+  const search = candidates.length > 0 ? candidates : charges;
+
+  const expectedNeg = -Math.abs(expectedAmountCents);
+  for (const ch of search) {
+    const rows = ch.refunds?.data ?? [];
+    const byAmount = rows.find(
+      (r) => typeof r.id === "string" && r.amount === expectedNeg,
+    );
+    if (byAmount?.id) return byAmount.id;
+  }
+  for (const ch of search) {
+    const rows = ch.refunds?.data ?? [];
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const id = rows[i]?.id;
+      if (typeof id === "string" && id.length > 0) return id;
+    }
   }
   return null;
 }
@@ -267,15 +288,25 @@ export async function refundConektaOrderCharge(
   const refundId = extractRefundIdFromOrderRefundResponse(
     res.data,
     input.chargeId,
+    amount,
   );
+
+  // No lanzamos: el POST fue 200, el reembolso ya está aplicado del lado de
+  // Conekta. Si no encontramos `refund.id` en la respuesta (caso imprevisto:
+  // cambios en payload, paginación, etc.) devolvemos `id: ""` y dejamos que
+  // el webhook `charge.refunded` haga el backfill vía
+  // `reconcileReservationRefundFromWebhook`. Throwing aquí provocaría un
+  // bucle de reintentos con el mismo `Idempotency-Key` (Conekta devuelve la
+  // misma respuesta cacheada y volveríamos a fallar la extracción).
   if (!refundId) {
-    throw new Error(
-      "refundConektaOrderCharge: respuesta sin refund_id en el cargo; revisar payload de Conekta.",
+    console.warn(
+      "[conekta] refundConektaOrderCharge: 200 sin refund_id reconocible; se devolverá id vacío para backfill por webhook.",
+      { orderId: input.orderId, chargeId: input.chargeId, amount },
     );
   }
 
   return {
-    id: refundId,
+    id: refundId ?? "",
     amount,
     status: res.data.payment_status || "unknown",
   };
