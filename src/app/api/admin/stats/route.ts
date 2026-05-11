@@ -7,7 +7,10 @@ import {
   forbiddenResponse,
 } from "@/utils/api-response";
 import { format, subDays } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { getMonterreyToday } from "@/utils/business-days";
+
+const MX_TZ = "America/Monterrey";
 
 /**
  * Obtiene estadísticas para el dashboard de admin.
@@ -88,11 +91,50 @@ export async function GET() {
         0
       ) ?? 0;
 
+    // "Canceladas hoy" como ACCIÓN del día (cuándo se canceló), no como
+    // "citas de hoy en status cancelled". Usamos `cancelled_at` filtrado
+    // en zona horaria de Monterrey: [hoy 00:00 MX, mañana 00:00 MX).
+    // `formatInTimeZone` con `XXX` produce ISO con offset, robusto ante
+    // futuros cambios de zona (Monterrey hoy no observa DST, pero no
+    // hardcodeamos `-06:00`).
+    const now = new Date();
+    const tomorrowMs = now.getTime() + 26 * 60 * 60 * 1000; // margen anti-DST
+    const startOfTodayMx = formatInTimeZone(
+      now,
+      MX_TZ,
+      "yyyy-MM-dd'T'00:00:00XXX",
+    );
+    const startOfTomorrowMx = formatInTimeZone(
+      new Date(tomorrowMs),
+      MX_TZ,
+      "yyyy-MM-dd'T'00:00:00XXX",
+    );
+
+    const { count: cancelledTodayCount, error: cancelledTodayErr } =
+      await supabase
+        .from("reservations")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "cancelled")
+        .not("cancelled_at", "is", null)
+        .gte("cancelled_at", startOfTodayMx)
+        .lt("cancelled_at", startOfTomorrowMx);
+
+    if (cancelledTodayErr) {
+      console.error("[admin stats cancelledToday]", cancelledTodayErr);
+      // No bloqueamos el dashboard por este contador: caemos al valor
+      // del RPC (citas de hoy canceladas) para no romper la página.
+    }
+
+    const cancelledReservationsToday =
+      typeof cancelledTodayCount === "number"
+        ? cancelledTodayCount
+        : (stats?.cancelled_reservations ?? 0);
+
     return successResponse({
       today: {
         totalReservations: stats?.total_reservations ?? 0,
         confirmedReservations: stats?.confirmed_reservations ?? 0,
-        cancelledReservations: stats?.cancelled_reservations ?? 0,
+        cancelledReservations: cancelledReservationsToday,
         completedReservations: stats?.completed_reservations ?? 0,
         revenue: Number(stats?.confirmed_revenue ?? 0),
       },
