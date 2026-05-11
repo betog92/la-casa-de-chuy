@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
@@ -68,6 +68,8 @@ const RANGE_OPTIONS: { value: RangePreset; label: string }[] = [
   { value: "all", label: "Histórico completo" },
 ];
 
+const FETCH_LIMIT = 100;
+
 const STATUS_FILTERS: { value: RefundStatus; label: string }[] = [
   { value: "pending", label: "Pendientes" },
   { value: "failed", label: "Fallidos" },
@@ -110,39 +112,69 @@ export default function AdminRefundsPage() {
   const [rowFeedback, setRowFeedback] = useState<
     Record<string, { type: "ok" | "error"; message: string }>
   >({});
+  // Tracker para descartar respuestas obsoletas si el admin cambia filtros
+  // antes de que el fetch previo responda.
+  const requestIdRef = useRef(0);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     params.set("status", activeStatuses.join(","));
     if (range === "all") params.set("all", "1");
     else params.set("days", range);
+    params.set("limit", String(FETCH_LIMIT));
     return params.toString();
   }, [range, activeStatuses]);
 
-  const fetchRefunds = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await axios.get(`/api/admin/refunds?${queryString}`);
-      if (!res.data?.success) {
-        setError(res.data?.error || "Error al cargar reembolsos");
-        return;
+  const fetchRefunds = useCallback(
+    async (signal?: AbortSignal) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await axios.get(`/api/admin/refunds?${queryString}`, {
+          signal,
+        });
+        if (reqId !== requestIdRef.current) return;
+        if (!res.data?.success) {
+          setError(res.data?.error || "Error al cargar reembolsos");
+          return;
+        }
+        const incoming = (res.data.refunds ?? []) as RefundRow[];
+        setRefunds(incoming);
+        // Limpia feedback de filas que ya no aparecen en el listado
+        // (acumular indefinidamente sería un leak en sesiones largas).
+        setRowFeedback((prev) => {
+          const visibleIds = new Set(incoming.map((r) => r.id));
+          let changed = false;
+          const next: typeof prev = {};
+          for (const [id, value] of Object.entries(prev)) {
+            if (visibleIds.has(id)) next[id] = value;
+            else changed = true;
+          }
+          return changed ? next : prev;
+        });
+      } catch (err) {
+        if (axios.isCancel(err) || (err as Error)?.name === "CanceledError") {
+          return;
+        }
+        if (reqId !== requestIdRef.current) return;
+        setError(
+          axios.isAxiosError(err)
+            ? (err.response?.data?.error as string) ||
+                "Error de conexión al cargar reembolsos"
+            : "Error inesperado al cargar reembolsos",
+        );
+      } finally {
+        if (reqId === requestIdRef.current) setLoading(false);
       }
-      setRefunds((res.data.refunds ?? []) as RefundRow[]);
-    } catch (err) {
-      setError(
-        axios.isAxiosError(err)
-          ? (err.response?.data?.error as string) ||
-              "Error de conexión al cargar reembolsos"
-          : "Error inesperado al cargar reembolsos",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [queryString]);
+    },
+    [queryString],
+  );
 
   useEffect(() => {
-    void fetchRefunds();
+    const controller = new AbortController();
+    void fetchRefunds(controller.signal);
+    return () => controller.abort();
   }, [fetchRefunds]);
 
   const toggleStatus = (status: RefundStatus) => {
@@ -325,6 +357,13 @@ export default function AdminRefundsPage() {
           </div>
         )}
 
+        {!loading && refunds.length >= FETCH_LIMIT && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 sm:px-5">
+            Se alcanzó el límite de {FETCH_LIMIT} resultados. Ajusta los
+            filtros (estado o rango) para ver el resto.
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           {loading && refunds.length === 0 ? (
             <div className="flex items-center justify-center py-16">
@@ -462,6 +501,8 @@ export default function AdminRefundsPage() {
                         )}
                         {feedback && (
                           <div
+                            role="status"
+                            aria-live="polite"
                             className={`mt-1 max-w-xs text-xs ${
                               feedback.type === "ok"
                                 ? "text-emerald-700"
