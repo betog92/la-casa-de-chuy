@@ -3,6 +3,7 @@ export const ADMIN_NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/calendario", label: "Calendario" },
   { href: "/admin/reservaciones", label: "Reservaciones" },
+  { href: "/admin/pagos-manuales", label: "Pagos manuales" },
   { href: "/admin/reembolsos", label: "Reembolsos" },
   { href: "/admin/clientes", label: "Clientes" },
   { href: "/admin/disponibilidad", label: "Disponibilidad" },

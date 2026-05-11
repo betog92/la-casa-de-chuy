@@ -57,10 +57,13 @@ export async function GET() {
 
     // Reservas recientes: por created_at; excluye null (en PG irían primero en DESC);
     // id DESC desempata misma marca de tiempo.
+    // Nota: la columna "Pago" del dashboard se eliminó porque para Conekta
+    // (mayoría) era ruido redundante con "Estado". El flujo de gestión de
+    // pagos manuales vive en /admin/pagos-manuales con su propio endpoint.
     const { data: recentReservations, error: recentErr } = await supabase
       .from("reservations")
       .select(
-        "id, date, start_time, name, email, price, status, payment_status, created_at",
+        "id, date, start_time, name, email, price, status, created_at",
       )
       .not("created_at", "is", null)
       .order("created_at", { ascending: false })
@@ -130,6 +133,29 @@ export async function GET() {
         ? cancelledTodayCount
         : (stats?.cancelled_reservations ?? 0);
 
+    // Pagos manuales pendientes (global). Mismas reglas que
+    // /api/admin/manual-payments: solo reservas creadas desde el panel,
+    // no importadas y no canceladas (validar pagos de citas canceladas
+    // no aplica). Sirve para la tarjeta-atajo del dashboard y no
+    // condiciona el resto de la respuesta si falla.
+    const { count: pendingManualPaymentsCount, error: pendingManualErr } =
+      await supabase
+        .from("reservations")
+        .select("id", { count: "exact", head: true })
+        .eq("source", "admin")
+        .is("import_type", null)
+        .neq("status", "cancelled")
+        .eq("payment_status", "pending");
+
+    if (pendingManualErr) {
+      console.error("[admin stats pendingManualPayments]", pendingManualErr);
+    }
+
+    const pendingManualPayments =
+      typeof pendingManualPaymentsCount === "number"
+        ? pendingManualPaymentsCount
+        : 0;
+
     return successResponse({
       today: {
         totalReservations: stats?.total_reservations ?? 0,
@@ -139,6 +165,7 @@ export async function GET() {
         revenue: Number(stats?.confirmed_revenue ?? 0),
       },
       weekRevenue: weekTotal,
+      pendingManualPayments,
       recentReservations: recentReservations ?? [],
     });
   } catch (error) {

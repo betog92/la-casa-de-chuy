@@ -20,7 +20,6 @@ interface RecentReservation {
   email: string;
   price: number;
   status: string;
-  payment_status: string | null;
   created_at: string | null;
 }
 
@@ -33,6 +32,7 @@ interface Stats {
     revenue: number;
   };
   weekRevenue: number;
+  pendingManualPayments: number;
   recentReservations: RecentReservation[];
 }
 
@@ -49,19 +49,6 @@ function reservationStatusLabel(status: string): string {
   }
 }
 
-function paymentStatusLabel(p: string | null): string {
-  switch (p) {
-    case "paid":
-      return "Pagado";
-    case "pending":
-      return "Pendiente";
-    case "not_applicable":
-      return "N/A";
-    default:
-      return p ?? "—";
-  }
-}
-
 function reservationStatusPillClass(status: string): string {
   switch (status) {
     case "confirmed":
@@ -72,17 +59,6 @@ function reservationStatusPillClass(status: string): string {
       return "bg-red-50 text-red-800 ring-1 ring-red-200";
     default:
       return "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200";
-  }
-}
-
-function paymentPillClass(p: string | null): string {
-  switch (p) {
-    case "paid":
-      return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200";
-    case "pending":
-      return "bg-amber-50 text-amber-900 ring-1 ring-amber-200";
-    default:
-      return "bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200";
   }
 }
 
@@ -190,6 +166,53 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {(() => {
+        const pendingManual = s.pendingManualPayments ?? 0;
+        return (
+          <Link
+            href="/admin/pagos-manuales"
+            className={`flex items-center justify-between rounded-lg border p-5 shadow-sm transition-colors ${
+              pendingManual > 0
+                ? "border-amber-200 bg-amber-50 hover:bg-amber-100"
+                : "border-zinc-200 bg-white hover:bg-zinc-50"
+            }`}
+          >
+            <div>
+              <p
+                className={`text-sm font-medium ${
+                  pendingManual > 0 ? "text-amber-900" : "text-zinc-500"
+                }`}
+              >
+                Pagos manuales por validar
+              </p>
+              <p
+                className={`mt-1 text-2xl font-bold ${
+                  pendingManual > 0 ? "text-amber-700" : "text-emerald-700"
+                }`}
+              >
+                {pendingManual}
+              </p>
+              <p
+                className={`mt-0.5 text-xs ${
+                  pendingManual > 0 ? "text-amber-800" : "text-zinc-400"
+                }`}
+              >
+                {pendingManual > 0
+                  ? "Hay cobros manuales esperando validación."
+                  : "Sin pagos manuales pendientes."}
+              </p>
+            </div>
+            <span
+              className={`text-sm font-medium ${
+                pendingManual > 0 ? "text-amber-900" : "text-[#103948]"
+              }`}
+            >
+              Ver lista →
+            </span>
+          </Link>
+        );
+      })()}
+
       <div className="rounded-lg border border-zinc-200 bg-white shadow-sm">
         <div className="flex flex-col gap-1 border-b border-zinc-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
@@ -223,7 +246,6 @@ export default function AdminDashboardPage() {
                   <th className="px-4 py-3 sm:px-5">Cita</th>
                   <th className="px-4 py-3 text-right sm:px-5">Total</th>
                   <th className="px-4 py-3 sm:px-5">Estado</th>
-                  <th className="px-4 py-3 sm:px-5">Pago</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -282,13 +304,6 @@ export default function AdminDashboardPage() {
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${reservationStatusPillClass(r.status)}`}
                         >
                           {reservationStatusLabel(r.status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 sm:px-5">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${paymentPillClass(r.payment_status)}`}
-                        >
-                          {paymentStatusLabel(r.payment_status)}
                         </span>
                       </td>
                     </tr>
