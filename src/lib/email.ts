@@ -478,7 +478,9 @@ export type AdminPaymentAlertType =
   | "orphan_payment_no_snapshot"
   | "orphan_cron_stale_heartbeat"
   | "dashboard_refund_received"
-  | "chargeback_received";
+  | "chargeback_received"
+  | "cancellation_refund_failed"
+  | "retry_refunds_cron_stale_heartbeat";
 
 export interface AdminPaymentAlertParams {
   type: AdminPaymentAlertType;
@@ -501,6 +503,10 @@ const ALERT_TITLE_BY_TYPE: Record<AdminPaymentAlertType, string> = {
     "Cron de huérfanos sin señal de vida — revisa cron-job.org / Vercel",
   dashboard_refund_received: "Reembolso registrado desde dashboard de Conekta",
   chargeback_received: "Chargeback recibido — acción urgente requerida",
+  cancellation_refund_failed:
+    "Cancelación: reembolso Conekta agotó reintentos — acción manual requerida",
+  retry_refunds_cron_stale_heartbeat:
+    "Cron de reintentos de reembolsos (cancelaciones) sin señal de vida",
 };
 
 /**
@@ -533,13 +539,17 @@ export async function sendAdminPaymentAlert(
   const isUrgent =
     params.type === "chargeback_received" ||
     params.type === "orphan_payment_refund_failed" ||
-    params.type === "orphan_cron_stale_heartbeat";
+    params.type === "orphan_cron_stale_heartbeat" ||
+    params.type === "cancellation_refund_failed" ||
+    params.type === "retry_refunds_cron_stale_heartbeat";
   const subject = `${isUrgent ? "[URGENTE] " : "[Conekta] "}${title}`;
 
   const rows: Array<[string, string]> = [
     ["Tipo de evento", params.type],
   ];
   if (params.type === "orphan_cron_stale_heartbeat") {
+    rows.push(["Job", params.paymentId]);
+  } else if (params.type === "retry_refunds_cron_stale_heartbeat") {
     rows.push(["Job", params.paymentId]);
   } else {
     rows.push(["Order ID (Conekta)", params.paymentId]);
@@ -568,16 +578,24 @@ export async function sendAdminPaymentAlert(
   const subtitle =
     params.type === "orphan_cron_stale_heartbeat"
       ? "Monitor automático del cron de reembolso de pagos huérfanos."
-      : params.type === "orphan_payment_no_snapshot"
+      : params.type === "retry_refunds_cron_stale_heartbeat"
+        ? "Monitor automático del cron de reintentos de reembolsos por cancelación."
+        : params.type === "orphan_payment_no_snapshot"
         ? "Conekta notificó order.paid pero no hay fila en pending_reservations ni reserva con ese order_id."
-        : "Evento detectado en el sistema de pagos de Conekta.";
+        : params.type === "cancellation_refund_failed"
+          ? "Una fila de reservation_refunds no pudo reembolsarse tras varios reintentos automáticos."
+          : "Evento detectado en el sistema de pagos de Conekta.";
 
   const footerHint =
     params.type === "orphan_cron_stale_heartbeat"
       ? "Revisa cron-job.org, Vercel (logs de /api/cron/refund-orphan-payments) y la tabla cron_job_heartbeats en Supabase."
-      : params.type === "orphan_payment_no_snapshot"
+      : params.type === "retry_refunds_cron_stale_heartbeat"
+        ? "Revisa cron-job.org, Vercel (logs de /api/cron/retry-failed-refunds) y la tabla cron_job_heartbeats en Supabase."
+        : params.type === "orphan_payment_no_snapshot"
         ? "Puede ser orden de prueba, API externa, o snapshot perdido. No implica que un reembolso automático haya fallado."
-        : "Revisa el panel de Conekta y la base de datos para confirmar el estado.";
+        : params.type === "cancellation_refund_failed"
+          ? "Revisa Conekta, la tabla reservation_refunds y /api/cron/retry-failed-refunds. Puedes usar POST /api/admin/reservations/[id]/refund/retry para reabrir reintentos."
+          : "Revisa el panel de Conekta y la base de datos para confirmar el estado.";
 
   const html = `
 <!DOCTYPE html>

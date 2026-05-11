@@ -228,6 +228,62 @@ export interface Database {
           additional_payment_method?: string | null;
         };
       };
+      reservation_refunds: {
+        Row: {
+          id: string;
+          reservation_id: number;
+          payment_id: string;
+          charge_id: string | null;
+          charge_kind: "initial" | "additional";
+          amount_mxn: number;
+          status: "pending" | "processed" | "failed" | "cancelled";
+          refund_id: string | null;
+          attempts: number;
+          last_error_message: string | null;
+          last_error_at: string | null;
+          next_retry_at: string;
+          processed_at: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          reservation_id: number;
+          payment_id: string;
+          charge_id?: string | null;
+          charge_kind: "initial" | "additional";
+          amount_mxn: number;
+          status?: "pending" | "processed" | "failed" | "cancelled";
+          refund_id?: string | null;
+          attempts?: number;
+          last_error_message?: string | null;
+          last_error_at?: string | null;
+          next_retry_at?: string;
+          processed_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          reservation_id?: number;
+          payment_id?: string;
+          charge_id?: string | null;
+          charge_kind?: "initial" | "additional";
+          amount_mxn?: number;
+          status?: "pending" | "processed" | "failed" | "cancelled";
+          refund_id?: string | null;
+          attempts?: number;
+          last_error_message?: string | null;
+          last_error_at?: string | null;
+          next_retry_at?: string;
+          processed_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       availability: {
         Row: {
           id: string;
@@ -761,6 +817,7 @@ export interface Database {
         };
       };
     };
+    Views: Record<string, never>;
     Functions: {
       get_available_slots: {
         Args: {
@@ -798,6 +855,16 @@ export interface Database {
           caption: string | null;
           created_at: string;
         };
+      };
+      reservation_refund_record_failure: {
+        Args: {
+          p_row_id: string;
+          p_message: string;
+          p_now: string;
+          p_next_retry: string;
+          p_max_attempts: number;
+        };
+        Returns: Json;
       };
     };
   };

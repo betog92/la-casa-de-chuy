@@ -54,16 +54,61 @@ export function getTotalConektaPaid(
   return initial + fromHistory;
 }
 
-/**
- * Genera un ID dummy para reembolsos (temporal hasta integrar con Conekta)
- * Formato: refund_dummy_[timestamp]_[random]
- * @returns ID dummy único
- */
-export function generateDummyRefundId(): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 9);
-  return `refund_dummy_${timestamp}_${random}`;
+/** Cada fila corresponde a una orden Conekta (`payment_id`) a reembolsar. */
+export type RefundPlanChargeKind = "initial" | "additional";
+
+export interface RefundPlanItem {
+  paymentId: string;
+  kind: RefundPlanChargeKind;
+  /** Monto a devolver al cliente (80% de lo pagado en ese cargo). */
+  amountMxn: number;
+  /** Lo pagado en ese cargo antes de aplicar el 80%. */
+  paidMxn: number;
 }
 
-
+/**
+ * Construye el plan de reembolsos por cancelación: hasta dos órdenes Conekta
+ * (pago inicial y pago adicional de reagendo). Debe alinearse con
+ * `getTotalConektaPaid` cuando sólo existen esas dos órdenes.
+ */
+export function buildRefundPlan(args: {
+  payment_method: string | null;
+  payment_id: string | null;
+  original_price: number | null;
+  price: number;
+  additional_payment_id: string | null;
+  additional_payment_amount: number | null;
+  additional_payment_method: string | null;
+}): RefundPlanItem[] {
+  const out: RefundPlanItem[] = [];
+  const originalPrice = args.original_price ?? args.price ?? 0;
+  const pid = (args.payment_id || "").trim();
+  if ((args.payment_method ?? "").toLowerCase() === "conekta" && pid) {
+    const paid = Number(originalPrice);
+    if (Number.isFinite(paid) && paid > 0) {
+      out.push({
+        paymentId: pid,
+        kind: "initial",
+        amountMxn: calculateRefundAmount(paid),
+        paidMxn: paid,
+      });
+    }
+  }
+  const addId = (args.additional_payment_id || "").trim();
+  const addAmt = Number(args.additional_payment_amount ?? 0);
+  if (
+    (args.additional_payment_method ?? "").toLowerCase() === "conekta" &&
+    addId &&
+    Number.isFinite(addAmt) &&
+    addAmt > 0
+  ) {
+    out.push({
+      paymentId: addId,
+      kind: "additional",
+      amountMxn: calculateRefundAmount(addAmt),
+      paidMxn: addAmt,
+    });
+  }
+  return out;
+}
 

@@ -226,6 +226,22 @@ export function findPaidCharge(order: ConektaOrder): ConektaCharge | null {
 }
 
 /**
+ * Primer cargo al que aún se le puede solicitar reembolso (pago completo o
+ * parcial). Tras un reembolso parcial Conekta puede dejar el cargo en
+ * `partially_refunded` en lugar de `paid`.
+ */
+export function findChargeEligibleForRefund(
+  order: ConektaOrder,
+): ConektaCharge | null {
+  const charges = order.charges?.data ?? [];
+  for (const c of charges) {
+    const s = (c.status || "").toLowerCase();
+    if (s === "paid" || s === "partially_refunded") return c;
+  }
+  return null;
+}
+
+/**
  * Detecta si un error de `refundConektaCharge` proviene de Conekta avisando
  * que el cargo ya estaba reembolsado (race con cron, dashboard manual, o
  * reintento de finalize tras un fallo previo). Devuelve `true` en ese caso
@@ -493,4 +509,29 @@ export function extractWebhookIds(event: ConektaWebhookEvent): {
   }
 
   return { paymentId, chargeId };
+}
+
+/**
+ * En `charge.refunded`, `data.object` es el **cargo**: `id` es `chg_...`.
+ * El recurso de reembolso en la API tiene otro id (`ref_...`) y suele
+ * listarse en `refunds.data` (el último suele corresponder al reembolso
+ * que disparó el evento). Preferimos `ref_` para alinear con lo que
+ * devuelve `refundConektaCharge` y con `reservation_refunds.refund_id`.
+ * Si el payload no trae `refunds`, se usa el id del cargo como antes.
+ */
+export function extractRefundIdFromChargeRefundedPayload(
+  obj: Record<string, unknown> | undefined,
+): string | null {
+  if (!obj || typeof obj !== "object") return null;
+  const refunds = obj.refunds as { data?: unknown[] } | undefined;
+  const rows = Array.isArray(refunds?.data) ? refunds.data : [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row && typeof row === "object") {
+      const id = (row as { id?: unknown }).id;
+      if (typeof id === "string" && id.length > 0) return id;
+    }
+  }
+  const chargeId = obj.id;
+  return typeof chargeId === "string" && chargeId.length > 0 ? chargeId : null;
 }

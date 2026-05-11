@@ -4,11 +4,17 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   verifyConektaWebhookSignature,
   extractWebhookIds,
+  extractRefundIdFromChargeRefundedPayload,
   type ConektaWebhookEvent,
 } from "@/lib/payments/conekta";
 import { finalizeReservationFromPayload } from "@/lib/payments/finalize-reservation";
+import {
+  reconcileReservationRefundFromWebhook,
+  recomputeReservationRefundStatus,
+} from "@/lib/payments/refund-processor";
 import { sendAdminPaymentAlert } from "@/lib/email";
 import { runRefundCronStaleCheck } from "@/lib/cron/refund-orphan-heartbeat";
+import { runRetryFailedRefundsCronStaleCheck } from "@/lib/cron/retry-failed-refunds-heartbeat";
 
 type ServiceSupabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -36,17 +42,20 @@ export const maxDuration = 120;
  *    - `order.paid` / `charge.created` / `charge.paid`: si la reserva no
  *      existe aún (cliente cerró pestaña), recuperar el snapshot de
  *      `pending_reservations` y crear la reserva vía helper compartido.
- *    - `charge.refunded`: actualizar `reservations.refund_status='processed'`
- *      y notificar al admin si el refund fue iniciado fuera del flujo.
+ *    - `charge.refunded`: reconciliar `reservation_refunds` (cancelaciones) y
+ *      `recomputeReservationRefundStatus`; si no hay filas en esa tabla,
+ *      actualizar `reservations` como antes (legacy). Notificar al admin si el
+ *      refund fue iniciado fuera del flujo.
  *    - `charge.chargeback.*`: notificar al admin urgente.
  *    - `order.expired` / `order.canceled`: marcar pending como `failed`.
  *
  * 4. Marcar el evento como `processed` / `ignored` / `failed`.
  *
  * 5. Tras completar el dispatch (cualquier status), programar comprobación de
- *    heartbeat del cron de huérfanos (`runRefundCronStaleCheck` vía `after()`
- *    de Next.js): el objetivo es vigilar que el cron externo siga vivo, no
- *    el éxito del evento puntual.
+ *    heartbeats de crons externos (`runRefundCronStaleCheck` y
+ *    `runRetryFailedRefundsCronStaleCheck` vía `after()` de Next.js): el
+ *    objetivo es vigilar que los schedulers sigan vivos, no el éxito del
+ *    evento puntual.
  *
  * IMPORTANTE: el body se lee como string raw para que la firma se calcule
  * sobre los mismos bytes que envió Conekta. No volver a serializar el JSON.
@@ -214,6 +223,12 @@ export async function POST(request: NextRequest) {
     after(() => {
       void runRefundCronStaleCheck(supabase).catch((err) => {
         console.error("[cron-heartbeat] runRefundCronStaleCheck falló:", err);
+      });
+      void runRetryFailedRefundsCronStaleCheck(supabase).catch((err) => {
+        console.error(
+          "[cron-heartbeat] runRetryFailedRefundsCronStaleCheck falló:",
+          err,
+        );
       });
     });
     // 200 aunque `status==='failed'`: el evento ya quedó en BD como failed;
@@ -481,15 +496,75 @@ async function handleChargeRefunded(
   const refundAmountMxn =
     typeof obj.amount === "number" ? Math.round(obj.amount) / 100 : null;
 
+  // El payload de `charge.refunded` suele incluir `refunds.data[]` con el
+  // recurso de reembolso (`ref_...`). Lo extraemos una vez para reusar
+  // tanto en la rama nueva (reconcile) como en la legacy (sin filas en
+  // reservation_refunds). Si Conekta no lo manda, cae a `chg_...` (= obj.id).
+  const refundIdFromPayload = extractRefundIdFromChargeRefundedPayload(
+    obj as Record<string, unknown>,
+  );
+
   if (reservation) {
     const reservationRow = reservation.row;
     const isAdditional = reservation.column === "additional_payment_id";
-    // Si la reserva ya tenía `refund_status='pending'` (cancelación iniciada
-    // por el cliente o admin desde nuestra UI), tampoco es "dashboard refund".
     const previouslyPending = reservationRow.refund_status === "pending";
+
+    const { count: rrCount, error: rrCountError } = await supabase
+      .from("reservation_refunds")
+      .select("id", { count: "exact", head: true })
+      .eq("reservation_id", reservationRow.id);
+
+    if (rrCountError) {
+      console.error(
+        "[conekta-webhook] charge.refunded: error contando reservation_refunds:",
+        rrCountError,
+      );
+    }
+
+    const hasReservationRefunds = (rrCount ?? 0) > 0;
+
+    if (hasReservationRefunds) {
+      const matchedOurRefund = await reconcileReservationRefundFromWebhook(
+        supabase,
+        {
+          reservationId: reservationRow.id,
+          chargeId,
+          orderId,
+          refundId: refundIdFromPayload,
+        },
+      );
+      await recomputeReservationRefundStatus(supabase, reservationRow.id);
+
+      // Si el webhook coincide con una fila nuestra de reservation_refunds,
+      // este refund fue iniciado por nosotros (cron o cancelación inline).
+      // Aunque `refund_status` ya esté `processed` (cancel inline rápido),
+      // NO debemos alertar como si fuera externo.
+      if (matchedOurRefund || initiatedInternally || previouslyPending) {
+        return {
+          status: "processed",
+          reason: "refund confirmado (cancelación / interno; sin alerta)",
+        };
+      }
+      // Reserva tiene filas de cancelación pero el cargo refundado no
+      // coincide con ninguna: alguien hizo un refund manual sobre otro
+      // cargo de esta reserva (raro). Alertar.
+      await sendAdminPaymentAlert({
+        type: "dashboard_refund_received",
+        paymentId: orderId ?? chargeId ?? "(desconocido)",
+        chargeId,
+        customerEmail: reservationRow.email ?? null,
+        reservationId: reservationRow.id,
+        amountMxn: refundAmountMxn,
+        notes: isAdditional
+          ? "Reembolso del pago adicional de reagendamiento (no coincide con reservation_refunds; revisar)."
+          : "Reembolso del pago inicial de reserva (no coincide con reservation_refunds; revisar).",
+      });
+      return { status: "processed", reason: "refund mapeado a reserva" };
+    }
+
     const updateFields: Record<string, unknown> = {
       refund_status: "processed",
-      refund_id: chargeId,
+      refund_id: refundIdFromPayload,
     };
     if (refundAmountMxn !== null) {
       updateFields.refund_amount = refundAmountMxn;

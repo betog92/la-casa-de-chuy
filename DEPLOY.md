@@ -234,6 +234,36 @@ del scheduler (por ejemplo cada 30 min), revisa que `ORPHAN_TIMEOUT_MIN` en
 `src/app/api/cron/refund-orphan-payments/route.ts` siga siendo coherente con
 cuánto quieres esperar antes de reembolsar automáticamente.
 
+### 7.ter Cron de reintentos de reembolsos por cancelación (`retry-failed-refunds`)
+
+Tras una cancelación, los reembolsos parciales a Conekta se guardan en
+`reservation_refunds` (migración `sql/47-migration-reservation-refunds.sql`).
+Si Conekta falla (red, 5xx, etc.), las filas quedan en `pending` con
+`next_retry_at` y un cron las reintenta con backoff.
+
+1. Aplica en Supabase las migraciones **47**, **48** y **49** en ese orden:
+   - `47` crea la tabla `reservation_refunds`.
+   - `48` inserta la fila de heartbeat `retry-failed-refunds` en
+     `cron_job_heartbeats` (idempotente).
+   - `49` crea la RPC `reservation_refund_record_failure` (incremento
+     atómico de `attempts`). Si falta, el código cae a un fallback no
+     atómico que registra advertencias.
+2. En **cron-job.org**, crea un **segundo** job (además del de huérfanos):
+   - **URL:** `https://<tu-dominio-prod>/api/cron/retry-failed-refunds`
+   - **Método:** POST
+   - **Cabecera:** `Authorization` = `Bearer <CRON_SECRET>` (el mismo
+     `CRON_SECRET` que el otro cron)
+   - **Programación:** cada ~5 minutos
+3. Tras cada corrida exitosa, el endpoint actualiza el heartbeat
+   `retry-failed-refunds`. Los webhooks de Conekta disparan también
+   `runRetryFailedRefundsCronStaleCheck` (misma lógica de 30 min / 24 h que el
+   cron de huérfanos, correo `retry_refunds_cron_stale_heartbeat`).
+
+**Reintento manual (admin):** si una fila llegó a `failed` tras agotar
+intentos, un admin puede llamar
+`POST /api/admin/reservations/<id>/refund/retry` (sesión admin) para volver a
+`pending` y que el cron reintente.
+
 ### 8. Testing en Producción
 
 Prueba las siguientes funcionalidades:

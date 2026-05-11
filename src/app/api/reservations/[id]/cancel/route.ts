@@ -8,9 +8,9 @@ import {
   getMonterreyToday,
 } from "@/utils/business-days";
 import {
+  buildRefundPlan,
   calculateRefundAmount,
   getTotalConektaPaid,
-  generateDummyRefundId,
 } from "@/utils/refunds";
 import {
   successResponse,
@@ -19,10 +19,29 @@ import {
   validationErrorResponse,
   notFoundResponse,
 } from "@/utils/api-response";
-import { sendCancellationConfirmation } from "@/lib/email";
+import {
+  sendCancellationConfirmation,
+  sendAdminPaymentAlert,
+} from "@/lib/email";
 import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
 import { requireAdmin } from "@/lib/auth/admin";
 import type { Database } from "@/types/database.types";
+import {
+  processRefundRow,
+  recomputeReservationRefundStatus,
+  type ReservationRefundRow,
+} from "@/lib/payments/refund-processor";
+
+/** Sin cache: estado de reserva y Conekta cambian en cada POST. */
+export const dynamic = "force-dynamic";
+/**
+ * Hasta 2 filas `processRefundRow` en paralelo; cada una puede hacer hasta
+ * ~2 llamadas HTTP a Conekta con timeout 30s → ~60s de peor caso por fila,
+ * pero en paralelo el techo práctico es ~60s + margen DB/email. 120s evita
+ * cortes si Conekta va lento. El techo efectivo lo impone el plan de Vercel
+ * (p. ej. Fluid Compute en Hobby permite hasta 300s según documentación).
+ */
+export const maxDuration = 120;
 
 export async function POST(
   request: NextRequest,
@@ -72,7 +91,7 @@ export async function POST(
     const { data: reservation, error: fetchError } = await supabase
       .from("reservations")
       .select(
-        "id, user_id, status, date, start_time, price, original_price, payment_method, additional_payment_amount, email, name"
+        "id, user_id, status, date, start_time, price, original_price, payment_method, payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, email, name"
       )
       .eq("id", reservationId)
       .single();
@@ -90,7 +109,10 @@ export async function POST(
       price: number;
       original_price: number;
       payment_method: string | null;
+      payment_id: string | null;
+      additional_payment_id: string | null;
       additional_payment_amount: number | null;
+      additional_payment_method: string | null;
       email: string | null;
       name: string | null;
     };
@@ -161,7 +183,7 @@ export async function POST(
       );
     }
 
-    // Reembolso solo por lo pagado con Conekta (reservación inicial + adicionales por tarjeta)
+    // Reembolso solo por lo pagado con Conekta (órdenes conocidas en la reserva)
     const originalPrice =
       reservationRow.original_price ?? reservationRow.price ?? 0;
     const totalConektaPaid = getTotalConektaPaid(
@@ -169,30 +191,149 @@ export async function POST(
       originalPrice,
       historyList
     );
-    const refundAmount = calculateRefundAmount(totalConektaPaid);
+    const refundPlan = buildRefundPlan({
+      payment_method: reservationRow.payment_method,
+      payment_id: reservationRow.payment_id,
+      original_price: reservationRow.original_price,
+      price: reservationRow.price,
+      additional_payment_id: reservationRow.additional_payment_id,
+      additional_payment_amount: reservationRow.additional_payment_amount,
+      additional_payment_method: reservationRow.additional_payment_method,
+    });
 
-    // TODO: Integrar con Conekta API para procesar el reembolso real
-    // Por ahora, generar un refund_id dummy
-    const dummyRefundId = generateDummyRefundId();
+    const refundAmountFromPlan = refundPlan.reduce(
+      (sum, item) => sum + item.amountMxn,
+      0,
+    );
+    /** Monto mostrado al cliente (email/UI): plan por órdenes, o 80% del total Conekta si no hay órdenes. */
+    const refundAmountForClient =
+      refundPlan.length > 0
+        ? refundAmountFromPlan
+        : calculateRefundAmount(totalConektaPaid);
 
-    // Actualizar la reserva (guardar quién canceló si fue admin)
-    const { error: updateError } = await supabase
+    /** Pagos Conekta detectados en negocio pero sin órdenes en DB → no se puede reembolsar automáticamente. */
+    const corruptConektaData =
+      totalConektaPaid > 0 && refundPlan.length === 0;
+
+    const initialRefundStatus = corruptConektaData
+      ? ("failed" as const)
+      : refundPlan.length > 0
+        ? ("pending" as const)
+        : ("processed" as const);
+
+    const cancelledAt = new Date().toISOString();
+
+    const { data: updatedReservation, error: updateError } = await supabase
       .from("reservations")
       .update({
         status: "cancelled",
-        refund_amount: refundAmount,
-        refund_status: "pending",
-        refund_id: dummyRefundId,
-        cancelled_at: new Date().toISOString(),
+        refund_amount: refundAmountForClient,
+        refund_status: initialRefundStatus,
+        refund_id: null,
+        cancelled_at: cancelledAt,
         ...(isAdmin && user && { cancelled_by_user_id: user.id }),
       } as never)
-      .eq("id", reservationId);
+      .eq("id", reservationId)
+      .eq("status", "confirmed")
+      .select("id");
 
     if (updateError) {
       console.error("Error cancelling reservation:", updateError);
       return errorResponse("Error al cancelar la reserva", 500);
     }
+    if (!updatedReservation?.length) {
+      return errorResponse(
+        "La reserva ya no estaba confirmada (posible doble solicitud).",
+        409,
+      );
+    }
 
+    let insertedRefundRows: ReservationRefundRow[] = [];
+    if (refundPlan.length > 0) {
+      const nextRetryAt = new Date(Date.now() + 30_000).toISOString();
+      const inserts = refundPlan.map((p) => ({
+        reservation_id: reservationId,
+        payment_id: p.paymentId,
+        charge_kind: p.kind,
+        amount_mxn: p.amountMxn,
+        status: "pending" as const,
+        next_retry_at: nextRetryAt,
+      }));
+      const { data: rrData, error: rrInsertError } = await supabase
+        .from("reservation_refunds")
+        .insert(inserts as never)
+        .select("*");
+      if (rrInsertError || !rrData) {
+        console.error(
+          "Error insertando reservation_refunds:",
+          rrInsertError,
+        );
+        const { error: revertErr } = await supabase
+          .from("reservations")
+          .update({
+            status: "confirmed",
+            refund_amount: null,
+            refund_status: null,
+            refund_id: null,
+            cancelled_at: null,
+            cancelled_by_user_id: null,
+          } as never)
+          .eq("id", reservationId)
+          .eq("status", "cancelled");
+        if (revertErr) {
+          console.error(
+            "[cancel] CRÍTICO: no se pudieron insertar refunds y falló revertir reserva:",
+            revertErr,
+          );
+        }
+        return errorResponse("Error al registrar reembolsos", 500);
+      }
+      insertedRefundRows = rrData as ReservationRefundRow[];
+    }
+
+    if (corruptConektaData) {
+      void sendAdminPaymentAlert({
+        type: "cancellation_refund_failed",
+        paymentId:
+          reservationRow.payment_id ||
+          reservationRow.additional_payment_id ||
+          "unknown",
+        chargeId: null,
+        reservationId,
+        notes: `Datos Conekta inconsistentes: total pagado Conekta estimado ${totalConektaPaid} pero sin órdenes en reservation_refunds (plan vacío). La reserva quedó cancelada con refund_status failed.`,
+      });
+    }
+
+    await Promise.all(
+      insertedRefundRows.map(async (rr) => {
+        try {
+          await processRefundRow(supabase, rr);
+        } catch (err) {
+          console.error(
+            "[cancel] processRefundRow excepción (se reintentará vía cron):",
+            {
+              reservationId,
+              refundRowId: rr.id,
+              paymentId: rr.payment_id,
+              err,
+            },
+          );
+        }
+      }),
+    );
+    if (insertedRefundRows.length > 0) {
+      await recomputeReservationRefundStatus(supabase, reservationId);
+    }
+
+    const { data: refundSnapshot } = await supabase
+      .from("reservations")
+      .select("refund_status, refund_id")
+      .eq("id", reservationId)
+      .maybeSingle();
+    const refundSnap = refundSnapshot as {
+      refund_status: string | null;
+      refund_id: string | null;
+    } | null;
     // Revocar puntos y créditos asociados a esta reserva (en paralelo)
     const revokeTimestamp = new Date().toISOString();
 
@@ -281,13 +422,16 @@ export async function POST(
     const name = (reservationRow.name || "Cliente").trim();
     const startTime = reservationRow.start_time || "00:00";
 
-    if (to) {
+    // Si los datos están corruptos (Conekta pagó pero sin órdenes en DB), NO
+    // enviamos el email automático con monto de reembolso: sería engañoso.
+    // El admin ya recibió la alerta y procesará el caso manualmente.
+    if (to && !corruptConektaData) {
       sendCancellationConfirmation({
         to,
         name,
         date: reservationRow.date || "",
         startTime,
-        refundAmount,
+        refundAmount: refundAmountForClient,
         reservationId,
         manageUrl,
       })
@@ -315,9 +459,9 @@ export async function POST(
 
     return successResponse({
       message: "Reserva cancelada exitosamente",
-      refund_amount: refundAmount,
-      refund_id: dummyRefundId,
-      refund_status: "pending",
+      refund_amount: refundAmountForClient,
+      refund_id: refundSnap?.refund_id ?? null,
+      refund_status: refundSnap?.refund_status ?? initialRefundStatus,
       cancelled_by,
     });
   } catch (error: unknown) {

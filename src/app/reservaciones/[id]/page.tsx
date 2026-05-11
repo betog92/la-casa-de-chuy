@@ -69,6 +69,11 @@ export default function ReservationDetailsPage() {
     startTime: string;
     additionalAmount: number;
   } | null>(null);
+  const [retryingRefund, setRetryingRefund] = useState(false);
+  const [retryRefundMessage, setRetryRefundMessage] = useState<string | null>(
+    null,
+  );
+  const [retryRefundError, setRetryRefundError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const previousReservationIdRef = useRef<string | null>(null);
 
@@ -127,6 +132,8 @@ export default function ReservationDetailsPage() {
   useEffect(() => {
     setSaveDetailSuccess(false);
     setEditDetailError(null);
+    setRetryRefundMessage(null);
+    setRetryRefundError(null);
   }, [reservation?.id]);
 
   // Ocultar mensaje "Detalles guardados" tras unos segundos
@@ -348,6 +355,53 @@ export default function ReservationDetailsPage() {
       // NO cerrar el modal cuando hay error
     } finally {
       setRescheduling(false);
+    }
+  };
+
+  const handleRetryRefund = async () => {
+    if (!reservation) return;
+    setRetryingRefund(true);
+    setRetryRefundMessage(null);
+    setRetryRefundError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/reservations/${reservation.id}/refund/retry`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!data.success) {
+        setRetryRefundError(data.error || "Error al reintentar el reembolso");
+        return;
+      }
+      const processed = Number(data.processed ?? 0);
+      const pending = Number(data.pending ?? 0);
+      const failed = Number(data.failed ?? 0);
+      const reset = Number(data.reset ?? 0);
+      if (reset === 0) {
+        setRetryRefundMessage(
+          "No había reembolsos en estado fallido para reintentar.",
+        );
+      } else {
+        setRetryRefundMessage(
+          `Reintento ejecutado: ${processed} procesado(s), ${pending} pendiente(s), ${failed} fallido(s).`,
+        );
+      }
+      setReservation((prev) =>
+        prev
+          ? {
+              ...prev,
+              refund_status:
+                (data.refund_status as Reservation["refund_status"]) ??
+                prev.refund_status,
+              refund_id: data.refund_id ?? prev.refund_id ?? null,
+            }
+          : prev,
+      );
+    } catch (err) {
+      console.error("Error retrying refund:", err);
+      setRetryRefundError("Error de conexión al reintentar el reembolso");
+    } finally {
+      setRetryingRefund(false);
     }
   };
 
@@ -1297,34 +1351,25 @@ export default function ReservationDetailsPage() {
                             </span>
                           </div>
                         )}
-                        {(reservation.refund_status ||
-                          reservation.refund_id?.startsWith("refund_dummy_")) && (
+                        {reservation.refund_status && (
                           <div className="flex items-center gap-2">
                             <span className="text-red-700 font-medium text-sm">
                               Estado del reembolso:
                             </span>
                             <span
                               className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full ${
-                                reservation.refund_id?.startsWith(
-                                  "refund_dummy_"
-                                )
+                                reservation.refund_status === "processed"
                                   ? "bg-green-100 text-green-800"
-                                  : reservation.refund_status === "processed"
-                                    ? "bg-green-100 text-green-800"
-                                    : reservation.refund_status === "failed"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-amber-100 text-amber-800"
+                                  : reservation.refund_status === "failed"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-amber-100 text-amber-800"
                               }`}
                             >
-                              {reservation.refund_id?.startsWith(
-                                "refund_dummy_"
-                              )
+                              {reservation.refund_status === "processed"
                                 ? "Procesado"
-                                : reservation.refund_status === "processed"
-                                  ? "Procesado"
-                                  : reservation.refund_status === "failed"
-                                    ? "Fallido"
-                                    : "Pendiente"}
+                                : reservation.refund_status === "failed"
+                                  ? "Fallido"
+                                  : "Pendiente"}
                             </span>
                           </div>
                         )}
@@ -1334,17 +1379,57 @@ export default function ReservationDetailsPage() {
                       <p className="text-xs text-red-700">
                         <strong>Información sobre el reembolso:</strong>
                       </p>
-                      <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
-                        <li>
-                          El reembolso se procesará en un plazo de 5-7 días
-                          hábiles.
-                        </li>
-                        <li>
-                          El monto se reembolsará al método de pago original
-                          utilizado para la reserva.
-                        </li>
-                      </ul>
+                      {reservation.refund_status === "failed" ? (
+                        <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
+                          <li>
+                            El reembolso automático no pudo completarse. El
+                            equipo de soporte te contactará para resolverlo
+                            manualmente.
+                          </li>
+                        </ul>
+                      ) : (
+                        <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
+                          <li>
+                            El reembolso se procesará en un plazo de 5-7 días
+                            hábiles.
+                          </li>
+                          <li>
+                            El monto se reembolsará al método de pago original
+                            utilizado para la reserva.
+                          </li>
+                        </ul>
+                      )}
                     </div>
+                  </div>
+                )}
+                {isAdmin && reservation.refund_status === "failed" && (
+                  <div className="mt-4 pt-3 border-t border-red-200 space-y-2">
+                    <p className="text-xs text-red-800">
+                      <strong>Acción de administrador:</strong> reabre los
+                      intentos de reembolso a Conekta y los procesa
+                      inmediatamente. Útil tras corregir credenciales, fondos o
+                      el cargo en el dashboard de Conekta.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleRetryRefund}
+                      disabled={retryingRefund}
+                      className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {retryingRefund
+                        ? "Reintentando…"
+                        : "Reintentar reembolso"}
+                    </button>
+                    {retryRefundMessage && (
+                      <p className="text-xs text-red-800">
+                        {retryRefundMessage}
+                      </p>
+                    )}
+                    {retryRefundError && (
+                      <p className="text-xs font-medium text-red-900">
+                        {retryRefundError}
+                      </p>
+                    )}
                   </div>
                 )}
                 {reservation.cancelled_by && (

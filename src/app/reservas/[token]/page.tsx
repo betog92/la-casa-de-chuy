@@ -780,34 +780,25 @@ export default function GuestReservationPage() {
                             </span>
                           </div>
                         )}
-                        {(reservation.refund_status ||
-                          reservation.refund_id?.startsWith("refund_dummy_")) && (
+                        {reservation.refund_status && (
                           <div className="flex items-center gap-2">
                             <span className="text-red-700 font-medium text-sm">
                               Estado del reembolso:
                             </span>
                             <span
                               className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full ${
-                                reservation.refund_id?.startsWith(
-                                  "refund_dummy_"
-                                )
+                                reservation.refund_status === "processed"
                                   ? "bg-green-100 text-green-800"
-                                  : reservation.refund_status === "processed"
-                                    ? "bg-green-100 text-green-800"
-                                    : reservation.refund_status === "failed"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-amber-100 text-amber-800"
+                                  : reservation.refund_status === "failed"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-amber-100 text-amber-800"
                               }`}
                             >
-                              {reservation.refund_id?.startsWith(
-                                "refund_dummy_"
-                              )
+                              {reservation.refund_status === "processed"
                                 ? "Procesado"
-                                : reservation.refund_status === "processed"
-                                  ? "Procesado"
-                                  : reservation.refund_status === "failed"
-                                    ? "Fallido"
-                                    : "Pendiente"}
+                                : reservation.refund_status === "failed"
+                                  ? "Fallido"
+                                  : "Pendiente"}
                             </span>
                           </div>
                         )}
@@ -817,16 +808,26 @@ export default function GuestReservationPage() {
                       <p className="text-xs text-red-700 font-medium mb-1">
                         <strong>Información sobre el reembolso:</strong>
                       </p>
-                      <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
-                        <li>
-                          El reembolso se procesará en un plazo de 5-7 días
-                          hábiles.
-                        </li>
-                        <li>
-                          El monto se reembolsará al método de pago original
-                          utilizado para la reserva.
-                        </li>
-                      </ul>
+                      {reservation.refund_status === "failed" ? (
+                        <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
+                          <li>
+                            El reembolso automático no pudo completarse. El
+                            equipo de soporte te contactará para resolverlo
+                            manualmente.
+                          </li>
+                        </ul>
+                      ) : (
+                        <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
+                          <li>
+                            El reembolso se procesará en un plazo de 5-7 días
+                            hábiles.
+                          </li>
+                          <li>
+                            El monto se reembolsará al método de pago original
+                            utilizado para la reserva.
+                          </li>
+                        </ul>
+                      )}
                     </div>
                   </div>
                 )}
