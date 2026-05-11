@@ -425,14 +425,18 @@ function AdminReservacionesPageInner() {
     setPickerTime(time);
     // Selección de slot libre: nunca es promoción, limpia el id.
     setSelectedReplacesId(null);
-    if (pickerDate && pickerPrice !== null) {
-      setNewForm((f) => ({
-        ...f,
-        date: format(pickerDate, "yyyy-MM-dd"),
-        startTime: time,
-        price: pickerPrice,
-      }));
-    }
+    if (!pickerDate) return;
+    // Siempre actualizamos date + startTime al clicar un horario (si no,
+    // el submit falla con "Selecciona fecha y horario"). El precio
+    // calculado solo aplica a variant `cliente`; si falló el fetch de
+    // precio (pickerPrice null) o no es `cliente`, no tocamos `price`.
+    setNewForm((f) => ({
+      ...f,
+      date: format(pickerDate, "yyyy-MM-dd"),
+      startTime: time,
+      price:
+        pickerPrice !== null && f.variant === "cliente" ? pickerPrice : f.price,
+    }));
   }, [pickerDate, pickerPrice]);
 
   // Selección de un "Espacio reservado para Alvero" → promoción en sitio.
