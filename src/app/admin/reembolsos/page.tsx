@@ -139,9 +139,14 @@ export default function AdminRefundsPage() {
   // antes de que el fetch previo responda.
   const requestIdRef = useRef(0);
   // mountedRef: evita setState tras unmount en `handleRetry` (que no usa
-  // AbortSignal porque su fetchRefunds final no recibe uno).
+  // AbortSignal porque su fetchRefunds final no recibe uno). Reseteamos
+  // a `true` en el setup además del init de useRef porque React Strict
+  // Mode en desarrollo monta-desmonta-monta cada componente, dejando
+  // `mountedRef.current = false` tras el primer cleanup y haciendo que
+  // todos los clicks subsiguientes parecieran inertes.
   const mountedRef = useRef(true);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -165,7 +170,7 @@ export default function AdminRefundsPage() {
         const res = await axios.get(`/api/admin/refunds?${queryString}`, {
           signal,
         });
-        if (reqId !== requestIdRef.current) return;
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
         if (!res.data?.success) {
           setError(res.data?.error || "Error al cargar reembolsos");
           return;
@@ -188,7 +193,7 @@ export default function AdminRefundsPage() {
         if (axios.isCancel(err) || (err as Error)?.name === "CanceledError") {
           return;
         }
-        if (reqId !== requestIdRef.current) return;
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
         setError(
           axios.isAxiosError(err)
             ? (err.response?.data?.error as string) ||
@@ -196,7 +201,9 @@ export default function AdminRefundsPage() {
             : "Error inesperado al cargar reembolsos",
         );
       } finally {
-        if (reqId === requestIdRef.current) setLoading(false);
+        if (mountedRef.current && reqId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
     [queryString],
