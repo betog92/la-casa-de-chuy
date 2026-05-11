@@ -7,7 +7,7 @@ import {
   formatConektaError,
   getConektaOrder,
   isAlreadyRefundedError,
-  refundConektaCharge,
+  refundConektaOrderCharge,
   toCents,
 } from "@/lib/payments/conekta";
 
@@ -196,11 +196,12 @@ export async function processRefundRow(
   }
 
   try {
-    const result = await refundConektaCharge(
+    const result = await refundConektaOrderCharge({
+      orderId: r.payment_id,
       chargeId,
-      refundCents,
-      `cancel_${r.id}`,
-    );
+      amountCents: refundCents,
+      idempotencyKey: `cancel_${r.id}`,
+    });
     await supabase
       .from("reservation_refunds")
       .update({

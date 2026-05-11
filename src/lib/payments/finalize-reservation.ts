@@ -16,7 +16,7 @@ import { computeAuthoritativeReservationPrice } from "@/lib/payments/pricing-ser
 import {
   getConektaOrder,
   findPaidCharge,
-  refundConektaCharge,
+  refundConektaOrderCharge,
   isAlreadyRefundedError,
   toCents,
 } from "@/lib/payments/conekta";
@@ -806,7 +806,12 @@ export async function safeRefundOrder(
     const order = await getConektaOrder(paymentId);
     charge = findPaidCharge(order);
     if (!charge) return true;
-    await refundConektaCharge(charge.id, charge.amount, `refund_${charge.id}`);
+    await refundConektaOrderCharge({
+      orderId: paymentId,
+      chargeId: charge.id,
+      amountCents: charge.amount,
+      idempotencyKey: `refund_${charge.id}`,
+    });
   } catch (err) {
     if (isAlreadyRefundedError(err)) {
       console.warn(

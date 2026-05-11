@@ -59,6 +59,8 @@ export interface ConektaCharge {
   failure_message?: string | null;
   failure_code?: string | null;
   payment_method?: { type?: string; brand?: string };
+  /** Presente en respuestas de reembolso; `amount` del refund suele ser negativo (centavos). */
+  refunds?: { data?: Array<{ id?: string; amount?: number; object?: string }> };
 }
 
 export interface ConektaOrder {
@@ -187,36 +189,96 @@ export async function getConektaOrder(orderId: string): Promise<ConektaOrder> {
 }
 
 export interface RefundResult {
+  /** Id del objeto `refund` en Conekta (`ref_...` o hex sin prefijo, según versión). */
   id: string;
+  /** Monto reembolsado en centavos (positivo). */
   amount: number;
+  /** `payment_status` de la orden tras el reembolso (p. ej. `partially_refunded`). */
   status: string;
 }
 
 /**
- * Solicita un reembolso parcial o total sobre un cargo específico.
- * `amountCents` debe coincidir con la moneda original (centavos).
+ * Último `refund.id` asociado al cargo indicado en la orden devuelta por
+ * `POST /orders/{id}/refunds` (Conekta agrega el refund al final de la lista).
  */
-export async function refundConektaCharge(
+function extractRefundIdFromOrderRefundResponse(
+  order: ConektaOrder,
   chargeId: string,
-  amountCents: number,
-  idempotencyKey?: string,
+): string | null {
+  const charges = order.charges?.data ?? [];
+  const ch = charges.find((c) => c.id === chargeId);
+  const rows = ch?.refunds?.data ?? [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const id = rows[i]?.id;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return null;
+}
+
+export type RefundConektaOrderChargeInput = {
+  /** Id de la orden Conekta (`ord_...`), igual que `payment_id` en BD. */
+  orderId: string;
+  /** Id del cargo a reembolsar (requerido para parcial y recomendado siempre). */
+  chargeId: string;
+  /** Monto en centavos (entero). Debe ser ≤ saldo reembolsable del cargo. */
+  amountCents: number;
+  idempotencyKey?: string;
+};
+
+/**
+ * Reembolso parcial o total vía API v2 de Conekta.
+ *
+ * **Importante:** en v2 el reembolso se hace con
+ * `POST /orders/{order_id}/refunds`, no con `/charges/.../refunds` (esa
+ * ruta no existe y devuelve 404).
+ *
+ * Para **reembolso parcial**, la documentación exige `charge_id` y opcional
+ * `amount` (centavos). Sin `charge_id`, un `amount` menor al total de la
+ * orden puede aplicarse mal o exigir `charge_id` en órdenes con varios cargos.
+ *
+ * @see https://developers.conekta.com/docs/reembolsar-orden
+ */
+export async function refundConektaOrderCharge(
+  input: RefundConektaOrderChargeInput,
 ): Promise<RefundResult> {
-  // Defensa: Conekta exige un entero en centavos. Cualquier float sería 422.
-  const amount = Math.round(Number(amountCents));
+  const amount = Math.round(Number(input.amountCents));
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error(
-      `refundConektaCharge: amountCents inválido (${amountCents})`,
+      `refundConektaOrderCharge: amountCents inválido (${input.amountCents})`,
     );
   }
-  if (!chargeId) {
-    throw new Error("refundConektaCharge: chargeId vacío");
+  if (!input.orderId?.trim()) {
+    throw new Error("refundConektaOrderCharge: orderId vacío");
   }
-  const res = await axios.post<RefundResult>(
-    `${CONEKTA_API_URL}/charges/${encodeURIComponent(chargeId)}/refunds`,
-    { amount, reason: "requested_by_client" },
-    buildRequestConfig(idempotencyKey),
+  if (!input.chargeId?.trim()) {
+    throw new Error("refundConektaOrderCharge: chargeId vacío");
+  }
+
+  const res = await axios.post<ConektaOrder>(
+    `${CONEKTA_API_URL}/orders/${encodeURIComponent(input.orderId)}/refunds`,
+    {
+      reason: "requested_by_client",
+      charge_id: input.chargeId,
+      amount,
+    },
+    buildRequestConfig(input.idempotencyKey),
   );
-  return res.data;
+
+  const refundId = extractRefundIdFromOrderRefundResponse(
+    res.data,
+    input.chargeId,
+  );
+  if (!refundId) {
+    throw new Error(
+      "refundConektaOrderCharge: respuesta sin refund_id en el cargo; revisar payload de Conekta.",
+    );
+  }
+
+  return {
+    id: refundId,
+    amount,
+    status: res.data.payment_status || "unknown",
+  };
 }
 
 /** Devuelve el primer charge con status `paid`, si existe. */
@@ -242,7 +304,7 @@ export function findChargeEligibleForRefund(
 }
 
 /**
- * Detecta si un error de `refundConektaCharge` proviene de Conekta avisando
+ * Detecta si un error de `refundConektaOrderCharge` proviene de Conekta avisando
  * que el cargo ya estaba reembolsado (race con cron, dashboard manual, o
  * reintento de finalize tras un fallo previo). Devuelve `true` en ese caso
  * para que el caller lo trate como éxito (idempotencia).
@@ -516,7 +578,7 @@ export function extractWebhookIds(event: ConektaWebhookEvent): {
  * El recurso de reembolso en la API tiene otro id (`ref_...`) y suele
  * listarse en `refunds.data` (el último suele corresponder al reembolso
  * que disparó el evento). Preferimos `ref_` para alinear con lo que
- * devuelve `refundConektaCharge` y con `reservation_refunds.refund_id`.
+ * devuelve `refundConektaOrderCharge` y con `reservation_refunds.refund_id`.
  * Si el payload no trae `refunds`, se usa el id del cargo como antes.
  */
 export function extractRefundIdFromChargeRefundedPayload(

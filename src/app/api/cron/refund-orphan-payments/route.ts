@@ -12,7 +12,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import {
   getConektaOrder,
   findPaidCharge,
-  refundConektaCharge,
+  refundConektaOrderCharge,
   isAlreadyRefundedError,
 } from "@/lib/payments/conekta";
 import { sendAdminPaymentAlert } from "@/lib/email";
@@ -313,7 +313,7 @@ async function processOne(
   // Trade-off residual: si finalize crea la reserva justo DESPUÉS del
   // recheck, reembolsaríamos a un cliente con reserva. Esto requiere que
   // finalize haya pasado todas las validaciones y empezado el INSERT
-  // exactamente en la ventana entre el recheck y el `refundConektaCharge`,
+  // exactamente en la ventana entre el recheck y el `refundConektaOrderCharge`,
   // con el pending en `refund_in_progress` (lo cual `finalize-reservation`
   // detecta en su check inicial y aborta con 409). Por eso, en la práctica,
   // la ventana es despreciable.
@@ -354,7 +354,12 @@ async function processOne(
   let refundOk = false;
   let alreadyRefunded = false;
   try {
-    await refundConektaCharge(charge.id, charge.amount, `refund_${charge.id}`);
+    await refundConektaOrderCharge({
+      orderId: paymentId,
+      chargeId: charge.id,
+      amountCents: charge.amount,
+      idempotencyKey: `refund_${charge.id}`,
+    });
     refundOk = true;
   } catch (err) {
     // Si el cargo ya está reembolsado en Conekta (lo iniciamos antes y la
