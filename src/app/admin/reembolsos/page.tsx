@@ -421,14 +421,14 @@ export default function AdminRefundsPage() {
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <th className="px-4 py-3 sm:px-5">Reserva</th>
-                  <th className="px-4 py-3 sm:px-5">Cliente</th>
-                  <th className="px-4 py-3 sm:px-5">Cita</th>
-                  <th className="px-4 py-3 text-right sm:px-5">Monto</th>
-                  <th className="px-4 py-3 sm:px-5">Estado</th>
-                  <th className="px-4 py-3 sm:px-5">Intentos</th>
-                  <th className="px-4 py-3 sm:px-5">Próximo intento</th>
-                  <th className="px-4 py-3 sm:px-5">Acción</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Reserva</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Cliente</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Cita</th>
+                  <th scope="col" className="px-4 py-3 text-right sm:px-5">Monto</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Estado</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Intentos</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Próximo intento</th>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -442,6 +442,7 @@ export default function AdminRefundsPage() {
                       <td className="px-4 py-3 sm:px-5">
                         <Link
                           href={`/reservaciones/${row.reservation_id}`}
+                          prefetch={false}
                           className="font-medium text-[#103948] hover:underline"
                         >
                           #{row.reservation_id}
