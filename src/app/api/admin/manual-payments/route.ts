@@ -23,9 +23,12 @@ import {
  *
  * Query params:
  *   - `status` (csv): 'pending' (default) o 'paid' o ambos.
- *   - `days` (int 1..365): ventana por `updated_at` (actividad reciente:
- *      registro o validación). Default 30. Alinea ordenamiento con el
- *      patrón de `/admin/reembolsos`.
+ *   - `days` (int 1..365): default 30. Ventana temporal:
+ *      - Solo **pending**: no filtra por fecha (lista alineada con dashboard).
+ *      - Solo **paid** o **pending+paid**: filas `paid` con
+ *        `payment_validated_at` dentro de la ventana (igual que `paidInWindow`);
+ *        en mezcla, los `pending` entran todos vía `or(...)`.
+ *      - Orden mezclado (ambos estados): `updated_at` DESC.
  *   - `all` (1/true): ignora `days`.
  *   - `limit` (int 1..200): default 100.
  *
@@ -59,7 +62,11 @@ export async function GET(request: NextRequest) {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => allowedStatuses.has(s));
-  const effectiveStatuses = statuses.length > 0 ? statuses : ["pending"];
+  // Orden estable y sin duplicados (p. ej. status=pending,pending).
+  const effectiveStatuses =
+    statuses.length > 0
+      ? [...new Set(statuses)].sort((a, b) => a.localeCompare(b))
+      : ["pending"];
 
   const allParam = url.searchParams.get("all");
   const ignoreWindow = allParam === "1" || allParam === "true";
@@ -94,15 +101,8 @@ export async function GET(request: NextRequest) {
         ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
         : null;
 
-    // Query principal: reservas manuales (panel, no importadas), no
-    // canceladas (no tiene sentido validar pagos de citas canceladas;
-    // si entra ese flujo se gestiona desde /admin/reembolsos).
-    //
-    // Filtro y orden por `updated_at` (actividad reciente). Para el caso
-    // "Pendientes" coincide con `created_at` (no se actualiza después).
-    // Para "Validados" coincide con la validación. Así los números de la
-    // tabla y de las tarjetas hablan el mismo idioma y la página se
-    // alinea con /admin/reembolsos.
+    // Reservas manuales (panel, no importadas, no canceladas; canceladas → /admin/reembolsos).
+    // Filtro base alineado con GET /api/admin/stats (pendingManualPayments).
     let rowsQuery = supabase
       .from("reservations")
       .select(
@@ -111,13 +111,47 @@ export async function GET(request: NextRequest) {
       .eq("source", "admin")
       .is("import_type", null)
       .neq("status", "cancelled")
-      .in("payment_status", effectiveStatuses)
-      .order("updated_at", { ascending: false })
-      .limit(limit);
+      .in("payment_status", effectiveStatuses);
+
+    const onlyPending =
+      effectiveStatuses.length === 1 && effectiveStatuses[0] === "pending";
+    const onlyPaid =
+      effectiveStatuses.length === 1 && effectiveStatuses[0] === "paid";
 
     if (sinceIso) {
-      rowsQuery = rowsQuery.gte("updated_at", sinceIso);
+      if (onlyPending) {
+        // Sin filtro de fecha: igual criterio que pendingTotal / dashboard.
+      } else if (onlyPaid) {
+        // Alineado con paidInWindow: ventana por fecha de validación, no updated_at.
+        rowsQuery = rowsQuery.gte("payment_validated_at", sinceIso);
+      } else {
+        // pending + paid: todos los pendientes + validados en la ventana (misma fecha que paidInWindow)
+        const iso = sinceIso.replace(/"/g, '\\"');
+        rowsQuery = rowsQuery.or(
+          `payment_status.eq.pending,and(payment_status.eq.paid,payment_validated_at.gte."${iso}")`,
+        );
+      }
     }
+
+    // Orden: solo pendientes → los más antiguos primero (evita que updated_at DESC
+    // empuje pendientes viejos fuera del LIMIT). Solo validados → por validación.
+    // Ambos estados → actividad reciente como compromiso.
+    if (onlyPending) {
+      rowsQuery = rowsQuery
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
+    } else if (onlyPaid) {
+      rowsQuery = rowsQuery
+        .order("payment_validated_at", {
+          ascending: false,
+        })
+        .order("id", { ascending: false });
+    } else {
+      rowsQuery = rowsQuery
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: false });
+    }
+    rowsQuery = rowsQuery.limit(limit);
 
     // Contador global de pendientes (sin filtros de ventana ni estado),
     // pero excluyendo canceladas por la misma razón. Sirve para la

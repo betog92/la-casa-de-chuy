@@ -300,6 +300,16 @@ export default function AdminManualPaymentsPage() {
     return acc;
   }, [rows]);
 
+  const orderHint = useMemo(() => {
+    const onlyP =
+      activeStatuses.length === 1 && activeStatuses[0] === "pending";
+    const onlyPd =
+      activeStatuses.length === 1 && activeStatuses[0] === "paid";
+    if (onlyP) return "Pendientes más antiguos primero (prioridad de validación).";
+    if (onlyPd) return "Validados más recientes primero (por fecha de validación).";
+    return "Ordenado por actividad reciente (registro o validación).";
+  }, [activeStatuses]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -360,14 +370,18 @@ export default function AdminManualPaymentsPage() {
           >
             {pendingTotal}
           </p>
-          <p className="text-xs text-zinc-400">sin importar filtros</p>
+          <p className="text-xs text-zinc-400">
+            Igual que la tarjeta del dashboard (sin ventana de fechas).
+          </p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">Pendientes</p>
           <p className="mt-1 text-2xl font-bold text-amber-700">
             {totalsByStatus.pending}
           </p>
-          <p className="text-xs text-zinc-400">en vista actual</p>
+          <p className="text-xs text-zinc-400">
+            En la tabla (máx. {FETCH_LIMIT} filas cargadas).
+          </p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">
@@ -428,9 +442,7 @@ export default function AdminManualPaymentsPage() {
             <h2 className="text-lg font-semibold text-[#103948]">
               {rows.length} resultado{rows.length === 1 ? "" : "s"}
             </h2>
-            <p className="text-xs text-zinc-500">
-              Ordenado por actividad reciente (registro o validación).
-            </p>
+            <p className="text-xs text-zinc-500">{orderHint}</p>
           </div>
           <button
             type="button"

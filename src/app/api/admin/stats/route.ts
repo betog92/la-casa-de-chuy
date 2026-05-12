@@ -133,8 +133,9 @@ export async function GET() {
         ? cancelledTodayCount
         : (stats?.cancelled_reservations ?? 0);
 
-    // Pagos manuales pendientes (global). Mismas reglas que
-    // /api/admin/manual-payments: solo reservas creadas desde el panel,
+    // Pagos manuales pendientes (global). Mismas reglas que el filtro base de
+    // GET /api/admin/manual-payments (source / import_type / status).
+    // Solo reservas creadas desde el panel,
     // no importadas y no canceladas (validar pagos de citas canceladas
     // no aplica). Sirve para la tarjeta-atajo del dashboard y no
     // condiciona el resto de la respuesta si falla.

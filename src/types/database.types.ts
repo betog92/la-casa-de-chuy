@@ -96,6 +96,14 @@ export interface Database {
           payment_validated_by_user_id: string | null;
           session_type: "xv_anos" | "boda" | "casual" | null;
           photographer_studio: string | null;
+          /** web | admin | google_import — ver sql/01-schema y migraciones */
+          source: string;
+          google_event_id: string | null;
+          import_type: string | null;
+          order_number: string | null;
+          import_notes: string | null;
+          import_notes_edited_at: string | null;
+          import_notes_edited_by_user_id: string | null;
         };
         Insert: {
           id?: number;
@@ -142,6 +150,13 @@ export interface Database {
           payment_validated_by_user_id?: string | null;
           session_type?: "xv_anos" | "boda" | "casual" | null;
           photographer_studio?: string | null;
+          source?: string;
+          google_event_id?: string | null;
+          import_type?: string | null;
+          order_number?: string | null;
+          import_notes?: string | null;
+          import_notes_edited_at?: string | null;
+          import_notes_edited_by_user_id?: string | null;
         };
         Update: {
           id?: number;
@@ -154,6 +169,13 @@ export interface Database {
           payment_validated_by_user_id?: string | null;
           session_type?: "xv_anos" | "boda" | "casual" | null;
           photographer_studio?: string | null;
+          source?: string;
+          google_event_id?: string | null;
+          import_type?: string | null;
+          order_number?: string | null;
+          import_notes?: string | null;
+          import_notes_edited_at?: string | null;
+          import_notes_edited_by_user_id?: string | null;
           email?: string;
           name?: string;
           phone?: string;
