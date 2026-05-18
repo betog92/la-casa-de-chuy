@@ -4,6 +4,82 @@ import type { Database } from "@/types/database.types";
 
 type UserInsert = Database["public"]["Tables"]["users"]["Insert"];
 
+type ReservationContact = {
+  name: string;
+  phone: string;
+};
+
+/**
+ * Rellena name/phone en public.users desde reservas del mismo email si el perfil
+ * aún no los tiene (misma lógica que finalize-reservation para usuarios logueados).
+ */
+async function backfillProfileFromReservations(
+  serviceClient: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+  normalizedEmail: string,
+): Promise<void> {
+  const { data: profile, error: profileError } = await serviceClient
+    .from("users")
+    .select("name, phone")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError || !profile) return;
+
+  const current = profile as { name: string | null; phone: string | null };
+  if (current.name?.trim() && current.phone?.trim()) return;
+
+  const { data: reservations, error: resError } = await serviceClient
+    .from("reservations")
+    .select("name, phone, created_at")
+    .eq("user_id", userId)
+    .ilike("email", normalizedEmail)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (resError || !reservations?.length) return;
+
+  let nameToSet: string | undefined;
+  let phoneToSet: string | undefined;
+
+  for (const row of reservations as ReservationContact[]) {
+    if (!nameToSet && !current.name?.trim() && row.name?.trim()) {
+      nameToSet = row.name.trim();
+    }
+    if (!phoneToSet && !current.phone?.trim() && row.phone?.trim()) {
+      phoneToSet = row.phone.trim();
+    }
+    if (nameToSet && phoneToSet) break;
+    if (
+      (current.name?.trim() || nameToSet) &&
+      (current.phone?.trim() || phoneToSet)
+    ) {
+      break;
+    }
+  }
+
+  if (!nameToSet && !phoneToSet) return;
+
+  const updateData: { name?: string; phone?: string; updated_at: string } = {
+    updated_at: new Date().toISOString(),
+  };
+  if (nameToSet) updateData.name = nameToSet;
+  if (phoneToSet) updateData.phone = phoneToSet;
+
+  const { error: updateError } = await serviceClient
+    .from("users")
+    // @ts-ignore
+    .update(updateData)
+    .eq("id", userId);
+
+  if (updateError) {
+    console.error(
+      "[syncUserToDatabase] Error backfilling name/phone from reservations:",
+      updateError,
+    );
+  }
+}
+
 export type SyncUserResult = {
   success: boolean;
   error?: string;
@@ -85,6 +161,13 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
         redemptionLinkError,
       );
     }
+
+    // 4. Copiar nombre/teléfono de reservas vinculadas si el perfil está vacío
+    await backfillProfileFromReservations(
+      serviceClient,
+      user.id,
+      normalizedEmail,
+    );
 
     if (upsertError) {
       // Perfil público falló: éxito parcial solo si se vincularon reservas;
