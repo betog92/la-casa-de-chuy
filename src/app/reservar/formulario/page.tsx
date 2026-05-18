@@ -1907,11 +1907,13 @@ function FormularioReservaContent() {
         isOpen={showTermsModal}
         onClose={() => setShowTermsModal(false)}
       />
-      <PayTermsConsentModal
-        isOpen={showPayConsentModal}
-        onCancel={() => setShowPayConsentModal(false)}
-        onConfirm={handlePayConsentConfirm}
-      />
+      {showPayConsentModal && (
+        <PayTermsConsentModal
+          isOpen={showPayConsentModal}
+          onCancel={() => setShowPayConsentModal(false)}
+          onConfirm={handlePayConsentConfirm}
+        />
+      )}
     </div>
   );
 }

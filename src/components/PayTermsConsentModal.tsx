@@ -33,9 +33,11 @@ export default function PayTermsConsentModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    // El componente se monta solo cuando isOpen es true (mount condicional
+    // desde el padre), por lo que `showFullTerms` inicia en false en cada
+    // apertura sin necesidad de reset manual aquí.
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
-    setShowFullTerms(false);
     const t = window.setTimeout(() => {
       cancelButtonRef.current?.focus();
     }, 0);
@@ -117,34 +119,50 @@ export default function PayTermsConsentModal({
             Antes de pagar
           </h2>
           <p className="mt-1 text-sm text-zinc-600">
-            Confirma que conoces los puntos clave del servicio. Puedes leer el
-            documento completo dentro de esta ventana.
+            Estas son las reglas que más afectan tu reserva. Puedes leer el
+            documento completo más abajo.
           </p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7">
-          <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-800 sm:text-[0.9375rem]">
-            <li>
-              El pago se procesa a través de <strong>Conekta</strong>. La casa
-              de chuy no almacena los datos de tu tarjeta.
-            </li>
-            <li>
-              Tu pago confirma la reserva del horario seleccionado. Si la
-              transacción falla, el sistema reembolsa automáticamente cualquier
-              cargo.
-            </li>
-            <li>
-              Para reagendar o cancelar, consulta las reglas vigentes en los
-              términos completos (algunos casos pueden generar costos
-              adicionales).
-            </li>
-            <li>
-              Tus datos de contacto se usan únicamente para gestionar la
-              reserva y enviarte la confirmación.
-            </li>
-          </ul>
+          <div className="space-y-5 text-sm text-zinc-800 sm:text-[0.9375rem]">
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Cancelaciones y reagendamiento
+              </h3>
+              <ul className="list-disc space-y-1.5 pl-5">
+                <li>
+                  Cancela con <strong>5 días hábiles</strong> de anticipación y
+                  recibes el <strong>80%</strong> de reembolso. Después de ese
+                  plazo o si no te presentas, no aplica reembolso.
+                </li>
+                <li>
+                  Reagendar es <strong>gratis</strong> si avisas con 5 días
+                  hábiles de anticipación.
+                </li>
+              </ul>
+            </section>
 
-          <div className="mt-4 border-t border-zinc-200 pt-3">
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Día de la sesión
+              </h3>
+              <ul className="list-disc space-y-1.5 pl-5">
+                <li>
+                  Sesiones permitidas: XV años, bodas y casuales.
+                  Boudoir/lencería, familiares y grupales no se permiten.
+                </li>
+                <li>
+                  Tu sesión incluye <strong>5 personas</strong>. Cada persona
+                  extra son <strong>$200 MXN en efectivo</strong> el día de la
+                  sesión (máximo 4 adicionales).
+                </li>
+                <li>El tiempo perdido por retraso no se recupera.</li>
+              </ul>
+            </section>
+          </div>
+
+          <div className="mt-5 border-t border-zinc-200 pt-3">
             <button
               type="button"
               onClick={() => setShowFullTerms((v) => !v)}

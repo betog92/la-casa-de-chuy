@@ -151,60 +151,7 @@ export default function TermsContent() {
 
       <section>
         <h3 className="mb-3 text-xl font-semibold text-zinc-900">
-          SECCIÓN ESPECIAL · Días Festivos
-        </h3>
-        <h4 className="mb-2 text-lg font-semibold text-zinc-900">
-          9. Días Festivos
-        </h4>
-        <p className="mb-2">
-          En días festivos se aplica un cargo adicional de $500 MXN, el cual se
-          cubre en efectivo antes de iniciar la sesión.
-        </p>
-        <p className="mb-2">
-          Se consideran días festivos tanto las fechas oficiales como días de
-          alta demanda.
-        </p>
-
-        <div className="mt-4 space-y-3">
-          <div>
-            <strong className="text-zinc-900">
-              Días Festivos Oficiales – 2026
-            </strong>
-            <ul className="ml-4 mt-1 space-y-1 list-disc">
-              <li>1 de enero – Año Nuevo</li>
-              <li>Lunes 2 de febrero – Constitución</li>
-              <li>Lunes 16 de marzo – Natalicio de Benito Juárez</li>
-              <li>1 de mayo – Día del Trabajo</li>
-              <li>16 de septiembre – Independencia</li>
-              <li>Lunes 16 de noviembre – Revolución Mexicana</li>
-              <li>25 de diciembre – Navidad</li>
-            </ul>
-          </div>
-
-          <div>
-            <strong className="text-zinc-900">
-              Días Especiales de Alta Demanda – 2026
-            </strong>
-            <ul className="ml-4 mt-1 space-y-1 list-disc">
-              <li>2 y 3 de abril – Jueves y Viernes Santo</li>
-              <li>10 de mayo – Día de las Madres</li>
-              <li>12 de diciembre – Día de la Virgen de Guadalupe</li>
-              <li>24 de diciembre – Nochebuena</li>
-              <li>31 de diciembre – Fin de Año</li>
-            </ul>
-          </div>
-
-          <p className="mt-3 italic text-zinc-600">
-            <strong>Aclaración sobre días recorridos:</strong> Cuando un día
-            festivo oficial se recorre al lunes, el cargo aplica en la fecha
-            recorrida, es decir, el día de descanso oficial.
-          </p>
-        </div>
-      </section>
-
-      <section>
-        <h3 className="mb-3 text-xl font-semibold text-zinc-900">
-          10. Consideraciones Finales
+          9. Consideraciones Finales
         </h3>
         <p className="mb-2">
           En ocasiones pueden presentarse situaciones externas que están fuera
