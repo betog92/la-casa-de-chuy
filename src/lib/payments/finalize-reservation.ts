@@ -58,6 +58,8 @@ export interface FinalizeReservationInput {
   useLoyaltyPoints: number;
   useCredits: number;
   discountCode: string | null;
+  /** Código de referido aplicado (opcional). Excluyente con `discountCode`. */
+  referralCode: string | null;
   /**
    * userId del cliente autenticado. El endpoint normal lo obtiene de las
    * cookies. El webhook no tiene cookies, pero el `payload` snapshot puede
@@ -207,6 +209,7 @@ export async function finalizeReservationFromPayload(
     useLoyaltyPoints: Number(input.useLoyaltyPoints) || 0,
     useCredits: Number(input.useCredits) || 0,
     discountCode: input.discountCode ?? null,
+    referralCode: input.referralCode ?? null,
   });
   if (!priceResult.ok) {
     return rejectAndRefund(priceResult.message, 400);
@@ -344,6 +347,30 @@ export async function finalizeReservationFromPayload(
               { pendingId: input.pendingReservationId, reservationId: existingId, paymentId },
             );
           }
+
+          // Defensiva: intentar acreditar al referidor también en esta rama.
+          // Si el webhook ya lo hizo, la UNIQUE(reservation_id) en
+          // referral_redemptions se encarga de la idempotencia (revoca el
+          // crédito recién creado y vuelve sin error).
+          if (priceResult.referralCodeId && priceResult.referrerUserId) {
+            try {
+              await awardReferralAndCredit(supabase, {
+                referralCodeId: priceResult.referralCodeId,
+                referrerUserId: priceResult.referrerUserId,
+                redeemedEmail: normalizedEmail,
+                redeemedUserId: userId,
+                reservationId: existingId,
+                inviteeDiscountAmount: priceResult.referralDiscount,
+                referrerCreditAmount: priceResult.referrerCreditAmount,
+              });
+            } catch (err) {
+              console.error(
+                "[finalize-reservation] awardReferralAndCredit en rama UNIQUE:",
+                err,
+              );
+            }
+          }
+
           return {
             ok: true,
             reservationId: existingId,
@@ -608,6 +635,35 @@ export async function finalizeReservationFromPayload(
     );
   }
 
+  // Referido V2: insertar redemption + acreditar $200 al referidor.
+  // Síncrono (antes del Promise.all de tareas) por dos razones:
+  //   1. La UNIQUE(reservation_id) es nuestro mecanismo de idempotencia
+  //      contra el webhook que finaliza la misma reserva en paralelo;
+  //      cerrar la ventana cuanto antes minimiza el ruido en logs.
+  //   2. Si ya existe la redemption (race con webhook), nos saltamos los
+  //      pasos de credits sin error.
+  if (priceResult.referralCodeId && priceResult.referrerUserId) {
+    try {
+      await awardReferralAndCredit(supabase, {
+        referralCodeId: priceResult.referralCodeId,
+        referrerUserId: priceResult.referrerUserId,
+        redeemedEmail: normalizedEmail,
+        redeemedUserId: userId,
+        reservationId,
+        inviteeDiscountAmount: priceResult.referralDiscount,
+        referrerCreditAmount: priceResult.referrerCreditAmount,
+      });
+    } catch (err) {
+      // No fallamos la reserva por esto: ya cobramos y guardamos. El cron
+      // o un job de reconciliación puede levantar la redemption faltante
+      // a partir de `reservations.discount_code`/`referral_discount`.
+      console.error(
+        "[finalize-reservation] Error en awardReferralAndCredit:",
+        err,
+      );
+    }
+  }
+
   await Promise.all(postInsertTasks);
 
   // 10. Email de confirmación en segundo plano.
@@ -779,6 +835,113 @@ async function verifyConektaOrderForReservation(args: {
   }
 
   return null;
+}
+
+/**
+ * Inserta la `referral_redemption` y otorga el crédito al referidor.
+ *
+ * Idempotencia: la tabla tiene UNIQUE(reservation_id) y UNIQUE(referral_code_id,
+ * redeemed_email). Si el insert falla por código `23505`, asumimos que otro
+ * proceso (webhook / segundo intento) ya lo creó y no hacemos nada.
+ *
+ * NO se acreditan créditos al invitado: su beneficio ya se aplicó como
+ * descuento en el checkout (-$100 al total). El referidor sí recibe $200
+ * en `credits` que NO caducan (`expires_at = null`, alineado con Monedas
+ * Chuy desde abril 2026).
+ */
+async function awardReferralAndCredit(
+  supabase: FinalizeReservationSupabase,
+  args: {
+    referralCodeId: string;
+    referrerUserId: string;
+    redeemedEmail: string;
+    redeemedUserId: string | null;
+    reservationId: number;
+    inviteeDiscountAmount: number;
+    referrerCreditAmount: number;
+  },
+): Promise<void> {
+  // 1. Crear el crédito PRIMERO para tener el id y guardarlo en la
+  //    redemption en el mismo paso (si la redemption ya existía por race,
+  //    revertimos el crédito).
+  const { data: creditRow, error: creditErr } = await supabase
+    .from("credits")
+    .insert({
+      user_id: args.referrerUserId,
+      amount: args.referrerCreditAmount,
+      source: "referral",
+      // NULL = no caduca (alineado con Monedas Chuy desde abril 2026)
+      expires_at: null,
+      used: false,
+      revoked: false,
+      // No asociamos a reservation_id porque no es revocable por cancelación
+      // de la reserva del invitado (decisión de negocio: el referidor lo
+      // ganó al pagar el invitado, no se revoca si después cancela).
+      reservation_id: null,
+    } as never)
+    .select("id")
+    .single();
+
+  if (creditErr || !creditRow) {
+    console.error(
+      "[awardReferralAndCredit] No se pudo crear el crédito del referidor:",
+      creditErr,
+    );
+    return;
+  }
+
+  const creditId = (creditRow as { id: string }).id;
+
+  // 2. Insertar la redemption con FK al crédito. Si choca con UNIQUE
+  //    (race con webhook que ya finalizó), revocamos el crédito recién
+  //    creado para no acreditar doble al referidor.
+  const { error: redErr } = await supabase
+    .from("referral_redemptions")
+    .insert({
+      referral_code_id: args.referralCodeId,
+      referrer_user_id: args.referrerUserId,
+      redeemed_email: args.redeemedEmail,
+      redeemed_user_id: args.redeemedUserId,
+      reservation_id: args.reservationId,
+      invitee_discount_amount: args.inviteeDiscountAmount,
+      referrer_credit_id: creditId,
+      referrer_credit_amount: args.referrerCreditAmount,
+      status: "awarded",
+    } as never);
+
+  if (redErr) {
+    const isUnique =
+      redErr.code === "23505" || redErr.message?.includes("UNIQUE");
+    if (!isUnique) {
+      console.error(
+        "[awardReferralAndCredit] Error insertando redemption; revirtiendo crédito:",
+        { creditId, reservationId: args.reservationId, error: redErr },
+      );
+    }
+    // Tanto en race (UNIQUE) como en error: revocamos el crédito recién
+    // creado para no acreditar doble. Si el revert falla, loggeamos con
+    // contexto para que un cron/admin pueda reconciliar el huérfano.
+    const { error: revokeErr } = await supabase
+      .from("credits")
+      .update({
+        revoked: true,
+        revoked_at: new Date().toISOString(),
+      } as never)
+      .eq("id", creditId);
+    if (revokeErr) {
+      console.error(
+        "[awardReferralAndCredit] CRITICAL: no se pudo revocar crédito huérfano; reconciliar manualmente:",
+        {
+          creditId,
+          referrerUserId: args.referrerUserId,
+          reservationId: args.reservationId,
+          amount: args.referrerCreditAmount,
+          revokeErr,
+          originalErr: redErr,
+        },
+      );
+    }
+  }
 }
 
 /**

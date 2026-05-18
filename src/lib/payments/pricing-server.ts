@@ -6,13 +6,17 @@ import {
   type PriceCalculationResult,
 } from "@/utils/pricing";
 import { getMonterreyToday } from "@/utils/business-days";
+import {
+  validateReferralForReservationPrice,
+  REFERRAL_REFERRER_CREDIT_MXN,
+} from "@/lib/payments/referral-validation";
 
 /**
  * Cálculo de precio AUTORITATIVO en el servidor para reservas nuevas.
  *
  * Es la única fuente de verdad para el monto a cobrar. El cliente puede
  * mostrar un total tentativo, pero el servidor recalcula desde cero leyendo
- * `availability`, `loyalty_points`, `credits`, `discount_codes` y conteos
+ * `availability`, `loyalty_points`, `credits`, `discount_codes`, `referrals` y conteos
  * reales del usuario, y rechaza beneficios inválidos en lugar de cobrar de
  * más al cliente sin avisar.
  */
@@ -32,6 +36,8 @@ export interface AuthoritativeReservationOptions {
   useCredits: number;
   /** Código de descuento (opcional). */
   discountCode?: string | null;
+  /** Código de referido (opcional). Mutuamente excluyente con `discountCode`. */
+  referralCode?: string | null;
 }
 
 export interface AuthoritativePriceFailure {
@@ -44,6 +50,8 @@ export interface AuthoritativePriceFailure {
     | "discount_code_already_used"
     | "discount_code_expired"
     | "discount_code_max_uses"
+    | "referral_invalid"
+    | "code_conflict"
     | "amount_zero";
   /** Mensaje listo para mostrar al usuario. */
   message: string;
@@ -63,7 +71,16 @@ export interface AuthoritativePriceResult {
   loyaltyDiscount: number;
   loyaltyPointsUsed: number;
   creditsUsed: number;
+  /** Monto fijo descontado al invitado por usar un código de referido. */
   referralDiscount: number;
+  /** Código de referido validado, si se aplicó. */
+  referralCode: string | null;
+  /** UUID en `referral_codes` (V2) — usado por finalize para crear redemption. */
+  referralCodeId: string | null;
+  /** user_id del referidor (V2) — usado por finalize para acreditarle. */
+  referrerUserId: string | null;
+  /** Monto en MXN a acreditar al referidor al confirmarse el pago. */
+  referrerCreditAmount: number;
   discountCode: string | null;
   discountCodeDiscount: number;
 
@@ -93,10 +110,26 @@ export async function computeAuthoritativeReservationPrice(
     useLoyaltyPoints,
     useCredits,
     discountCode,
+    referralCode,
   } = opts;
 
   const date = parse(dateString, "yyyy-MM-dd", new Date());
   const normalizedEmail = (contactEmail || "").toLowerCase().trim();
+
+  // Códigos mutuamente excluyentes: la UI fuerza elegir uno; si llega lo contrario,
+  // mejor rechazar que aplicar uno arbitrariamente y cobrar mal.
+  const hasDiscountCode =
+    typeof discountCode === "string" && discountCode.trim() !== "";
+  const hasReferralCode =
+    typeof referralCode === "string" && referralCode.trim() !== "";
+  if (hasDiscountCode && hasReferralCode) {
+    return {
+      ok: false,
+      reason: "code_conflict",
+      message:
+        "Solo puedes aplicar un código a la vez (descuento o referido). Elige uno.",
+    };
+  }
 
   // 1. Resolver userId (si invitado pero el email tiene cuenta, asignar)
   let resolvedUserId: string | null = userId ?? null;
@@ -265,6 +298,39 @@ export async function computeAuthoritativeReservationPrice(
     validatedDiscountCode = { code: dc.code, percentage: pct };
   }
 
+  // 4b. Validar código de referido (si se envió). Mutuamente excluyente con
+  // `discountCode`, ya verificado arriba. V2: el referido descuenta un monto
+  // FIJO ($100) al invitado, no un porcentaje. El referidor recibirá $200 en
+  // créditos al confirmarse el pago (lo hace `finalize-reservation.ts`).
+  let validatedReferral: {
+    referralCodeId: string;
+    referrerUserId: string;
+    code: string;
+    inviteeDiscountAmount: number;
+    referrerCreditAmount: number;
+  } | null = null;
+  if (hasReferralCode) {
+    const referralResult = await validateReferralForReservationPrice(supabase, {
+      codeRaw: referralCode!,
+      contactEmail: normalizedEmail,
+      resolvedUserId,
+    });
+    if (!referralResult.ok) {
+      return {
+        ok: false,
+        reason: "referral_invalid",
+        message: referralResult.message,
+      };
+    }
+    validatedReferral = {
+      referralCodeId: referralResult.referralCodeId,
+      referrerUserId: referralResult.referrerUserId,
+      code: referralResult.code,
+      inviteeDiscountAmount: referralResult.inviteeDiscountAmount,
+      referrerCreditAmount: referralResult.referrerCreditAmount,
+    };
+  }
+
   // 5. Calcular precio base y descuentos automáticos (last-min, fidelización)
   // (Sin código y sin monedas/créditos: sólo last-min + lealtad)
   const baseCalc = await calculateFinalPrice(supabase, {
@@ -279,7 +345,7 @@ export async function computeAuthoritativeReservationPrice(
   let runningPrice = baseCalc.finalPrice;
   let lastMinuteDiscount = baseCalc.discounts.lastMinute?.amount || 0;
   let loyaltyDiscount = baseCalc.discounts.loyalty?.amount || 0;
-  const referralDiscount = baseCalc.discounts.referral?.amount || 0;
+  let referralDiscount = 0;
   let discountCodeDiscount = 0;
 
   // 6. Si hay código, recalcula last-min/lealtad sobre el precio post-código
@@ -324,6 +390,20 @@ export async function computeAuthoritativeReservationPrice(
     runningPrice = Math.max(0, runningPrice - pointsApplied);
   }
 
+  // 7b. Referido: descuento FIJO ($100) al invitado, topado al subtotal
+  // para no dejar precios negativos. Si el precio del slot es menor a $100,
+  // se descuenta hasta el subtotal y punto (no genera saldo a favor).
+  if (validatedReferral) {
+    const rd = Math.min(validatedReferral.inviteeDiscountAmount, runningPrice);
+    if (rd < validatedReferral.inviteeDiscountAmount) {
+      console.warn(
+        `[pricing-server] Referido ${validatedReferral.code}: descuento topado a $${rd.toFixed(2)} (subtotal menor a $${validatedReferral.inviteeDiscountAmount}).`,
+      );
+    }
+    referralDiscount = rd;
+    runningPrice = Math.max(0, runningPrice - rd);
+  }
+
   // 8. Aplicar créditos
   let creditsApplied = 0;
   if (requestedCredits > 0) {
@@ -336,6 +416,7 @@ export async function computeAuthoritativeReservationPrice(
   const finalPrice = round2(runningPrice);
   lastMinuteDiscount = round2(lastMinuteDiscount);
   loyaltyDiscount = round2(loyaltyDiscount);
+  referralDiscount = round2(referralDiscount);
   discountCodeDiscount = round2(discountCodeDiscount);
   creditsApplied = round2(creditsApplied);
 
@@ -348,7 +429,12 @@ export async function computeAuthoritativeReservationPrice(
     loyaltyDiscount,
     loyaltyPointsUsed: pointsApplied,
     creditsUsed: creditsApplied,
-    referralDiscount: round2(referralDiscount),
+    referralDiscount,
+    referralCode: validatedReferral?.code ?? null,
+    referralCodeId: validatedReferral?.referralCodeId ?? null,
+    referrerUserId: validatedReferral?.referrerUserId ?? null,
+    referrerCreditAmount:
+      validatedReferral?.referrerCreditAmount ?? REFERRAL_REFERRER_CREDIT_MXN,
     discountCode: validatedDiscountCode?.code ?? null,
     discountCodeDiscount,
     pricing: baseCalc,

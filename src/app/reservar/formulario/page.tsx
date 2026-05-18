@@ -81,20 +81,23 @@ function FormularioReservaContent() {
   const paymentFlowLockRef = useRef(false);
   const { user } = useAuth();
 
-  // Estados para descuentos y beneficios
+  // Código único en checkout (cupón o referido; el servidor clasifica)
   const [discountCode, setDiscountCode] = useState("");
-  const [referralCode, setReferralCode] = useState("");
   const [appliedDiscountCode, setAppliedDiscountCode] = useState<{
     code: string;
     percentage: number;
   } | null>(null);
+  // Referido V2: monto FIJO descontado al invitado (no es porcentaje).
+  // `referrerCreditAmount` es solo informativo (no afecta el precio que paga
+  // el invitado), se usa para mostrar "gana $200 tu amigo" si se quiere.
   const [appliedReferralCode, setAppliedReferralCode] = useState<{
     code: string;
-    percentage: number;
+    inviteeDiscountAmount: number;
+    referrerCreditAmount: number;
   } | null>(null);
-  const [showCodeChoice, setShowCodeChoice] = useState(false);
-  const [selectedCodeType, setSelectedCodeType] = useState<
-    "discount" | "referral" | null
+  /** Correo con el que se validó el código (cupón o referido); si cambia, se invalida. */
+  const [codeValidatedForEmail, setCodeValidatedForEmail] = useState<
+    string | null
   >(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [validatingCode, setValidatingCode] = useState(false);
@@ -145,6 +148,25 @@ function FormularioReservaContent() {
   // Obtener el email actual del formulario
   const currentEmail = watch("email");
 
+  const hasAppliedCheckoutCode =
+    !!appliedDiscountCode || !!appliedReferralCode;
+
+  // Si validó un código con correo y luego lo cambia, el preview y el servidor
+  // ya no coincidirían con `/api/codes/validate`.
+  useEffect(() => {
+    if (!codeValidatedForEmail || !hasAppliedCheckoutCode) return;
+    const e = (currentEmail || "").trim().toLowerCase();
+    if (e && e !== codeValidatedForEmail) {
+      setAppliedDiscountCode(null);
+      setAppliedReferralCode(null);
+      setCodeValidatedForEmail(null);
+      setDiscountCode("");
+      setCodeError(
+        "El correo cambió respecto al que usaste al aplicar el código. Vuelve a validarlo si aplica.",
+      );
+    }
+  }, [currentEmail, codeValidatedForEmail, hasAppliedCheckoutCode]);
+
   // Extraer valores de searchParams de forma estable para evitar re-renders innecesarios
   const dateParam = searchParams.get("date");
   const timeParam = searchParams.get("time");
@@ -161,7 +183,10 @@ function FormularioReservaContent() {
 
           // Prellenar email siempre si está disponible y marcarlo como prellenado
           if (profile.email) {
-            setValue("email", profile.email);
+            setValue(
+              "email",
+              String(profile.email).trim().toLowerCase(),
+            );
             setPrefilledFields((prev) => ({ ...prev, email: true }));
           }
           // Prellenar name solo si existe y marcarlo como prellenado
@@ -265,11 +290,14 @@ function FormularioReservaContent() {
           customPrice: reservationData.price,
           isLastMinute: true,
           reservationCount: useLoyaltyDiscount ? reservationCount : undefined,
-          isFirstReservation: undefined, // TODO: Verificar si es primera reserva
+          // El descuento por referido se aplica explícitamente abajo a partir
+          // de `appliedReferralCode` para evitar duplicarlo con la rama de
+          // `isFirstReservation` interna de `calculateFinalPrice`.
+          isFirstReservation: false,
           useLoyaltyPoints: useLoyaltyPoints,
         });
 
-        // Aplicar código de descuento o referido (solo uno)
+        // Aplicar cupón o referido (mutuamente excluyentes; un solo campo en UI).
         let priceAfterCode = calculation.finalPrice;
         const discountsWithCode = { ...calculation.discounts };
 
@@ -338,15 +366,22 @@ function FormularioReservaContent() {
           // Remover referral si estaba aplicado (no se pueden combinar)
           delete discountsWithCode.referral;
         } else if (appliedReferralCode) {
-          // Aplicar código de referido al precio final calculado
-          const referralDiscount =
-            calculation.finalPrice * (appliedReferralCode.percentage / 100);
-          priceAfterCode = calculation.finalPrice - referralDiscount;
+          // Referido V2: descuento FIJO (no %), topado al subtotal para
+          // no permitir precios negativos. Mismo cálculo que pricing-server.
+          const referralDiscount = Math.min(
+            appliedReferralCode.inviteeDiscountAmount,
+            calculation.finalPrice,
+          );
+          priceAfterCode = Math.max(
+            0,
+            calculation.finalPrice - referralDiscount,
+          );
 
           discountsWithCode.referral = {
             amount: referralDiscount,
             applied: true,
           };
+          delete discountsWithCode.discountCode;
         }
 
         // Aplicar créditos al precio final
@@ -375,8 +410,16 @@ function FormularioReservaContent() {
     appliedReferralCode,
   ]);
 
-  // Función para validar código de descuento
-  const validateDiscountCode = async (code: string) => {
+  const clearAppliedCheckoutCode = () => {
+    setAppliedDiscountCode(null);
+    setAppliedReferralCode(null);
+    setCodeValidatedForEmail(null);
+    setDiscountCode("");
+    setCodeError(null);
+  };
+
+  /** Un campo "Código": `/api/codes/validate` decide cupón vs referido. */
+  const applyCheckoutCode = async (code: string) => {
     if (!code.trim()) {
       setCodeError("Ingresa un código");
       return;
@@ -386,91 +429,73 @@ function FormularioReservaContent() {
     setCodeError(null);
 
     try {
-      const response = await axios.post("/api/discount-codes/validate", {
+      const emailTrim = (currentEmail || "").trim().toLowerCase();
+      const response = await axios.post("/api/codes/validate", {
         code: code.trim(),
-        email:
-          currentEmail && currentEmail.trim() ? currentEmail.trim() : undefined,
+        email: emailTrim || undefined,
       });
 
-      // La respuesta es { success: true, valid: true, code: "...", ... }
-      if (response.data.success && response.data.valid) {
-        const codeData = response.data;
-
-        // Si ya hay un código de referido válido, mostrar selección
-        if (appliedReferralCode) {
-          setAppliedDiscountCode({
-            code: codeData.code,
-            percentage: codeData.discountPercentage,
-          });
-          setShowCodeChoice(true);
-          setSelectedCodeType("discount");
-        } else {
-          // Aplicar directamente
-          setAppliedDiscountCode({
-            code: codeData.code,
-            percentage: codeData.discountPercentage,
-          });
-          setAppliedReferralCode(null);
-          setShowCodeChoice(false);
+      if (response.data?.success && response.data?.valid) {
+        const code = String(response.data.code || "").toUpperCase();
+        if (!code) {
+          setCodeError("Respuesta inválida del servidor. Intenta de nuevo.");
+          return;
         }
+
+        if (response.data.type === "referral") {
+          const inviteeAmount = Number(response.data.inviteeDiscountAmount);
+          const referrerAmount = Number(response.data.referrerCreditAmount);
+          if (!Number.isFinite(inviteeAmount) || inviteeAmount <= 0) {
+            setCodeError("No se pudo leer el descuento. Intenta de nuevo.");
+            return;
+          }
+          setAppliedReferralCode({
+            code,
+            inviteeDiscountAmount: inviteeAmount,
+            referrerCreditAmount: Number.isFinite(referrerAmount)
+              ? referrerAmount
+              : 0,
+          });
+          setAppliedDiscountCode(null);
+        } else {
+          const pct = Number(response.data.discountPercentage);
+          if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+            setCodeError(
+              "No se pudo leer el descuento del código. Intenta de nuevo.",
+            );
+            return;
+          }
+          setAppliedDiscountCode({ code, percentage: pct });
+          setAppliedReferralCode(null);
+        }
+        setCodeValidatedForEmail(emailTrim || null);
+        setDiscountCode(code);
       } else {
-        setCodeError(response.data.error || "Código no válido");
+        setCodeError(response.data?.error || "Código no válido");
       }
     } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error);
-      setCodeError(errorMessage);
+      setCodeError(getErrorMessage(error));
     } finally {
       setValidatingCode(false);
     }
   };
 
-  // Función para validar código de referido (placeholder - implementar después)
-  const validateReferralCode = async (code: string) => {
-    // TODO: Implementar validación de código de referido
-    // Por ahora, simular validación
-    if (!code.trim()) {
-      setCodeError("Ingresa un código");
-      return;
-    }
-
-    setValidatingCode(true);
-    setCodeError(null);
-
-    // Simulación temporal - reemplazar con API real
-    setTimeout(() => {
-      const referralData = {
-        code: code.trim().toUpperCase(),
-        percentage: 10,
-      };
-
-      // Si ya hay un código de descuento válido, mostrar selección
-      if (appliedDiscountCode) {
-        setAppliedReferralCode(referralData);
-        setShowCodeChoice(true);
-        setSelectedCodeType("referral");
-      } else {
-        // Aplicar directamente
-        setAppliedReferralCode(referralData);
-        setAppliedDiscountCode(null);
-        setShowCodeChoice(false);
-      }
-      setValidatingCode(false);
-    }, 500);
-  };
-
-  // Función para aplicar el código seleccionado
-  const handleApplySelectedCode = () => {
-    if (selectedCodeType === "discount") {
-      setAppliedReferralCode(null);
-      setShowCodeChoice(false);
-    } else if (selectedCodeType === "referral") {
-      setAppliedDiscountCode(null);
-      setShowCodeChoice(false);
-    }
-  };
+  const discountCodeForRequest = appliedDiscountCode?.code ?? null;
+  const referralCodeForRequest = appliedReferralCode?.code ?? null;
 
   const handlePayClick = async () => {
     if (loading || paymentFlowLockRef.current) return;
+    const emailAtPay = (currentEmail || "").trim().toLowerCase();
+    if (
+      hasAppliedCheckoutCode &&
+      codeValidatedForEmail &&
+      emailAtPay !== codeValidatedForEmail
+    ) {
+      setError(
+        "El correo no coincide con el que usaste al aplicar el código. Corrige el correo o valida de nuevo.",
+      );
+      return;
+    }
     const ok = await trigger([
       "email",
       "name",
@@ -501,6 +526,19 @@ function FormularioReservaContent() {
     setError(null);
     setConektaError(null);
 
+    const emailNorm = data.email.trim().toLowerCase();
+    if (
+      hasAppliedCheckoutCode &&
+      codeValidatedForEmail &&
+      emailNorm !== codeValidatedForEmail
+    ) {
+      setError(
+        "El correo no coincide con el que usaste al aplicar el código. Corrige el correo o valida de nuevo.",
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
       // Paso 1: Crear token de tarjeta con Conekta
       if (!paymentFormRef.current) {
@@ -529,7 +567,7 @@ function FormularioReservaContent() {
             startTime: reservationData.time,
             contact: {
               name: data.name,
-              email: data.email,
+              email: emailNorm,
               phone: data.phone,
             },
             sessionType: data.sessionType,
@@ -539,7 +577,8 @@ function FormularioReservaContent() {
             useLoyaltyDiscount: useLoyaltyDiscount,
             useLoyaltyPoints: useLoyaltyPoints || 0,
             useCredits: useCredits || 0,
-            discountCode: appliedDiscountCode?.code ?? null,
+            discountCode: discountCodeForRequest,
+            referralCode: referralCodeForRequest,
           },
         });
 
@@ -566,7 +605,7 @@ function FormularioReservaContent() {
         const reservationResponse = await axios.post(
           "/api/reservations/create",
           {
-            email: data.email,
+            email: emailNorm,
             name: data.name,
             phone: data.phone,
             date: reservationData.date,
@@ -580,7 +619,8 @@ function FormularioReservaContent() {
             useLoyaltyDiscount: useLoyaltyDiscount,
             useLoyaltyPoints: useLoyaltyPoints || 0,
             useCredits: useCredits || 0,
-            discountCode: appliedDiscountCode?.code ?? null,
+            discountCode: discountCodeForRequest,
+            referralCode: referralCodeForRequest,
           }
         );
 
@@ -793,30 +833,30 @@ function FormularioReservaContent() {
                     {/* Código de Descuento/Referido */}
                     <div className="mb-4 pb-4 border-b border-zinc-200">
                       <label className="block text-sm font-medium text-zinc-700 mb-2">
-                        ¿Tienes un código de descuento?
+                        ¿Tienes un código?
                       </label>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           value={discountCode}
                           onChange={(e) => setDiscountCode(e.target.value)}
-                          placeholder="Ingresa código"
-                          disabled={validatingCode || !!appliedDiscountCode}
+                          placeholder="Cupón o código de referido"
+                          disabled={validatingCode || hasAppliedCheckoutCode}
                           className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                         />
                         <button
                           type="button"
-                          onClick={() => validateDiscountCode(discountCode)}
+                          onClick={() => void applyCheckoutCode(discountCode)}
                           disabled={
                             validatingCode ||
                             !discountCode.trim() ||
-                            !!appliedDiscountCode
+                            hasAppliedCheckoutCode
                           }
                           className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {validatingCode
                             ? "Validando..."
-                            : appliedDiscountCode
+                            : hasAppliedCheckoutCode
                             ? "Aplicado"
                             : "Aplicar"}
                         </button>
@@ -824,7 +864,7 @@ function FormularioReservaContent() {
                       {codeError && (
                         <p className="mt-2 text-sm text-red-600">{codeError}</p>
                       )}
-                      {appliedDiscountCode && (
+                      {hasAppliedCheckoutCode && (
                         <div className="mt-2 py-1 flex items-center justify-between gap-2 text-sm text-green-600">
                           <div className="flex items-center gap-2">
                             <svg
@@ -841,132 +881,33 @@ function FormularioReservaContent() {
                               />
                             </svg>
                             <span>
-                              Código {appliedDiscountCode.code} aplicado (
-                              {appliedDiscountCode.percentage}% de descuento)
+                              {appliedReferralCode ? (
+                                <>
+                                  Código {appliedReferralCode.code} aplicado: $
+                                  {appliedReferralCode.inviteeDiscountAmount.toLocaleString(
+                                    "es-MX",
+                                  )}{" "}
+                                  de descuento en tu primera reserva
+                                </>
+                              ) : appliedDiscountCode ? (
+                                <>
+                                  Cupón {appliedDiscountCode.code} aplicado (
+                                  {appliedDiscountCode.percentage}% de descuento)
+                                </>
+                              ) : null}
                             </span>
                           </div>
                           <button
                             type="button"
-                            onClick={() => {
-                              setAppliedDiscountCode(null);
-                              setDiscountCode("");
-                              setCodeError(null);
-                            }}
+                            onClick={clearAppliedCheckoutCode}
                             className="flex-shrink-0 px-1 py-0.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                            aria-label="Remover código"
+                            aria-label="Quitar código"
                           >
                             ✕
                           </button>
                         </div>
                       )}
                     </div>
-
-                    {/* Selección de código cuando ambos son válidos */}
-                    {showCodeChoice &&
-                      appliedDiscountCode &&
-                      appliedReferralCode && (
-                        <div className="mb-4 pb-4 border-b border-zinc-200">
-                          <p className="text-sm font-medium text-zinc-900 mb-3">
-                            Tienes dos códigos válidos. Elige cuál aplicar:
-                          </p>
-                          <div className="space-y-2">
-                            {/* Opción 1: Código de descuento */}
-                            <label
-                              className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
-                                selectedCodeType === "discount"
-                                  ? "border-[#103948] bg-green-50"
-                                  : "border-zinc-200"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="codeChoice"
-                                value="discount"
-                                checked={selectedCodeType === "discount"}
-                                onChange={() => setSelectedCodeType("discount")}
-                                className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
-                              />
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-zinc-900">
-                                    {appliedDiscountCode.code}
-                                  </span>
-                                  {selectedCodeType === "discount" && (
-                                    <svg
-                                      className="w-4 h-4 text-green-600"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      strokeWidth="2.5"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                      />
-                                    </svg>
-                                  )}
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-0.5">
-                                  {appliedDiscountCode.percentage}% de descuento
-                                </p>
-                              </div>
-                            </label>
-
-                            {/* Opción 2: Código de referido */}
-                            <label
-                              className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
-                                selectedCodeType === "referral"
-                                  ? "border-[#103948] bg-green-50"
-                                  : "border-zinc-200"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="codeChoice"
-                                value="referral"
-                                checked={selectedCodeType === "referral"}
-                                onChange={() => setSelectedCodeType("referral")}
-                                className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
-                              />
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-zinc-900">
-                                    {appliedReferralCode.code}
-                                  </span>
-                                  {selectedCodeType === "referral" && (
-                                    <svg
-                                      className="w-4 h-4 text-green-600"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      strokeWidth="2.5"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                      />
-                                    </svg>
-                                  )}
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-0.5">
-                                  {appliedReferralCode.percentage}% de descuento
-                                  (referido)
-                                </p>
-                              </div>
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleApplySelectedCode}
-                            disabled={!selectedCodeType}
-                            className="mt-3 w-full rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d3a] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            Aplicar código seleccionado
-                          </button>
-                        </div>
-                      )}
 
                     {/* Beneficios Disponibles - Estilo Rappi */}
                     <div className="mb-6 space-y-3">
@@ -1086,7 +1027,7 @@ function FormularioReservaContent() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-zinc-900">
-                              Créditos disponibles
+                              Créditos
                             </span>
                             {useCredits > 0 && (
                               <svg
@@ -1586,30 +1527,30 @@ function FormularioReservaContent() {
               {/* Código de Descuento/Referido */}
               <div className="mb-4 pb-4 border-b border-zinc-200">
                 <label className="block text-sm font-medium text-zinc-700 mb-2">
-                  ¿Tienes un código de descuento?
+                  ¿Tienes un código?
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={discountCode}
                     onChange={(e) => setDiscountCode(e.target.value)}
-                    placeholder="Ingresa código"
-                    disabled={validatingCode || !!appliedDiscountCode}
+                    placeholder="Cupón o código de referido"
+                    disabled={validatingCode || hasAppliedCheckoutCode}
                     className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-zinc-100"
                   />
                   <button
                     type="button"
-                    onClick={() => validateDiscountCode(discountCode)}
+                    onClick={() => void applyCheckoutCode(discountCode)}
                     disabled={
                       validatingCode ||
                       !discountCode.trim() ||
-                      !!appliedDiscountCode
+                      hasAppliedCheckoutCode
                     }
                     className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {validatingCode
                       ? "Validando..."
-                      : appliedDiscountCode
+                      : hasAppliedCheckoutCode
                       ? "Aplicado"
                       : "Aplicar"}
                   </button>
@@ -1617,7 +1558,7 @@ function FormularioReservaContent() {
                 {codeError && (
                   <p className="mt-2 text-sm text-red-600">{codeError}</p>
                 )}
-                {appliedDiscountCode && (
+                {hasAppliedCheckoutCode && (
                   <div className="mt-2 py-1 flex items-center justify-between gap-2 text-sm text-green-600">
                     <div className="flex items-center gap-2">
                       <svg
@@ -1634,130 +1575,33 @@ function FormularioReservaContent() {
                         />
                       </svg>
                       <span>
-                        Código {appliedDiscountCode.code} aplicado (
-                        {appliedDiscountCode.percentage}% de descuento)
+                        {appliedReferralCode ? (
+                          <>
+                            Código {appliedReferralCode.code} aplicado: $
+                            {appliedReferralCode.inviteeDiscountAmount.toLocaleString(
+                              "es-MX",
+                            )}{" "}
+                            de descuento en tu primera reserva
+                          </>
+                        ) : appliedDiscountCode ? (
+                          <>
+                            Cupón {appliedDiscountCode.code} aplicado (
+                            {appliedDiscountCode.percentage}% de descuento)
+                          </>
+                        ) : null}
                       </span>
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setAppliedDiscountCode(null);
-                        setDiscountCode("");
-                        setCodeError(null);
-                      }}
+                      onClick={clearAppliedCheckoutCode}
                       className="flex-shrink-0 px-1 py-0.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                      aria-label="Remover código"
+                      aria-label="Quitar código"
                     >
                       ✕
                     </button>
                   </div>
                 )}
               </div>
-
-              {/* Selección de código cuando ambos son válidos - Desktop */}
-              {showCodeChoice && appliedDiscountCode && appliedReferralCode && (
-                <div className="mb-4 pb-4 border-b border-zinc-200">
-                  <p className="text-sm font-medium text-zinc-900 mb-3">
-                    Tienes dos códigos válidos. Elige cuál aplicar:
-                  </p>
-                  <div className="space-y-2">
-                    {/* Opción 1: Código de descuento */}
-                    <label
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
-                        selectedCodeType === "discount"
-                          ? "border-[#103948] bg-green-50"
-                          : "border-zinc-200"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="codeChoice"
-                        value="discount"
-                        checked={selectedCodeType === "discount"}
-                        onChange={() => setSelectedCodeType("discount")}
-                        className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-zinc-900">
-                            {appliedDiscountCode.code}
-                          </span>
-                          {selectedCodeType === "discount" && (
-                            <svg
-                              className="w-4 h-4 text-green-600"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              strokeWidth="2.5"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          {appliedDiscountCode.percentage}% de descuento
-                        </p>
-                      </div>
-                    </label>
-
-                    {/* Opción 2: Código de referido */}
-                    <label
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer hover:border-[#103948] ${
-                        selectedCodeType === "referral"
-                          ? "border-[#103948] bg-green-50"
-                          : "border-zinc-200"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="codeChoice"
-                        value="referral"
-                        checked={selectedCodeType === "referral"}
-                        onChange={() => setSelectedCodeType("referral")}
-                        className="h-5 w-5 border-2 border-zinc-300 accent-[#103948] text-[#103948] focus:ring-2 focus:ring-[#103948] focus:ring-offset-0"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-zinc-900">
-                            {appliedReferralCode.code}
-                          </span>
-                          {selectedCodeType === "referral" && (
-                            <svg
-                              className="w-4 h-4 text-green-600"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              strokeWidth="2.5"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          {appliedReferralCode.percentage}% de descuento
-                          (referido)
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleApplySelectedCode}
-                    disabled={!selectedCodeType}
-                    className="mt-3 w-full rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d3a] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    Aplicar código seleccionado
-                  </button>
-                </div>
-              )}
 
               {/* Beneficios Disponibles - Estilo Rappi */}
               <div className="mb-6 space-y-3">
@@ -1875,7 +1719,7 @@ function FormularioReservaContent() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-zinc-900">
-                        Créditos disponibles
+                        Créditos
                       </span>
                       {useCredits > 0 && (
                         <svg

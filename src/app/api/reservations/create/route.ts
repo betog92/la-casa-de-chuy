@@ -43,6 +43,7 @@ interface CreateReservationBody {
   useLoyaltyPoints?: number;
   useCredits?: number;
   discountCode?: string | null;
+  referralCode?: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
       useLoyaltyPoints: Number(body.useLoyaltyPoints) || 0,
       useCredits: Number(body.useCredits) || 0,
       discountCode: body.discountCode ?? null,
+      referralCode: body.referralCode ?? null,
       authenticatedUserId,
       pendingReservationId: pendingId,
       supabase,

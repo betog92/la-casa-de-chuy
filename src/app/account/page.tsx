@@ -12,6 +12,7 @@ import {
   formatCurrency,
 } from "@/utils/formatters";
 import type { Reservation } from "@/types/reservation";
+import { ReferralCodeCard } from "@/components/ReferralCodeCard";
 
 interface UserProfile {
   email: string;
@@ -291,6 +292,9 @@ export default function AccountPage() {
             )}
           </div>
         </div>
+
+        {/* Tu código de referido */}
+        <ReferralCodeCard />
 
         {/* Historial de reservas */}
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6">

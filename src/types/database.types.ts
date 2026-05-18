@@ -440,7 +440,8 @@ export interface Database {
           user_id: string;
           amount: number;
           source: string;
-          expires_at: string;
+          // expires_at NULL = "no caduca" (migración 50: créditos de referido son perpetuos)
+          expires_at: string | null;
           used: boolean;
           created_at: string;
           reservation_id?: number | null;
@@ -452,7 +453,7 @@ export interface Database {
           user_id: string;
           amount: number;
           source: string;
-          expires_at: string;
+          expires_at?: string | null;
           used?: boolean;
           created_at?: string;
           reservation_id?: number | null;
@@ -464,7 +465,7 @@ export interface Database {
           user_id?: string;
           amount?: number;
           source?: string;
-          expires_at?: string;
+          expires_at?: string | null;
           used?: boolean;
           created_at?: string;
           reservation_id?: number | null;
@@ -508,36 +509,81 @@ export interface Database {
           revoked_at?: string | null;
         };
       };
-      referrals: {
+      // ============================================================
+      // Referidos V2 (migración 50): código permanente por usuario.
+      // La tabla `referrals` v1 fue dropeada en la misma migración.
+      // ============================================================
+      referral_codes: {
         Row: {
           id: string;
-          referrer_id: string;
-          referred_email: string;
+          user_id: string;
           code: string;
-          link: string;
-          completed: boolean;
-          credit_given: boolean;
+          active: boolean;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
-          referrer_id: string;
-          referred_email: string;
+          user_id: string;
           code: string;
-          link: string;
-          completed?: boolean;
-          credit_given?: boolean;
+          active?: boolean;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
-          referrer_id?: string;
-          referred_email?: string;
+          user_id?: string;
           code?: string;
-          link?: string;
-          completed?: boolean;
-          credit_given?: boolean;
+          active?: boolean;
           created_at?: string;
+          updated_at?: string;
+        };
+      };
+      referral_redemptions: {
+        Row: {
+          id: string;
+          referral_code_id: string;
+          referrer_user_id: string;
+          redeemed_email: string;
+          redeemed_user_id: string | null;
+          reservation_id: number;
+          invitee_discount_amount: number;
+          referrer_credit_id: string | null;
+          referrer_credit_amount: number;
+          status: "awarded" | "revoked";
+          created_at: string;
+          updated_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          referral_code_id: string;
+          referrer_user_id: string;
+          redeemed_email: string;
+          redeemed_user_id?: string | null;
+          reservation_id: number;
+          invitee_discount_amount?: number;
+          referrer_credit_id?: string | null;
+          referrer_credit_amount?: number;
+          status?: "awarded" | "revoked";
+          created_at?: string;
+          updated_at?: string;
+          revoked_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          referral_code_id?: string;
+          referrer_user_id?: string;
+          redeemed_email?: string;
+          redeemed_user_id?: string | null;
+          reservation_id?: number;
+          invitee_discount_amount?: number;
+          referrer_credit_id?: string | null;
+          referrer_credit_amount?: number;
+          status?: "awarded" | "revoked";
+          created_at?: string;
+          updated_at?: string;
+          revoked_at?: string | null;
         };
       };
       vestido_calendar_events: {
@@ -850,6 +896,16 @@ export interface Database {
           start_time: string;
           end_time: string;
         }>;
+      };
+      ensure_user_referral_code: {
+        Args: {
+          p_user_id: string;
+        };
+        Returns: string;
+      };
+      generate_unique_referral_code: {
+        Args: Record<string, never>;
+        Returns: string;
       };
       is_slot_available: {
         Args: {

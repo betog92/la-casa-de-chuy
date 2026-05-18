@@ -68,6 +68,7 @@ type ReservationIntentBody = {
     useLoyaltyPoints?: number;
     useCredits?: number;
     discountCode?: string | null;
+    referralCode?: string | null;
   };
 };
 
@@ -137,6 +138,7 @@ async function handleReservationIntent(body: ReservationIntentBody) {
     useLoyaltyPoints,
     useCredits,
     discountCode,
+    referralCode,
   } = reservation;
 
   if (!date || !startTime) {
@@ -218,6 +220,7 @@ async function handleReservationIntent(body: ReservationIntentBody) {
     useLoyaltyPoints: Number(useLoyaltyPoints) || 0,
     useCredits: Number(useCredits) || 0,
     discountCode: discountCode ?? null,
+    referralCode: referralCode ?? null,
   });
 
   if (!priceResult.ok) {
@@ -254,6 +257,7 @@ async function handleReservationIntent(body: ReservationIntentBody) {
     useLoyaltyPoints: Number(useLoyaltyPoints) || 0,
     useCredits: Number(useCredits) || 0,
     discountCode: discountCode ?? null,
+    referralCode: referralCode ?? null,
   };
   const { data: pendingRow, error: pendingErr } = await supabase
     .from("pending_reservations")

@@ -397,6 +397,8 @@ async function handleOrderPaid(
     useCredits: Number(payload.useCredits) || 0,
     discountCode:
       typeof payload.discountCode === "string" ? payload.discountCode : null,
+    referralCode:
+      typeof payload.referralCode === "string" ? payload.referralCode : null,
     authenticatedUserId: pending.user_id,
     pendingReservationId: pending.id,
     supabase,
