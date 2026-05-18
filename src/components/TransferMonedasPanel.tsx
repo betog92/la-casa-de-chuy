@@ -10,8 +10,7 @@ import { pluralizeLoyalty } from "@/utils/loyalty";
 // =====================================================
 // Panel reutilizable para que el cliente regale las Monedas
 // Chuy de una reserva a su fotógrafo / estudio.
-// Se usa en /reservar/confirmacion, /reservaciones/[id] y
-// /reservas/[token] (invitado con cuenta vinculada). En
+// Se usa en /reservaciones/[id] y /reservas/[token] (invitado con token). En
 // /reservaciones/[id] con adminReadOnly el staff ve historial y estado
 // sin poder crear ni cancelar transferencias.
 //
