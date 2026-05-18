@@ -47,9 +47,13 @@ export async function POST(request: NextRequest) {
     }
 
     return successResponse({
-      message: "Usuario sincronizado correctamente",
+      message: syncResult.skipped
+        ? "Usuario ya sincronizado"
+        : "Usuario sincronizado correctamente",
       userId: user.id,
       linkedReservationCount: syncResult.linkedReservationCount ?? 0,
+      skipped: syncResult.skipped ?? false,
+      partialProfile: syncResult.partialProfile ?? false,
     });
   } catch (error: unknown) {
     const errorMessage =

@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth/guest-tokens";
 import { sendReservationConfirmation } from "@/lib/email";
 import { calculateLoyaltyLevel, type LoyaltyLevel } from "@/utils/loyalty";
+import { pickContactFieldsToFill } from "@/lib/user-profile-contact";
 import { computeAuthoritativeReservationPrice } from "@/lib/payments/pricing-server";
 import {
   getConektaOrder,
@@ -571,15 +572,17 @@ export async function finalizeReservationFromPayload(
             .maybeSingle();
           if (!existingProfile) return;
           const p = existingProfile as { name: string | null; phone: string | null };
-          if (p.name && p.phone) return;
-          const updateData: { name?: string; phone?: string; updated_at: string } = {
-            updated_at: new Date().toISOString(),
-          };
-          if (!p.name && input.name) updateData.name = input.name;
-          if (!p.phone && input.phone) updateData.phone = input.phone;
-          if (updateData.name || updateData.phone) {
-            await supabase.from("users").update(updateData as never).eq("id", userId);
-          }
+          const patch = pickContactFieldsToFill(p, [
+            { name: input.name, phone: input.phone },
+          ]);
+          if (!patch) return;
+          await supabase
+            .from("users")
+            .update({
+              ...patch,
+              updated_at: new Date().toISOString(),
+            } as never)
+            .eq("id", userId);
         } catch (err) {
           console.error("Error updating user profile:", err);
         }

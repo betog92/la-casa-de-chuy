@@ -76,6 +76,14 @@ export async function GET(request: NextRequest) {
             syncResult.error,
             { userId: user.id, linked: syncResult.linkedReservationCount },
           );
+        } else if (syncResult.partialProfile) {
+          console.warn(
+            "[auth/callback] Sync parcial: reservas vinculadas pero public.users no se actualizó",
+            {
+              userId: user.id,
+              linked: syncResult.linkedReservationCount,
+            },
+          );
         }
       }
     } catch (syncError) {
