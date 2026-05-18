@@ -69,9 +69,14 @@ export async function GET(request: NextRequest) {
       } = await supabase.auth.getUser();
 
       if (user && user.email) {
-        // Sincronizar usuario usando función helper
-        // No interrumpimos el flujo si falla, solo logueamos
-        await syncUserToDatabase(user);
+        const syncResult = await syncUserToDatabase(user);
+        if (!syncResult.success) {
+          console.error(
+            "[auth/callback] syncUserToDatabase falló:",
+            syncResult.error,
+            { userId: user.id, linked: syncResult.linkedReservationCount },
+          );
+        }
       }
     } catch (syncError) {
       // No interrumpimos el flujo si falla la sincronización

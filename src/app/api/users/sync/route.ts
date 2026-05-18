@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     return successResponse({
       message: "Usuario sincronizado correctamente",
       userId: user.id,
+      linkedReservationCount: syncResult.linkedReservationCount ?? 0,
     });
   } catch (error: unknown) {
     const errorMessage =
