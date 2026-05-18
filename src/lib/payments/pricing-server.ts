@@ -337,7 +337,6 @@ export async function computeAuthoritativeReservationPrice(
     date,
     isLastMinute: true,
     reservationCount: useLoyaltyDiscount ? confirmedReservationCount : undefined,
-    isFirstReservation: undefined,
     useLoyaltyPoints: 0,
   });
 

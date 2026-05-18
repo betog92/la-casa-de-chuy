@@ -290,10 +290,6 @@ function FormularioReservaContent() {
           customPrice: reservationData.price,
           isLastMinute: true,
           reservationCount: useLoyaltyDiscount ? reservationCount : undefined,
-          // El descuento por referido se aplica explícitamente abajo a partir
-          // de `appliedReferralCode` para evitar duplicarlo con la rama de
-          // `isFirstReservation` interna de `calculateFinalPrice`.
-          isFirstReservation: false,
           useLoyaltyPoints: useLoyaltyPoints,
         });
 

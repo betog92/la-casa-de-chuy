@@ -269,34 +269,6 @@ export function applyLoyaltyDiscount(
   };
 }
 
-/**
- * Calcula descuento por referido (10% en primera reserva)
- *
- * @param isFirstReservation - Si es la primera reserva del referido
- * @param basePrice - Precio base
- * @returns Precio con descuento
- */
-export function applyReferralDiscount(
-  isFirstReservation: boolean,
-  basePrice: number
-): { price: number; discount: number; applied: boolean } {
-  if (!isFirstReservation) {
-    return {
-      price: basePrice,
-      discount: 0,
-      applied: false,
-    };
-  }
-
-  const discount = basePrice * 0.1;
-
-  return {
-    price: basePrice - discount,
-    discount,
-    applied: true,
-  };
-}
-
 // =====================================================
 // FUNCIÓN PARA CALCULAR PRECIO FINAL CON TODOS LOS DESCUENTOS
 // =====================================================
@@ -306,7 +278,6 @@ export interface PriceCalculationOptions {
   customPrice?: number | null;
   isLastMinute?: boolean;
   reservationCount?: number;
-  isFirstReservation?: boolean;
   useLoyaltyPoints?: number; // Puntos a usar (1 punto = $1 MXN)
 }
 
@@ -336,7 +307,6 @@ export async function calculateFinalPrice(
     customPrice,
     isLastMinute,
     reservationCount,
-    isFirstReservation,
     useLoyaltyPoints,
   } = options;
 
@@ -379,19 +349,12 @@ export async function calculateFinalPrice(
     finalPrice = loyalty.price;
   }
 
-  // 4. Aplicar descuento por referido (si aplica)
-  if (isFirstReservation) {
-    const referral = applyReferralDiscount(true, finalPrice);
-    if (referral.applied) {
-      discounts.referral = {
-        amount: referral.discount,
-        applied: true,
-      };
-      finalPrice = referral.price;
-    }
-  }
+  // El descuento por referido del programa V2 se aplica fuera de esta
+  // función (en `pricing-server.ts` y en el preview del formulario) porque
+  // depende de validación contra `referral_codes` y se calcula como monto
+  // fijo, no como porcentaje automático por "primera reserva".
 
-  // 5. Aplicar puntos de fidelización (si aplica)
+  // 4. Aplicar puntos de fidelización (si aplica)
   if (useLoyaltyPoints && useLoyaltyPoints > 0) {
     // 1 punto = $1 MXN; el descuento no puede superar el precio actual
     const discountFromPoints = Math.min(useLoyaltyPoints, finalPrice);
