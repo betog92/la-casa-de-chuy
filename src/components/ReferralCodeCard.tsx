@@ -58,7 +58,7 @@ export function ReferralCodeCard() {
   }, []);
 
   const handleCopy = useCallback(async () => {
-    if (!data?.code) return;
+    if (!data?.code || !data.active) return;
     try {
       await navigator.clipboard.writeText(data.code);
       setCopied(true);
@@ -67,10 +67,10 @@ export function ReferralCodeCard() {
       // Fallback silencioso: si el navegador bloquea clipboard, el usuario
       // siempre puede seleccionar el texto a mano.
     }
-  }, [data?.code]);
+  }, [data?.code, data?.active]);
 
   const handleShare = useCallback(async () => {
-    if (!data?.code) return;
+    if (!data?.code || !data.active) return;
     const inviteeAmount = data.rewards.inviteeDiscountAmount;
     const shareText =
       `Reserva tu sesión en La Casa de Chuy y obtén $${inviteeAmount} de descuento ` +
@@ -123,7 +123,7 @@ export function ReferralCodeCard() {
     );
   }
 
-  const { code, stats, rewards } = data;
+  const { code, active, stats, rewards } = data;
   const friendCountText =
     stats.redeemedCount === 0
       ? "Aún nadie ha usado tu código. ¡Compártelo!"
@@ -137,22 +137,46 @@ export function ReferralCodeCard() {
         Tu código de referido
       </h2>
       <p className="text-sm text-zinc-600 mb-4">
-        Compártelo con tus amigos: ellos obtienen{" "}
-        <strong>${rewards.inviteeDiscountAmount}</strong> de descuento en su
-        primera reserva y tú ganas{" "}
-        <strong>${rewards.referrerCreditAmount}</strong> en créditos cuando
-        paguen.
+        {active ? (
+          <>
+            Compártelo con tus amigos: ellos obtienen{" "}
+            <strong>${rewards.inviteeDiscountAmount}</strong> de descuento en su
+            primera reserva y tú ganas{" "}
+            <strong>${rewards.referrerCreditAmount}</strong> en créditos cuando
+            paguen.
+          </>
+        ) : (
+          <>
+            Tu código está pausado y no puede usarse en nuevas reservas por
+            ahora. Si crees que es un error, contáctanos.
+          </>
+        )}
       </p>
 
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+      {!active && (
+        <p
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          role="status"
+        >
+          Código inactivo — Copiar y Compartir están deshabilitados hasta que se
+          reactive.
+        </p>
+      )}
+
+      <div
+        className={`flex flex-col sm:flex-row gap-3 items-stretch sm:items-center${!active ? " opacity-60" : ""}`}
+      >
         <div className="flex-1 flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3">
-          <code className="text-lg font-mono font-semibold text-[#103948] tracking-wider">
+          <code
+            className={`text-lg font-mono font-semibold tracking-wider ${active ? "text-[#103948]" : "text-zinc-500"}`}
+          >
             {code}
           </code>
           <button
             type="button"
             onClick={handleCopy}
-            className="px-3 py-1.5 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap"
+            disabled={!active}
+            className="px-3 py-1.5 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-[#103948]"
             aria-label="Copiar código al portapapeles"
           >
             {copied ? "¡Copiado!" : "Copiar"}
@@ -161,13 +185,16 @@ export function ReferralCodeCard() {
         <button
           type="button"
           onClick={handleShare}
-          className="px-4 py-3 sm:py-2 text-sm font-semibold bg-[#103948] text-white rounded-lg hover:bg-[#0d2d38] transition-colors whitespace-nowrap"
+          disabled={!active}
+          className="px-4 py-3 sm:py-2 text-sm font-semibold bg-[#103948] text-white rounded-lg hover:bg-[#0d2d38] transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
         >
           Compartir
         </button>
       </div>
 
-      <p className="text-xs text-zinc-500 mt-3">{friendCountText}</p>
+      {active && (
+        <p className="text-xs text-zinc-500 mt-3">{friendCountText}</p>
+      )}
     </div>
   );
 }

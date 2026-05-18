@@ -10,9 +10,14 @@ import { getMonterreyToday } from "./business-days";
 export const PRICES = {
   normal: 1500, // Lunes a sábado: $1,500 MXN por hora
   weekend: 1500, // Viernes/sábado: misma tarifa que horario regular
-  sunday: 2000, // Domingos: $1,500 + $500 adicional = $2,000 MXN por hora
-  holiday: 2000, // Días festivos: $1,500 + $500 adicional = $2,000 MXN por hora
+  sunday: 2000, // Domingos: $2,000 MXN por hora (tarifa en línea, sin cargo aparte)
+  holiday: 2000, // Días festivos: $2,000 MXN por hora (tarifa en línea, sin cargo aparte)
 } as const;
+
+/** Texto para UI pública: precio por hora en pesos mexicanos. */
+export function formatPricePerHour(mxn: number): string {
+  return `$${mxn.toLocaleString("es-MX")} MXN por hora`;
+}
 
 // =====================================================
 // DÍAS FESTIVOS EN MÉXICO (2026)

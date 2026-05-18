@@ -1,5 +1,5 @@
 /**
- * Texto legal de términos y condiciones (compartido entre TermsModal y PayTermsConsentModal).
+ * Texto legal de términos y condiciones (compartido entre /terminos, TermsModal y PayTermsConsentModal).
  */
 export default function TermsContent() {
   return (
@@ -15,8 +15,8 @@ export default function TermsContent() {
           </li>
           <li>El tiempo perdido por retraso no puede recuperarse.</li>
           <li>
-            Puedes reagendar sin costo con mínimo 5 días hábiles de
-            anticipación.
+            Puedes reagendar sin costo desde la sección de tu reserva, con
+            mínimo 5 días hábiles de anticipación.
           </li>
           <li>
             Si no te presentas a tu cita, el pago realizado no es reembolsable.
@@ -139,12 +139,17 @@ export default function TermsContent() {
         </h3>
         <ul className="ml-4 space-y-2 list-disc">
           <li>
-            Puedes cancelar tu sesión con mínimo 5 días hábiles de anticipación
-            y recibir un reembolso del 80%.
+            Puedes cancelar tu sesión desde la sección de tu reserva, con
+            mínimo 5 días hábiles de anticipación y recibir un reembolso del
+            80%.
           </li>
           <li>
             Cancelaciones fuera de ese periodo, o la inasistencia, no generan
             reembolso.
+          </li>
+          <li>
+            El reagendamiento sin costo (mismas condiciones de anticipación) se
+            describe en el apartado 1.
           </li>
         </ul>
       </section>

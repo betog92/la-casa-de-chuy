@@ -71,7 +71,8 @@ export async function validateCheckoutCode(
     return { ok: false, message: discountResult.message };
   }
 
-  // No es cupón: intenta como referido. El referido SIEMPRE requiere email.
+  // No es cupón: intenta como referido. El referido SIEMPRE requiere email
+  // (la UI de checkout también exige correo antes de "Aplicar" cualquier código).
   if (!normalizedEmail) {
     return {
       ok: false,

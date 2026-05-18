@@ -43,6 +43,11 @@ const reservationFormSchema = z.object({
 type ReservationFormData = z.infer<typeof reservationFormSchema>;
 
 // Helper para extraer mensaje de error de axios
+/** Correo mínimo para validar cupón o referido en checkout (referido lo exige el servidor). */
+function isCheckoutEmailReady(email: string | undefined): boolean {
+  return z.string().email().safeParse((email || "").trim()).success;
+}
+
 function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     // Si hay una respuesta del servidor con un mensaje de error
@@ -147,6 +152,7 @@ function FormularioReservaContent() {
 
   // Obtener el email actual del formulario
   const currentEmail = watch("email");
+  const checkoutEmailReady = isCheckoutEmailReady(currentEmail);
 
   const hasAppliedCheckoutCode =
     !!appliedDiscountCode || !!appliedReferralCode;
@@ -425,11 +431,18 @@ function FormularioReservaContent() {
       return;
     }
 
+    const emailTrim = (currentEmail || "").trim().toLowerCase();
+    if (!isCheckoutEmailReady(emailTrim)) {
+      setCodeError(
+        "Captura tu correo en el formulario antes de validar el código.",
+      );
+      return;
+    }
+
     setValidatingCode(true);
     setCodeError(null);
 
     try {
-      const emailTrim = (currentEmail || "").trim().toLowerCase();
       const response = await axios.post("/api/codes/validate", {
         code: code.trim(),
         email: emailTrim || undefined,
@@ -835,6 +848,10 @@ function FormularioReservaContent() {
                       <label className="block text-sm font-medium text-zinc-700 mb-2">
                         ¿Tienes un código?
                       </label>
+                      <p className="mb-2 text-xs text-zinc-500">
+                        Primero ingresa tu correo; los códigos de referido lo
+                        requieren para validarse.
+                      </p>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -850,7 +867,8 @@ function FormularioReservaContent() {
                           disabled={
                             validatingCode ||
                             !discountCode.trim() ||
-                            hasAppliedCheckoutCode
+                            hasAppliedCheckoutCode ||
+                            !checkoutEmailReady
                           }
                           className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                         >
@@ -1529,6 +1547,10 @@ function FormularioReservaContent() {
                 <label className="block text-sm font-medium text-zinc-700 mb-2">
                   ¿Tienes un código?
                 </label>
+                <p className="mb-2 text-xs text-zinc-500">
+                  Primero ingresa tu correo; los códigos de referido lo requieren
+                  para validarse.
+                </p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1544,7 +1566,8 @@ function FormularioReservaContent() {
                     disabled={
                       validatingCode ||
                       !discountCode.trim() ||
-                      hasAppliedCheckoutCode
+                      hasAppliedCheckoutCode ||
+                      !checkoutEmailReady
                     }
                     className="px-4 py-2 text-sm font-medium text-[#103948] border border-[#103948] rounded hover:bg-[#103948] hover:text-white transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                   >

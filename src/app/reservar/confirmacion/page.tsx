@@ -577,8 +577,8 @@ function ConfirmacionContent() {
               <li className="flex items-start">
                 <span className="mr-2">•</span>
                 <span>
-                  Puedes reagendar sin costo con mínimo 5 días hábiles de
-                  anticipación.
+                  Puedes reagendar sin costo desde el enlace de tu reserva, con
+                  mínimo 5 días hábiles de anticipación.
                 </span>
               </li>
             )}

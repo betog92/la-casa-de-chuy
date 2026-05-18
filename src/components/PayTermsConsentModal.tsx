@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import CheckoutTermsHighlights from "@/components/CheckoutTermsHighlights";
 import TermsContent from "@/components/TermsContent";
 
 interface PayTermsConsentModalProps {
@@ -12,13 +13,15 @@ interface PayTermsConsentModalProps {
 /**
  * Modal de consentimiento antes del cobro.
  *
- * Diseño: resumen corto de los puntos clave + acordeón con el texto completo
- * de los términos. Esto reduce la fricción frente a leer el documento largo
- * sin esconderlo (el cliente puede expandirlo si quiere antes de aceptar).
+ * Diseño: resumen corto (`CheckoutTermsHighlights`) + acordeón con el texto
+ * completo de los términos (`TermsContent`).
  *
- * Comportamiento: el botón "Acepto y continuar con el pago" es el único que
- * dispara el cobro. Esc o "Cancelar" cierran el modal sin pagar; el foco
- * queda atrapado dentro del diálogo y se restaura al cerrarlo.
+ * Comportamiento:
+ * - Solo "Acepto y continuar con el pago" confirma; Esc o "Cancelar" cierran
+ *   sin cobrar.
+ * - El clic en el fondo oscuro (overlay) NO cierra el modal: es intencional
+ *   para evitar cerrar por accidente antes de leer/aceptar (a diferencia de
+ *   `TermsModal`, que sí cierra al pulsar fuera).
  */
 export default function PayTermsConsentModal({
   isOpen,
@@ -33,9 +36,6 @@ export default function PayTermsConsentModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    // El componente se monta solo cuando isOpen es true (mount condicional
-    // desde el padre), por lo que `showFullTerms` inicia en false en cada
-    // apertura sin necesidad de reset manual aquí.
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
     const t = window.setTimeout(() => {
@@ -47,8 +47,8 @@ export default function PayTermsConsentModal({
       if (!dialogEl) return [] as HTMLElement[];
       return Array.from(
         dialogEl.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
       ).filter((el) => !el.hasAttribute("disabled"));
     };
 
@@ -101,6 +101,10 @@ export default function PayTermsConsentModal({
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-2 sm:p-4 lg:p-8"
       aria-hidden={false}
+      onClick={(e) => {
+        // Clic en overlay: no cerrar (consentimiento explícito requerido).
+        if (e.target === e.currentTarget) e.preventDefault();
+      }}
     >
       <div
         ref={dialogRef}
@@ -108,7 +112,9 @@ export default function PayTermsConsentModal({
         aria-modal="true"
         aria-labelledby="pay-consent-title"
         tabIndex={-1}
-        className="flex max-h-[92vh] w-full min-w-0 max-w-2xl flex-col rounded-xl bg-white shadow-2xl ring-1 ring-black/5"
+        className={`flex max-h-[92vh] w-full min-w-0 flex-col rounded-xl bg-white shadow-2xl ring-1 ring-black/5 transition-[max-width] duration-200 ease-out ${
+          showFullTerms ? "max-w-5xl" : "max-w-3xl"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 border-b border-zinc-200 px-5 py-4 sm:px-7">
@@ -125,42 +131,7 @@ export default function PayTermsConsentModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7">
-          <div className="space-y-5 text-sm text-zinc-800 sm:text-[0.9375rem]">
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Cancelaciones y reagendamiento
-              </h3>
-              <ul className="list-disc space-y-1.5 pl-5">
-                <li>
-                  Cancela con <strong>5 días hábiles</strong> de anticipación y
-                  recibes el <strong>80%</strong> de reembolso. Después de ese
-                  plazo o si no te presentas, no aplica reembolso.
-                </li>
-                <li>
-                  Reagendar es <strong>gratis</strong> si avisas con 5 días
-                  hábiles de anticipación.
-                </li>
-              </ul>
-            </section>
-
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Día de la sesión
-              </h3>
-              <ul className="list-disc space-y-1.5 pl-5">
-                <li>
-                  Sesiones permitidas: XV años, bodas y casuales.
-                  Boudoir/lencería, familiares y grupales no se permiten.
-                </li>
-                <li>
-                  Tu sesión incluye <strong>5 personas</strong>. Cada persona
-                  extra son <strong>$200 MXN en efectivo</strong> el día de la
-                  sesión (máximo 4 adicionales).
-                </li>
-                <li>El tiempo perdido por retraso no se recupera.</li>
-              </ul>
-            </section>
-          </div>
+          <CheckoutTermsHighlights />
 
           <div className="mt-5 border-t border-zinc-200 pt-3">
             <button

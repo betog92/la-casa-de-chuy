@@ -1,5 +1,6 @@
 import Link from "next/link";
 import HeroCarousel from "@/components/HeroCarousel";
+import { PRICES, formatPricePerHour } from "@/utils/pricing";
 
 export default function Home() {
   return (
@@ -43,11 +44,19 @@ export default function Home() {
               <div className="space-y-3 text-zinc-700">
                 <div>
                   <p className="font-semibold">Horario regular</p>
-                  <p className="text-zinc-600">Lunes a sábado: $1,500 MXN por hora</p>
+                  <p className="text-zinc-600">
+                    Lunes a sábado: {formatPricePerHour(PRICES.normal)}
+                  </p>
                 </div>
                 <div>
                   <p className="font-semibold">Domingos y días festivos</p>
-                  <p className="text-zinc-600">$1,500 MXN por hora + $500 MXN por hora adicional ($2,000 MXN por hora)</p>
+                  <p className="text-zinc-600">
+                    {formatPricePerHour(PRICES.holiday)}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    El precio se aplica automáticamente al reservar en línea; no
+                    hay cargos adicionales en efectivo por domingo o festivo.
+                  </p>
                 </div>
               </div>
             </div>
