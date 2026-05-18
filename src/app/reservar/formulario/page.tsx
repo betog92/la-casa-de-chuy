@@ -151,18 +151,22 @@ function FormularioReservaContent() {
   const hasAppliedCheckoutCode =
     !!appliedDiscountCode || !!appliedReferralCode;
 
-  // Si validó un código con correo y luego lo cambia, el preview y el servidor
-  // ya no coincidirían con `/api/codes/validate`.
+  // Si validó un código con correo y luego lo cambia o lo vacía, el preview
+  // y el servidor ya no coincidirían con `/api/codes/validate`. Importante:
+  // tratamos email vacío también como "ya no coincide" para evitar que el
+  // badge "código aplicado" siga en la UI sin un correo válido detrás.
   useEffect(() => {
     if (!codeValidatedForEmail || !hasAppliedCheckoutCode) return;
     const e = (currentEmail || "").trim().toLowerCase();
-    if (e && e !== codeValidatedForEmail) {
+    if (e !== codeValidatedForEmail) {
       setAppliedDiscountCode(null);
       setAppliedReferralCode(null);
       setCodeValidatedForEmail(null);
       setDiscountCode("");
       setCodeError(
-        "El correo cambió respecto al que usaste al aplicar el código. Vuelve a validarlo si aplica.",
+        e
+          ? "El correo cambió respecto al que usaste al aplicar el código. Vuelve a validarlo si aplica."
+          : "Borraste el correo. Captúralo de nuevo y vuelve a aplicar el código si quieres usarlo.",
       );
     }
   }, [currentEmail, codeValidatedForEmail, hasAppliedCheckoutCode]);
