@@ -321,4 +321,11 @@ ALTER TABLE public.referral_redemptions ENABLE ROW LEVEL SECURITY;
 
 -- Sin políticas = nadie tiene acceso desde el cliente; service_role bypasea RLS.
 
+-- Privilegios RPC (patron migraciones 51-52)
+REVOKE ALL ON FUNCTION public.assign_referral_code_to_new_user() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ensure_user_referral_code(UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.generate_unique_referral_code() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ensure_user_referral_code(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION public.generate_unique_referral_code() TO service_role;
+
 COMMIT;

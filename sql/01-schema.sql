@@ -322,11 +322,7 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
-DROP POLICY IF EXISTS "gallery_public_read_objects" ON storage.objects;
-CREATE POLICY "gallery_public_read_objects"
-  ON storage.objects FOR SELECT
-  TO public
-  USING (bucket_id = 'gallery');
+-- Bucket public=true: URLs directas por path. Sin política SELECT amplia (evita listar el bucket).
 
 -- Reordenar galería en una sola transacción (ver sql/36-migration-gallery-reorder-rpc.sql)
 CREATE OR REPLACE FUNCTION reorder_gallery_images(p_ordered_ids UUID[])
@@ -377,9 +373,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION reorder_gallery_images(UUID[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION reorder_gallery_images(UUID[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION reorder_gallery_images(UUID[]) TO service_role;
-GRANT EXECUTE ON FUNCTION reorder_gallery_images(UUID[]) TO authenticated;
 
 -- Insertar imagen con sort_order siguiente (ver sql/37-migration-gallery-register-image-rpc.sql)
 CREATE OR REPLACE FUNCTION register_gallery_image(
@@ -414,9 +409,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION register_gallery_image(TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION register_gallery_image(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION register_gallery_image(TEXT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION register_gallery_image(TEXT, TEXT) TO authenticated;
 
 -- =====================================================
 -- CALENDARIO DE RENTA DE VESTIDOS (copia desde Google)
@@ -822,6 +816,13 @@ BEGIN
   ALTER SEQUENCE reservations_google_import_id_seq MINVALUE 10001 RESTART WITH 10001;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+ALTER FUNCTION next_google_import_id() SET search_path = public;
+ALTER FUNCTION reset_google_import_seq() SET search_path = public;
+REVOKE ALL ON FUNCTION next_google_import_id() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION reset_google_import_seq() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION next_google_import_id() TO service_role;
+GRANT EXECUTE ON FUNCTION reset_google_import_seq() TO service_role;
 
 -- =====================================================
 -- COMENTARIOS EN TABLAS

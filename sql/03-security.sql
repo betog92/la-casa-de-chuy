@@ -26,6 +26,11 @@ ALTER TABLE benefit_transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pending_reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conekta_webhook_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cron_job_heartbeats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reservation_reschedule_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vestido_calendar_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vestido_calendar_events ENABLE ROW LEVEL SECURITY;
+-- referral_codes / referral_redemptions: ver 50-migration-referral-codes-v2.sql
+-- reservation_refunds: ver 47-migration-reservation-refunds.sql
 
 -- =====================================================
 -- 2. ELIMINAR POLÍTICAS EXISTENTES (si las hay)
@@ -52,6 +57,7 @@ DROP POLICY IF EXISTS "Users can view own loyalty points" ON loyalty_points;
 DROP POLICY IF EXISTS "Users can view own referrals" ON referrals;
 DROP POLICY IF EXISTS "Users can view own outgoing transfers" ON benefit_transfers;
 DROP POLICY IF EXISTS "Photographers can view incoming transfers" ON benefit_transfers;
+DROP POLICY IF EXISTS "Users can view own benefit transfers" ON benefit_transfers;
 
 -- =====================================================
 -- 3. POLÍTICAS RLS PARA USERS
@@ -101,49 +107,23 @@ CREATE POLICY "Users can update own reservations"
 -- 5. POLÍTICAS RLS PARA AVAILABILITY
 -- =====================================================
 
--- Cualquiera puede ver la disponibilidad (necesario para el calendario)
+-- Cualquiera puede ver la disponibilidad (necesario para el calendario en /reservar)
 CREATE POLICY "Anyone can view availability"
   ON availability FOR SELECT
   USING (true);
 
--- Solo admins pueden modificar disponibilidad (por ahora, permitir todo)
--- TODO: Restringir esto cuando tengas autenticación de admin
--- Políticas separadas para evitar duplicación con SELECT
-CREATE POLICY "Anyone can insert availability"
-  ON availability FOR INSERT
-  WITH CHECK (true);
-
-CREATE POLICY "Anyone can update availability"
-  ON availability FOR UPDATE
-  USING (true);
-
-CREATE POLICY "Anyone can delete availability"
-  ON availability FOR DELETE
-  USING (true);
+-- INSERT/UPDATE/DELETE solo vía APIs admin (service role). Sin políticas = denegado al cliente.
 
 -- =====================================================
 -- 6. POLÍTICAS RLS PARA TIME_SLOTS
 -- =====================================================
 
--- Cualquiera puede ver los slots (necesario para el calendario)
+-- Cualquiera puede ver los slots (RPC get_available_slots / calendario)
 CREATE POLICY "Anyone can view time slots"
   ON time_slots FOR SELECT
   USING (true);
 
--- Solo admins pueden modificar slots (por ahora, permitir todo)
--- TODO: Restringir esto cuando tengas autenticación de admin
--- Políticas separadas para evitar duplicación con SELECT
-CREATE POLICY "Anyone can insert time slots"
-  ON time_slots FOR INSERT
-  WITH CHECK (true);
-
-CREATE POLICY "Anyone can update time slots"
-  ON time_slots FOR UPDATE
-  USING (true);
-
-CREATE POLICY "Anyone can delete time slots"
-  ON time_slots FOR DELETE
-  USING (true);
+-- INSERT/UPDATE/DELETE solo vía APIs admin (service role).
 
 -- =====================================================
 -- 7. POLÍTICAS RLS PARA CREDITS
@@ -179,33 +159,23 @@ CREATE POLICY "Users can view own referrals"
 -- así que NO se definen políticas de INSERT/UPDATE/DELETE: solo el
 -- backend puede crear/modificar transferencias.
 
--- El cliente que originó la transferencia puede verla
-CREATE POLICY "Users can view own outgoing transfers"
+-- Una sola política SELECT (emisor o receptor). La app usa APIs con service role.
+CREATE POLICY "Users can view own benefit transfers"
   ON benefit_transfers FOR SELECT
+  TO authenticated
   USING (
-    from_user_id IS NOT NULL AND (select auth.uid()) = from_user_id
-  );
-
--- El fotógrafo destinatario puede verla una vez vinculada
-CREATE POLICY "Photographers can view incoming transfers"
-  ON benefit_transfers FOR SELECT
-  USING (
-    to_user_id IS NOT NULL AND (select auth.uid()) = to_user_id
+    (SELECT auth.uid()) = from_user_id
+    OR (SELECT auth.uid()) = to_user_id
   );
 
 -- =====================================================
 -- NOTAS IMPORTANTES
 -- =====================================================
 -- 
--- Las políticas RLS actuales son básicas y permiten:
--- - Las reservas SOLO se crean a través de API routes del servidor (que usan Service Role Key)
--- - Cualquiera puede ver disponibilidad y slots (necesario para calendario)
--- - Los usuarios autenticados pueden ver/editar sus propias reservas
---
--- IMPORTANTE: Cuando implementes el panel de admin, deberás:
--- 1. Crear un rol de admin
--- 2. Agregar políticas que permitan a los admins ver/editar todo
--- 3. Restringir las políticas de availability y time_slots para que solo admins puedan modificarlas
---
--- Por ahora, estas políticas permiten que el sistema funcione mientras desarrollas.
+-- Resumen:
+-- - Reservas: solo APIs (service role) crean filas; usuarios ven las suyas.
+-- - availability / time_slots: SELECT público; mutaciones solo service role (admin APIs).
+-- - Tablas sin políticas (webhooks, referidos, reembolsos, etc.): solo service role.
+--   El Security Advisor muestra INFO "RLS enabled no policy"; es intencional.
+-- - RPC internas SECURITY DEFINER: privilegios en migraciones / 04 / 07 / 37 / 50.
 

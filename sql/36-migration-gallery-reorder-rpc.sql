@@ -52,9 +52,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION reorder_gallery_images(UUID[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION reorder_gallery_images(UUID[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION reorder_gallery_images(UUID[]) TO service_role;
-GRANT EXECUTE ON FUNCTION reorder_gallery_images(UUID[]) TO authenticated;
 
 COMMENT ON FUNCTION reorder_gallery_images IS
   'Reordena gallery_images en una transacción; p_ordered_ids es permutación completa de IDs.';

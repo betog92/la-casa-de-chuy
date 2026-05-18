@@ -70,10 +70,7 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
-DROP POLICY IF EXISTS "gallery_public_read_objects" ON storage.objects;
-CREATE POLICY "gallery_public_read_objects"
-  ON storage.objects FOR SELECT
-  TO public
-  USING (bucket_id = 'gallery');
+-- Sin política SELECT en storage.objects: bucket public=true sirve URLs por path
+-- sin permitir list() del bucket (Security Advisor).
 
 COMMIT;

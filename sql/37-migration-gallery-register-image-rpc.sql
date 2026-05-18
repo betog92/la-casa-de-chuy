@@ -37,9 +37,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION register_gallery_image(TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION register_gallery_image(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION register_gallery_image(TEXT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION register_gallery_image(TEXT, TEXT) TO authenticated;
 
 COMMENT ON FUNCTION register_gallery_image IS
   'Inserta fila de galería con sort_order siguiente; bloqueo transaccional evita duplicados concurrentes.';

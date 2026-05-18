@@ -24,3 +24,7 @@ COMMENT ON TABLE vestido_calendar_events IS 'Copia de eventos del calendario de 
 COMMENT ON COLUMN vestido_calendar_events.synced_at IS 'Última vez que se actualizó este evento desde Google.';
 
 CREATE INDEX IF NOT EXISTS idx_vestido_calendar_events_date ON vestido_calendar_events(date);
+
+-- Solo APIs admin / script sync (service role)
+ALTER TABLE vestido_calendar_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vestido_calendar_events ENABLE ROW LEVEL SECURITY;

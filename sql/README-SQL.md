@@ -126,11 +126,19 @@ Si solo necesitas actualizar las políticas RLS:
 
 ### Sobre la seguridad:
 
-- Las políticas RLS actuales permiten:
-  - Cualquiera puede ver disponibilidad y slots (necesario para el calendario)
-  - Cualquiera puede crear reservas (reservas como invitado)
-  - Los usuarios autenticados pueden ver/editar sus propias reservas
-- Cuando implementes el panel de admin, deberás agregar políticas específicas para admins
+- **Calendario público:** `availability` y `time_slots` tienen política `SELECT` abierta; `INSERT`/`UPDATE`/`DELETE` solo vía APIs admin (service role).
+- **Reservas:** se crean solo en API routes (service role); usuarios autenticados ven/editan las suyas.
+- **Tablas solo backend** (`conekta_webhook_events`, `referral_codes`, `pending_reservations`, etc.): RLS activo **sin políticas** → el cliente no accede; service role sí. El Security Advisor puede mostrar INFO `rls_enabled_no_policy`; es intencional.
+- **RPC internas** (`SECURITY DEFINER`): `REVOKE` de `PUBLIC`, `anon` y `authenticated`; `GRANT` solo a `service_role` (y `postgres` para cron). Ver `51`/`52` si la BD existía antes de esos cambios.
+- **Storage `gallery`:** bucket `public=true` sin política SELECT amplia en `storage.objects` (evita listar archivos).
+- **Contraseñas filtradas (HaveIBeenPwned):** requiere plan Pro en Supabase; opcional en Free.
+
+### Migraciones de seguridad (BD ya en producción):
+
+Si aplicaste cambios en el advisor antes de actualizar estos archivos:
+
+- `51-migration-security-advisor-fixes.sql` — RLS tablas internas, política `benefit_transfers`, revocar `PUBLIC` en RPC.
+- `52-migration-security-advisor-followup.sql` — revocar `anon`/`authenticated`, quitar políticas permisivas de availability/slots, storage gallery.
 
 ## 🔍 Verificación
 

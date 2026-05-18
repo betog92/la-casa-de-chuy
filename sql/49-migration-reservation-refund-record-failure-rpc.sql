@@ -58,6 +58,9 @@ $fn$;
 COMMENT ON FUNCTION public.reservation_refund_record_failure IS
   'Incrementa attempts en una fila pending; marca failed si alcanza p_max_attempts.';
 
+REVOKE ALL ON FUNCTION public.reservation_refund_record_failure(
+  uuid, text, timestamptz, timestamptz, integer
+) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reservation_refund_record_failure(
   uuid, text, timestamptz, timestamptz, integer
 ) TO service_role;

@@ -22,3 +22,6 @@ CREATE INDEX IF NOT EXISTS idx_reservation_reschedule_history_reservation_id
   ON reservation_reschedule_history(reservation_id);
 
 COMMENT ON TABLE reservation_reschedule_history IS 'Cada reagendamiento: quién, cuándo, de qué fecha/hora a cuál';
+
+-- Solo APIs con service role (sin políticas RLS = cliente bloqueado)
+ALTER TABLE reservation_reschedule_history ENABLE ROW LEVEL SECURITY;

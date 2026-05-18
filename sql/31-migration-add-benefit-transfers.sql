@@ -118,19 +118,14 @@ ALTER TABLE benefit_transfers ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own outgoing transfers" ON benefit_transfers;
 DROP POLICY IF EXISTS "Photographers can view incoming transfers" ON benefit_transfers;
+DROP POLICY IF EXISTS "Users can view own benefit transfers" ON benefit_transfers;
 
--- El cliente que originó la transferencia puede verla
-CREATE POLICY "Users can view own outgoing transfers"
+CREATE POLICY "Users can view own benefit transfers"
   ON benefit_transfers FOR SELECT
+  TO authenticated
   USING (
-    from_user_id IS NOT NULL AND (select auth.uid()) = from_user_id
-  );
-
--- El fotógrafo destinatario puede verla una vez vinculada
-CREATE POLICY "Photographers can view incoming transfers"
-  ON benefit_transfers FOR SELECT
-  USING (
-    to_user_id IS NOT NULL AND (select auth.uid()) = to_user_id
+    (SELECT auth.uid()) = from_user_id
+    OR (SELECT auth.uid()) = to_user_id
   );
 
 -- Las APIs de admin y server-side usan Service Role Key (bypassan RLS),

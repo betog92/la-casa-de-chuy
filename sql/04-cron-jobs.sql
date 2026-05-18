@@ -39,6 +39,10 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Configurar search_path para seguridad
 ALTER FUNCTION maintain_time_slots_at_midnight_monterrey() SET search_path = public;
 
+REVOKE ALL ON FUNCTION maintain_time_slots_at_midnight_monterrey() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION maintain_time_slots_at_midnight_monterrey() TO postgres;
+GRANT EXECUTE ON FUNCTION maintain_time_slots_at_midnight_monterrey() TO service_role;
+
 -- =====================================================
 -- CRON JOB OPTIMIZADO: Ejecutar solo en el rango UTC relevante
 -- =====================================================

@@ -59,6 +59,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Configurar search_path para seguridad
 ALTER FUNCTION increment_discount_code_uses(UUID) SET search_path = public;
 
+REVOKE ALL ON FUNCTION increment_discount_code_uses(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION increment_discount_code_uses(UUID) TO service_role;
+
 -- Comentarios para documentación
 COMMENT ON TABLE discount_codes IS 'Códigos de descuento promocionales (Buen Fin, Navidad, etc.)';
 COMMENT ON TABLE discount_code_uses IS 'Rastrea qué usuarios han usado qué códigos de descuento';

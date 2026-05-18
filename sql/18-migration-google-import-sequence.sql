@@ -35,6 +35,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+ALTER FUNCTION next_google_import_id() SET search_path = public;
+ALTER FUNCTION reset_google_import_seq() SET search_path = public;
+
+REVOKE ALL ON FUNCTION next_google_import_id() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION reset_google_import_seq() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION next_google_import_id() TO service_role;
+GRANT EXECUTE ON FUNCTION reset_google_import_seq() TO service_role;
+
 -- 5. Agregar columnas de importación si no existen
 ALTER TABLE reservations
   ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web'
