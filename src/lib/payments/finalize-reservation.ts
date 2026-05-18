@@ -287,6 +287,13 @@ export async function finalizeReservationFromPayload(
 
   // 7. INSERT reserva con valores autoritativos.
   const endTime = calculateEndTime(input.startTime);
+  // Cupón y referido son mutuamente excluyentes (pricing-server). `discount_code`
+  // almacena el string del código usado en checkout (cupón O referido) para
+  // trazabilidad en admin y reconciliación; el monto del referido va en
+  // `referral_discount`. No confundir con `priceResult.discountCode`, que solo
+  // se llena para cupones de marketing (evita registrar en discount_code_uses).
+  const persistedCheckoutCode =
+    priceResult.discountCode ?? priceResult.referralCode ?? null;
   const reservationData = {
     email: normalizedEmail,
     name: input.name,
@@ -308,7 +315,7 @@ export async function finalizeReservationFromPayload(
     loyalty_points_used: priceResult.loyaltyPointsUsed,
     credits_used: priceResult.creditsUsed,
     referral_discount: priceResult.referralDiscount,
-    discount_code: priceResult.discountCode,
+    discount_code: persistedCheckoutCode,
     discount_code_discount: priceResult.discountCodeDiscount,
   };
 
@@ -656,7 +663,9 @@ export async function finalizeReservationFromPayload(
     } catch (err) {
       // No fallamos la reserva por esto: ya cobramos y guardamos. El cron
       // o un job de reconciliación puede levantar la redemption faltante
-      // a partir de `reservations.discount_code`/`referral_discount`.
+      // a partir de `reservations.discount_code` (código CHUY-…) y
+      // `referral_discount` (monto). La fuente canónica sigue siendo
+      // `referral_redemptions` cuando el insert de premio sí corrió.
       console.error(
         "[finalize-reservation] Error en awardReferralAndCredit:",
         err,
