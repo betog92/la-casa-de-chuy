@@ -166,11 +166,36 @@ export async function validateReferralForReservationPrice(
     };
   }
 
+  // Fail-closed en la consulta del email del referidor: si la query falla,
+  // `referrerRes.data` es null y el check de auto-referido por email (abajo)
+  // se saltaría silenciosamente, permitiendo que el dueño del código lo use
+  // como guest con su propio correo.
+  if (referrerRes.error) {
+    console.error(
+      "[referral-validation] Error consultando email del referidor:",
+      referrerRes.error,
+    );
+    return {
+      ok: false,
+      message: "No se pudo validar el referido. Intenta de nuevo.",
+    };
+  }
+  if (!referrerRes.data) {
+    // Datos inconsistentes: existe el código pero no su dueño en public.users.
+    // En el flujo normal el trigger garantiza ambos; si falta, fail closed.
+    console.error(
+      "[referral-validation] Dueño del código no encontrado en public.users:",
+      code.user_id,
+    );
+    return {
+      ok: false,
+      message: "Este código no es válido en este momento.",
+    };
+  }
+
   // Auto-referido por email (caso: invitado sin sesión usa el código del
   // dueño de la cuenta).
-  const referrerEmail = (
-    (referrerRes.data as { email: string } | null)?.email ?? ""
-  )
+  const referrerEmail = ((referrerRes.data as { email: string }).email ?? "")
     .toLowerCase()
     .trim();
   if (referrerEmail && referrerEmail === normalizedEmail) {
