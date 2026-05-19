@@ -8,6 +8,10 @@ import {
   getAuthCallbackUrl,
   getPasswordResetCallbackUrl,
 } from "@/utils/url-helpers";
+import {
+  buildSignUpMetadata,
+  type SignUpContact,
+} from "@/lib/auth/sign-up-contact";
 
 interface AuthContextType {
   user: User | null;
@@ -19,7 +23,8 @@ interface AuthContextType {
   ) => Promise<{ success: boolean; error?: string }>;
   signUp: (
     email: string,
-    password: string
+    password: string,
+    contact: SignUpContact,
   ) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   signInWithMagicLink: (
@@ -82,12 +87,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    contact: SignUpContact,
+  ) => {
     const { error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
       options: {
         emailRedirectTo: getAuthCallbackUrl(),
+        data: buildSignUpMetadata(contact),
       },
     });
 

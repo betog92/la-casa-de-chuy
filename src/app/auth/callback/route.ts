@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthErrorMessage } from "@/utils/auth-error-messages";
 import { syncUserToDatabase } from "@/lib/supabase/user-sync";
+import { readRedirectAfterVerify } from "@/lib/auth/sign-up-contact";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   // Determinar la URL de redirección según el tipo
   // Si type=recovery, es reset de contraseña; de lo contrario, es verificación de email
-  const redirectUrl =
+  let redirectUrl =
     type === "recovery" ? "/auth/reset-password" : "/auth/email-verified";
 
   // Validar que hay código
@@ -27,6 +28,12 @@ export async function GET(request: NextRequest) {
     new URL(redirectUrl, request.url)
   );
 
+  let lastCookiesToSet: {
+    name: string;
+    value: string;
+    options?: Parameters<NextResponse["cookies"]["set"]>[2];
+  }[] = [];
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -36,7 +43,7 @@ export async function GET(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          // Crear nueva respuesta y establecer cookies correctamente en la respuesta
+          lastCookiesToSet = cookiesToSet;
           supabaseResponse = NextResponse.redirect(
             new URL(redirectUrl, request.url)
           );
@@ -69,6 +76,11 @@ export async function GET(request: NextRequest) {
       } = await supabase.auth.getUser();
 
       if (user && user.email) {
+        const postVerifyRedirect = readRedirectAfterVerify(user.user_metadata);
+        if (postVerifyRedirect) {
+          redirectUrl = postVerifyRedirect;
+        }
+
         const syncResult = await syncUserToDatabase(user);
         if (!syncResult.success) {
           console.error(
@@ -93,6 +105,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Retornar la respuesta con las cookies establecidas
+  // Redirect final (p. ej. reclaim Monedas) conservando opciones de cookies de sesión
+  supabaseResponse = NextResponse.redirect(new URL(redirectUrl, request.url));
+  lastCookiesToSet.forEach(({ name, value, options }) =>
+    supabaseResponse.cookies.set(name, value, options)
+  );
+
   return supabaseResponse;
 }

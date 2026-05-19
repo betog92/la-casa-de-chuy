@@ -1,14 +1,24 @@
 import RegisterForm from "@/components/auth/RegisterForm";
 import Link from "next/link";
+import { isSafeRedirectPath } from "@/utils/safe-redirect";
 
 interface PageProps {
-  searchParams: Promise<{ redirect?: string; email?: string }>;
+  searchParams: Promise<{
+    redirect?: string;
+    email?: string;
+    name?: string;
+    phone?: string;
+  }>;
 }
 
 export default async function RegisterPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const redirectTo = params.redirect ?? undefined;
+  const rawRedirect = params.redirect?.trim();
+  const redirectTo =
+    rawRedirect && isSafeRedirectPath(rawRedirect) ? rawRedirect : undefined;
   const defaultEmail = params.email?.trim() || undefined;
+  const defaultName = params.name?.trim() || undefined;
+  const defaultPhone = params.phone?.trim() || undefined;
   const loginHref = redirectTo
     ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}`
     : "/auth/login";
@@ -32,6 +42,8 @@ export default async function RegisterPage({ searchParams }: PageProps) {
           <RegisterForm
             redirectTo={redirectTo}
             defaultEmail={defaultEmail}
+            defaultName={defaultName}
+            defaultPhone={defaultPhone}
           />
 
           <div className="mt-6 text-center">

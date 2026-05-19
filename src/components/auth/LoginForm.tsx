@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import AuthError from "./AuthError";
 import Link from "next/link";
+import { resolveSafeRedirectPath } from "@/utils/safe-redirect";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -45,10 +46,8 @@ export default function LoginForm({ onSuccess, redirectTo }: LoginFormProps) {
       if (result.success) {
         if (onSuccess) {
           onSuccess();
-        } else if (redirectTo) {
-          router.push(redirectTo);
         } else {
-          router.push("/account");
+          router.push(resolveSafeRedirectPath(redirectTo, "/account"));
         }
       } else {
         setError(result.error || "Error al iniciar sesión");

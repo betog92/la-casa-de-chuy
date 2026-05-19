@@ -7,9 +7,17 @@ import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import AuthError from "./AuthError";
+import {
+  contactNameSchema,
+  contactPhoneSchema,
+  normalizePhone,
+} from "@/lib/validation/contact-fields";
+import { isSafeRedirectPath } from "@/utils/safe-redirect";
 
 const registerSchema = z
   .object({
+    name: contactNameSchema,
+    phone: contactPhoneSchema,
     email: z.string().email("Email inválido"),
     password: z
       .string()
@@ -28,12 +36,16 @@ interface RegisterFormProps {
   redirectTo?: string;
   /** Email a precargar (p.ej. cuando llegan desde un magic link). */
   defaultEmail?: string;
+  defaultName?: string;
+  defaultPhone?: string;
 }
 
 export default function RegisterForm({
   onSuccess,
   redirectTo,
   defaultEmail,
+  defaultName,
+  defaultPhone,
 }: RegisterFormProps) {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -48,7 +60,11 @@ export default function RegisterForm({
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
-    defaultValues: defaultEmail ? { email: defaultEmail } : undefined,
+    defaultValues: {
+      email: defaultEmail ?? "",
+      name: defaultName ?? "",
+      phone: defaultPhone ?? "",
+    },
   });
 
   const onSubmit = async (data: RegisterFormData) => {
@@ -56,19 +72,31 @@ export default function RegisterForm({
     setLoading(true);
 
     try {
-      const result = await signUp(data.email, data.password);
+      const email = defaultEmail?.trim().toLowerCase() ?? data.email.trim().toLowerCase();
+      const safeRedirect =
+        redirectTo && isSafeRedirectPath(redirectTo) ? redirectTo.trim() : undefined;
+
+      const result = await signUp(email, data.password, {
+        name: data.name.trim(),
+        phone: normalizePhone(data.phone),
+        redirectAfterVerify: safeRedirect,
+      });
       if (result.success) {
+        const verifyParams = new URLSearchParams({
+          email,
+        });
+        if (safeRedirect) {
+          verifyParams.set("redirect", safeRedirect);
+        }
         if (onSuccess) {
           onSuccess();
-        } else if (redirectTo) {
-          router.push(redirectTo);
         } else {
-          router.push(`/auth/verify-email?email=${encodeURIComponent(data.email)}`);
+          router.push(`/auth/verify-email?${verifyParams.toString()}`);
         }
       } else {
         setError(result.error || "Error al registrar usuario");
       }
-    } catch (err) {
+    } catch {
       setError("Error inesperado al registrar usuario");
     } finally {
       setLoading(false);
@@ -81,6 +109,46 @@ export default function RegisterForm({
 
       <div>
         <label
+          htmlFor="name"
+          className="block text-sm font-medium text-[#103948] mb-2"
+        >
+          Nombre completo
+        </label>
+        <input
+          id="name"
+          type="text"
+          autoComplete="name"
+          {...register("name")}
+          className="w-full px-4 py-3 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-[#103948] focus:border-transparent outline-none transition-all"
+          placeholder="Tu nombre"
+        />
+        {errors.name && (
+          <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label
+          htmlFor="phone"
+          className="block text-sm font-medium text-[#103948] mb-2"
+        >
+          Celular
+        </label>
+        <input
+          id="phone"
+          type="tel"
+          autoComplete="tel"
+          {...register("phone")}
+          className="w-full px-4 py-3 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-[#103948] focus:border-transparent outline-none transition-all"
+          placeholder="81 1234 5678"
+        />
+        {errors.phone && (
+          <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label
           htmlFor="email"
           className="block text-sm font-medium text-[#103948] mb-2"
         >
@@ -89,10 +157,19 @@ export default function RegisterForm({
         <input
           id="email"
           type="email"
+          autoComplete="email"
+          readOnly={Boolean(defaultEmail)}
           {...register("email")}
-          className="w-full px-4 py-3 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-[#103948] focus:border-transparent outline-none transition-all"
+          className={`w-full px-4 py-3 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-[#103948] focus:border-transparent outline-none transition-all ${
+            defaultEmail ? "bg-zinc-50 text-zinc-700" : ""
+          }`}
           placeholder="tu@email.com"
         />
+        {defaultEmail && (
+          <p className="mt-1 text-xs text-zinc-500">
+            Usamos el email de tu reserva para vincularla a tu cuenta.
+          </p>
+        )}
         {errors.email && (
           <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
         )}

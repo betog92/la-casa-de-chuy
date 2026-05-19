@@ -13,6 +13,7 @@ import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
+import { buildRegisterHref } from "@/utils/register-url";
 
 function ConfirmacionContent() {
   const searchParams = useSearchParams();
@@ -496,9 +497,11 @@ function ConfirmacionContent() {
               Monedas Chuy, créditos y más.
             </p>
             <Link
-              href={`/auth/register?email=${encodeURIComponent(
-                reservation.email
-              )}`}
+              href={buildRegisterHref({
+                email: reservation.email,
+                name: reservation.name,
+                phone: reservation.phone,
+              })}
               className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
             >
               Crear cuenta

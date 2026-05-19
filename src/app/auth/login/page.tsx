@@ -1,5 +1,6 @@
 import Link from "next/link";
 import LoginForm from "@/components/auth/LoginForm";
+import { isSafeRedirectPath } from "@/utils/safe-redirect";
 
 export default async function LoginPage({
   searchParams,
@@ -7,7 +8,12 @@ export default async function LoginPage({
   searchParams: Promise<{ redirect?: string }>;
 }) {
   const params = await searchParams;
-  const redirectTo = params.redirect ?? undefined;
+  const rawRedirect = params.redirect?.trim();
+  const redirectTo =
+    rawRedirect && isSafeRedirectPath(rawRedirect) ? rawRedirect : undefined;
+  const registerHref = redirectTo
+    ? `/auth/register?redirect=${encodeURIComponent(redirectTo)}`
+    : "/auth/register";
 
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
@@ -31,7 +37,7 @@ export default async function LoginPage({
             <p className="text-sm text-zinc-600">
               ¿No tienes una cuenta?{" "}
               <Link
-                href="/auth/register"
+                href={registerHref}
                 className="text-[#103948] hover:text-[#0d2d38] font-medium"
               >
                 Regístrate

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { buildRegisterHref } from "@/utils/register-url";
 import { pluralizeLoyalty } from "@/utils/loyalty";
 
 // =====================================================
@@ -300,11 +301,10 @@ export default function ReclamarMonedasPage() {
                 Iniciar sesión
               </Link>
               <Link
-                href={`/auth/register?email=${encodeURIComponent(
-                  info.toEmail,
-                )}&redirect=${encodeURIComponent(
-                  `/fotografos/reclamar/${token}`,
-                )}`}
+                href={buildRegisterHref({
+                  email: info.toEmail,
+                  redirect: `/fotografos/reclamar/${token}`,
+                })}
                 className="rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
               >
                 Crear cuenta

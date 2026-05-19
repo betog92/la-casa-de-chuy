@@ -4,6 +4,7 @@ import type { Database } from "@/types/database.types";
 import {
   type ContactSource,
   type ProfileContact,
+  contactFromAuthMetadata,
   isProfileContactComplete,
   pickContactFieldsToFill,
 } from "@/lib/user-profile-contact";
@@ -119,6 +120,11 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
       : { name: null, phone: null };
 
     const guestReservations = (guestResRes.data ?? []) as ContactSource[];
+    const metadataContact = contactFromAuthMetadata(user);
+    const contactSourcesForFill: ContactSource[] = [
+      ...(metadataContact ? [metadataContact] : []),
+      ...guestReservations,
+    ];
     const hasUnlinkedReservations = guestReservations.length > 0;
 
     // Magic link / re-login: nada pendiente → evitar queries extra
@@ -138,7 +144,7 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
 
     const contactForUpsert = pickContactFieldsToFill(
       profileExists ? currentProfile : { name: null, phone: null },
-      guestReservations,
+      contactSourcesForFill,
     );
 
     const userData: UserInsert = {
@@ -184,11 +190,11 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
       linkedReservationCount = linkedRows?.length ?? 0;
     }
 
-    let contactSources: ContactSource[] = guestReservations;
+    let contactSources: ContactSource[] = contactSourcesForFill;
 
     // Reparación: perfil vacío pero reservas ya vinculadas en un sync anterior
     if (
-      contactSources.length === 0 &&
+      guestReservations.length === 0 &&
       !isProfileContactComplete(currentProfile)
     ) {
       const { data: ownedReservations } = await serviceClient
@@ -198,7 +204,10 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
         .ilike("email", normalizedEmail)
         .order("created_at", { ascending: false })
         .limit(10);
-      contactSources = (ownedReservations ?? []) as ContactSource[];
+      contactSources = [
+        ...(metadataContact ? [metadataContact] : []),
+        ...((ownedReservations ?? []) as ContactSource[]),
+      ];
     }
 
     await Promise.all([

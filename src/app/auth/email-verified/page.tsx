@@ -1,18 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
+import { readRedirectAfterVerify } from "@/lib/auth/sign-up-contact";
+import { resolveSafeRedirectPath } from "@/utils/safe-redirect";
 
-export default function EmailVerifiedPage() {
+function EmailVerifiedContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading } = useAuth();
   const [countdown, setCountdown] = useState(5);
   const [shouldRedirect, setShouldRedirect] = useState(false);
 
-  // Contador que cuenta hacia atrás
+  const destination = useMemo(
+    () =>
+      resolveSafeRedirectPath(
+        searchParams.get("redirect") ??
+          readRedirectAfterVerify(user?.user_metadata) ??
+          undefined,
+        "/account",
+      ),
+    [searchParams, user?.user_metadata],
+  );
+
+  // Esperar sesión antes del countdown para leer redirect_after_verify en metadata
   useEffect(() => {
+    if (loading) return;
+
     const interval = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -25,14 +41,13 @@ export default function EmailVerifiedPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [loading]);
 
-  // Redirigir solo cuando el contador llegue a 0
   useEffect(() => {
-    if (shouldRedirect) {
-      router.push("/account");
+    if (shouldRedirect && !loading) {
+      router.push(destination);
     }
-  }, [shouldRedirect, router]);
+  }, [shouldRedirect, loading, router, destination]);
 
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
@@ -75,13 +90,29 @@ export default function EmailVerifiedPage() {
           )}
 
           <Link
-            href="/account"
+            href={destination}
             className="inline-block bg-[#103948] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
           >
-            Ir a mi cuenta ahora
+            {destination === "/account"
+              ? "Ir a mi cuenta ahora"
+              : "Continuar"}
           </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EmailVerifiedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white py-12 px-4 flex items-center justify-center">
+          <p className="text-zinc-600">Cargando...</p>
+        </div>
+      }
+    >
+      <EmailVerifiedContent />
+    </Suspense>
   );
 }

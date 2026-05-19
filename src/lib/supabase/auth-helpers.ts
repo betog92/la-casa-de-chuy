@@ -4,6 +4,10 @@ import {
   getAuthCallbackUrl,
   getPasswordResetCallbackUrl,
 } from "@/utils/url-helpers";
+import {
+  buildSignUpMetadata,
+  type SignUpContact,
+} from "@/lib/auth/sign-up-contact";
 
 export interface AuthResult {
   success: boolean;
@@ -80,11 +84,12 @@ export async function signInWithMagicLink(
 }
 
 /**
- * Registra un nuevo usuario (solo email y contraseña)
+ * Registra un nuevo usuario con contacto en user_metadata (name, phone).
  */
 export async function signUp(
   email: string,
-  password: string
+  password: string,
+  contact: SignUpContact,
 ): Promise<AuthResult> {
   try {
     const supabase = createClient();
@@ -93,6 +98,7 @@ export async function signUp(
       password,
       options: {
         emailRedirectTo: getAuthCallbackUrl(),
+        data: buildSignUpMetadata(contact),
       },
     });
 

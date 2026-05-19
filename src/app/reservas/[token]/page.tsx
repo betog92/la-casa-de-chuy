@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { format, parse, addDays, startOfDay, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
+import { buildRegisterHref } from "@/utils/register-url";
 import {
   calculateBusinessDays,
   getMonterreyToday,
@@ -917,9 +918,11 @@ export default function GuestReservationPage() {
           {/* Navegación */}
           <div>
             <Link
-              href={`/auth/register?email=${encodeURIComponent(
-                reservation.email
-              )}`}
+              href={buildRegisterHref({
+                email: reservation.email,
+                name: reservation.name,
+                phone: reservation.phone ?? undefined,
+              })}
               className="block w-full text-center rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
             >
               Crear cuenta
