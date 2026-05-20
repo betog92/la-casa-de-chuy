@@ -7,6 +7,8 @@ import Image from "next/image";
 import MobileMenu from "./MobileMenu";
 import { navigation } from "@/constants/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { UserMenuLinks } from "@/components/UserMenuLinks";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -14,6 +16,7 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Cerrar menú de usuario al hacer clic fuera
@@ -91,7 +94,7 @@ export default function Header() {
 
           {/* Icono de usuario (Desktop) */}
           <div className="hidden lg:flex lg:items-center">
-            {loading ? (
+            {loading || (user && adminLoading) ? (
               <div className="w-6 h-6 animate-pulse bg-[#103948BF] rounded-full" />
             ) : user ? (
               <div className="relative" ref={userMenuRef}>
@@ -123,20 +126,10 @@ export default function Header() {
                         {user.email}
                       </p>
                     </div>
-                    <Link
-                      href="/account"
-                      className="block px-4 py-2 text-sm text-[#103948BF] hover:bg-zinc-50 hover:text-[#103948] transition-colors"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      Mi cuenta
-                    </Link>
-                    <Link
-                      href="/admin"
-                      className="block px-4 py-2 text-sm text-[#103948BF] hover:bg-zinc-50 hover:text-[#103948] transition-colors"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      Panel admin
-                    </Link>
+                    <UserMenuLinks
+                      isAdmin={isAdmin}
+                      onNavigate={() => setUserMenuOpen(false)}
+                    />
                     <button
                       type="button"
                       onClick={async () => {

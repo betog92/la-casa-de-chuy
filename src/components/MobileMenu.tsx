@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ADMIN_NAV_ITEMS } from "@/constants/admin-nav";
 import { navigation } from "@/constants/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -16,19 +17,7 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // Saber si el usuario es admin para mostrar enlaces del panel en el mismo menú
-  useEffect(() => {
-    if (!isOpen || !user?.id) {
-      setIsAdmin(false);
-      return;
-    }
-    fetch("/api/admin/me")
-      .then((res) => res.json())
-      .then((data) => setIsAdmin(data.success === true && data.isAdmin === true))
-      .catch(() => setIsAdmin(false));
-  }, [isOpen, user?.id]);
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
 
   // Cerrar menú al presionar Escape
   useEffect(() => {
@@ -118,35 +107,37 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
 
               {/* Usuario o Iniciar sesión */}
               <li className="pt-2 border-t border-zinc-200 mt-2">
-                {loading ? (
+                {loading || (user && adminLoading) ? (
                   <div className="px-4 py-3 flex items-center gap-3">
                     <div className="w-5 h-5 animate-pulse bg-zinc-300 rounded-full" />
                     <span className="text-base text-zinc-400">Cargando...</span>
                   </div>
                 ) : user ? (
                   <>
-                    <Link
-                      href="/account"
-                      onClick={onClose}
-                      className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
-                      style={{ fontFamily: "var(--font-cormorant), serif" }}
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth="1.5"
-                        stroke="currentColor"
-                        aria-hidden="true"
+                    {!isAdmin && (
+                      <Link
+                        href="/account"
+                        onClick={onClose}
+                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
+                        style={{ fontFamily: "var(--font-cormorant), serif" }}
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                        />
-                      </svg>
-                      <span>Mi cuenta</span>
-                    </Link>
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="1.5"
+                          stroke="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                          />
+                        </svg>
+                        <span>Mi cuenta</span>
+                      </Link>
+                    )}
                     {isAdmin ? (
                       <>
                         <div className="border-t border-zinc-200 mt-2 pt-2" aria-hidden="true" />
@@ -169,17 +160,15 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                             </Link>
                           );
                         })}
+                        <Link
+                          href="/account"
+                          onClick={onClose}
+                          className="mt-2 block px-4 py-2.5 rounded-lg text-sm font-medium text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948] transition-colors"
+                        >
+                          Vista cliente
+                        </Link>
                       </>
-                    ) : (
-                      <Link
-                        href="/admin"
-                        onClick={onClose}
-                        className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-base font-medium transition-colors text-[#103948BF] hover:bg-zinc-100 hover:text-[#103948]"
-                        style={{ fontFamily: "var(--font-cormorant), serif" }}
-                      >
-                        <span>Panel admin</span>
-                      </Link>
-                    )}
+                    ) : null}
                     <button
                       type="button"
                       onClick={async () => {

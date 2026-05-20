@@ -38,7 +38,13 @@ export default function AdminLayout({
                 );
               })}
             </nav>
-            <div className="border-t border-zinc-200 p-3">
+            <div className="border-t border-zinc-200 p-3 space-y-0.5">
+              <Link
+                href="/account"
+                className="block rounded-lg px-3 py-2.5 text-sm text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+              >
+                Vista cliente
+              </Link>
               <Link
                 href="/"
                 className="block rounded-lg px-3 py-2.5 text-sm text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"

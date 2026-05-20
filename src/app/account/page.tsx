@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import Link from "next/link";
 import axios from "axios";
 import {
@@ -65,6 +66,7 @@ const formatPhone = (phone: string): string => {
 export default function AccountPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationsLoading, setReservationsLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -200,6 +202,20 @@ export default function AccountPage() {
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
+          {!adminLoading && isAdmin && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#103948]/20 bg-[#103948]/5 px-4 py-3">
+              <p className="text-sm text-zinc-700">
+                Estás en <span className="font-medium">vista cliente</span>{" "}
+                (reservas y beneficios personales).
+              </p>
+              <Link
+                href="/admin"
+                className="text-sm font-medium text-[#103948] hover:text-[#0d2d38] underline"
+              >
+                ← Volver al panel admin
+              </Link>
+            </div>
+          )}
           <h1
             className="text-3xl font-bold text-[#103948] mb-2"
             style={{ fontFamily: "var(--font-cormorant), serif" }}

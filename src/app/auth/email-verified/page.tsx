@@ -6,11 +6,13 @@ import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { readRedirectAfterVerify } from "@/lib/auth/sign-up-contact";
 import { resolveSafeRedirectPath } from "@/utils/safe-redirect";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 function EmailVerifiedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [countdown, setCountdown] = useState(5);
   const [shouldRedirect, setShouldRedirect] = useState(false);
 
@@ -20,14 +22,21 @@ function EmailVerifiedContent() {
         searchParams.get("redirect") ??
           readRedirectAfterVerify(user?.user_metadata) ??
           undefined,
-        "/account",
+        isAdmin ? "/admin" : "/account",
       ),
-    [searchParams, user?.user_metadata],
+    [searchParams, user?.user_metadata, isAdmin],
   );
+
+  const redirectMessage =
+    destination === "/admin"
+      ? "al panel de administración"
+      : destination === "/account"
+        ? "a tu cuenta"
+        : "a la siguiente página";
 
   // Esperar sesión antes del countdown para leer redirect_after_verify en metadata
   useEffect(() => {
-    if (loading) return;
+    if (loading || adminLoading) return;
 
     const interval = setInterval(() => {
       setCountdown((prev) => {
@@ -41,13 +50,13 @@ function EmailVerifiedContent() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [loading, adminLoading]);
 
   useEffect(() => {
-    if (shouldRedirect && !loading) {
+    if (shouldRedirect && !loading && !adminLoading) {
       router.push(destination);
     }
-  }, [shouldRedirect, loading, router, destination]);
+  }, [shouldRedirect, loading, adminLoading, router, destination]);
 
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
@@ -80,13 +89,13 @@ function EmailVerifiedContent() {
         </div>
 
         <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-8 text-center">
-          <p className="text-zinc-700 mb-4">
-            Redirigiendo a tu cuenta en {countdown} segundo
-            {countdown !== 1 ? "s" : ""}...
-          </p>
-
-          {loading && (
-            <p className="text-sm text-zinc-500 mb-4">Verificando sesión...</p>
+          {loading || adminLoading ? (
+            <p className="text-zinc-700 mb-4">Verificando sesión...</p>
+          ) : (
+            <p className="text-zinc-700 mb-4">
+              Redirigiendo {redirectMessage} en {countdown} segundo
+              {countdown !== 1 ? "s" : ""}...
+            </p>
           )}
 
           <Link
@@ -95,7 +104,9 @@ function EmailVerifiedContent() {
           >
             {destination === "/account"
               ? "Ir a mi cuenta ahora"
-              : "Continuar"}
+              : destination === "/admin"
+                ? "Ir al panel admin"
+                : "Continuar"}
           </Link>
         </div>
       </div>

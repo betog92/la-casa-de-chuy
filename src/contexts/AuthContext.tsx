@@ -17,6 +17,9 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isAdminLoading: boolean;
   signIn: (
     email: string,
     password: string
@@ -47,6 +50,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isAdminLoading, setIsAdminLoading] = useState(false);
 
   // Memoizar el cliente de Supabase para evitar recrearlo en cada render
   const supabase = useMemo(() => createClient(), []);
@@ -70,6 +76,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, [supabase]);
+
+  useEffect(() => {
+    if (loading || !user?.id) {
+      setIsAdmin(false);
+      setIsSuperAdmin(false);
+      setIsAdminLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsAdminLoading(true);
+
+    fetch("/api/users/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.success === true) {
+          setIsAdmin(data.isAdmin === true);
+          setIsSuperAdmin(data.isSuperAdmin === true);
+        } else {
+          setIsAdmin(false);
+          setIsSuperAdmin(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdmin(false);
+          setIsSuperAdmin(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsAdminLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, loading]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -189,6 +233,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     loading,
+    isAdmin,
+    isSuperAdmin,
+    isAdminLoading,
     signIn,
     signUp,
     signOut,
