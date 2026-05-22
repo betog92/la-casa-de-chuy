@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirma tu correo</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color:#18181b;">
+  <!-- Preheader: vista previa en bandeja de entrada (oculto en el cuerpo) -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">
+    Activa tu cuenta con un clic — La Casa de Chuy el Rico
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f4f5;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:480px; width:100%;">
+          <!-- Tarjeta principal -->
+          <tr>
+            <td style="background-color:#ffffff; border-radius:12px; padding:32px 28px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+              <!-- Marca -->
+              <p style="margin:0 0 24px; font-size:0.8125rem; font-weight:600; letter-spacing:0.02em; color:#103948; text-align:center;">
+                La Casa de Chuy el Rico
+              </p>
+
+              <h1 style="margin:0 0 12px; font-size:1.375rem; line-height:1.3; font-weight:700; color:#103948; text-align:center;">
+                Confirma tu correo
+              </h1>
+              <p style="margin:0 0 28px; font-size:0.9375rem; line-height:1.5; color:#52525b; text-align:center;">
+                Un paso más para activar tu cuenta y reservar con beneficios.
+              </p>
+
+              <p style="margin:0 0 16px; font-size:0.9375rem; line-height:1.5; color:#27272a;">
+                {{ if .Data.name }}Hola {{ .Data.name }},{{ else }}Hola,{{ end }}
+              </p>
+              <p style="margin:0 0 24px; font-size:0.9375rem; line-height:1.55; color:#3f3f46;">
+                Gracias por registrarte. Para completar tu cuenta, confirma que este correo es tuyo:
+                <strong style="color:#27272a;">{{ .Email }}</strong>
+              </p>
+
+              <!-- CTA primario (tabla para clientes que ignoran padding en &lt;a&gt;) -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block; min-width:200px; padding:16px 28px; background-color:#103948; color:#ffffff; text-decoration:none; border-radius:10px; font-size:1rem; font-weight:600; line-height:1.2; text-align:center; box-shadow:0 2px 4px rgba(16,57,72,0.2);">
+                      Confirmar mi correo
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Qué pasa después (reduce ansiedad / abandono) -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px; background-color:#fafafa; border-radius:8px; border-left:4px solid #103948;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <p style="margin:0 0 10px; font-size:0.8125rem; font-weight:600; color:#103948;">
+                      Después de confirmar podrás:
+                    </p>
+                    <p style="margin:0 0 6px; font-size:0.875rem; line-height:1.45; color:#52525b;">
+                      • Ver y gestionar tus reservas en un solo lugar
+                    </p>
+                    <p style="margin:0 0 6px; font-size:0.875rem; line-height:1.45; color:#52525b;">
+                      • Acumular Monedas Chuy y descuentos por fidelización
+                    </p>
+                    <p style="margin:0; font-size:0.875rem; line-height:1.45; color:#52525b;">
+                      • Usar créditos y códigos de referido en futuras sesiones
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Enlace de respaldo -->
+              <p style="margin:0 0 8px; font-size:0.8125rem; line-height:1.5; color:#71717a;">
+                Si el botón no funciona, copia y pega este enlace en tu navegador:
+              </p>
+              <p style="margin:0 0 24px; font-size:0.75rem; line-height:1.5; word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#103948; text-decoration:underline;">{{ .ConfirmationURL }}</a>
+              </p>
+
+              <p style="margin:0; font-size:0.8125rem; line-height:1.5; color:#a1a1aa;">
+                Si no creaste esta cuenta, puedes ignorar este correo. El enlace caduca por seguridad.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Pie -->
+          <tr>
+            <td style="padding:24px 8px 0; text-align:center;">
+              <p style="margin:0; font-size:0.75rem; line-height:1.5; color:#a1a1aa;">
+                La Casa de Chuy el Rico — Estudio de locación fotográfica<br>
+                <a href="{{ .SiteURL }}" style="color:#71717a; text-decoration:none;">lacasadechuyelrico.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

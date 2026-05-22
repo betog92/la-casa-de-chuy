@@ -14,6 +14,7 @@ import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
 import { buildRegisterHref } from "@/utils/register-url";
+import { GuestReservationNextStep } from "@/components/reservar/GuestReservationNextStep";
 
 function ConfirmacionContent() {
   const searchParams = useSearchParams();
@@ -120,10 +121,19 @@ function ConfirmacionContent() {
   const guestReservationLink =
     guestReservationUrl ??
     (guestTokenFromParams ? `/reservas/${guestTokenFromParams}` : null);
-  const displayGuestUrl = guestReservationUrl ?? "";
   const isGuest =
     !user && (guestReservationUrl || guestTokenFromParams) && hasAccount === false;
+  const urlToCopy =
+    guestReservationUrl ??
+    (typeof window !== "undefined" && guestReservationLink
+      ? `${window.location.origin}${guestReservationLink}`
+      : "");
+  const showGuestNextStep =
+    isGuest && !guestTokenFromParams && Boolean(guestReservationLink);
   const showNormalAccountBlock = user || !!hasAccount;
+  const showBottomFooter =
+    Boolean(guestTokenFromParams && guestReservationLink) ||
+    Boolean(user || hasAccount === true);
   const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
 
   // Usar el nivel de los query params si está disponible, sino usar el cargado desde la API
@@ -434,57 +444,57 @@ function ConfirmacionContent() {
           </div>
         )}
 
-        {/* Magic Link para Invitados - Solo en nueva reserva (no en reagendamiento; ahí ya tienen el enlace del correo) */}
-        {isGuest && !guestTokenFromParams && (
-          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-6">
-            <h3 className="mb-3 flex items-center text-lg font-semibold text-green-900">
-              <svg
-                className="mr-2 h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-                />
-              </svg>
-              Enlace de gestión de reserva
-            </h3>
-            <p className="mb-4 text-sm text-green-800">
-              Guarda este enlace para gestionar tu reserva (cancelar, reagendar,
-              etc.):
-            </p>
-            <div className="flex items-center gap-2 p-3 bg-white rounded border border-green-200">
-              <input
-                type="text"
-                readOnly
-                value={displayGuestUrl}
-                className="flex-1 text-sm text-zinc-700 bg-transparent border-none outline-none"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-              />
-              <button
-                onClick={() => {
-                  if (displayGuestUrl) {
-                    navigator.clipboard.writeText(displayGuestUrl);
-                    alert("Enlace copiado al portapapeles");
-                  }
-                }}
-                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-              >
-                Copiar
-              </button>
-            </div>
-            <Link
-              href={guestReservationLink ?? "#"}
-              className="mt-3 inline-block text-sm text-green-700 hover:text-green-900 font-medium underline"
-            >
-              Abrir página de gestión →
-            </Link>
-          </div>
+        {showGuestNextStep && guestReservationLink && (
+          <GuestReservationNextStep
+            manageHref={guestReservationLink}
+            urlToCopy={urlToCopy}
+            guestEmail={reservation?.email}
+          />
         )}
+        {/* Información Importante */}
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-6">
+          <h3 className="mb-3 flex items-center text-lg font-semibold text-blue-900">
+            <svg
+              className="mr-2 h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            Información Importante
+          </h3>
+          <ul className="space-y-2 text-sm text-blue-800">
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>
+                Recibirás un correo de confirmación con todos los detalles de tu
+                reserva.
+              </span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>
+                Si utilizarás el vestidor, te recomendamos llegar 25 minutos
+                antes de tu cita.
+              </span>
+            </li>
+            {rescheduled !== "true" && !showGuestNextStep && (
+              <li className="flex items-start">
+                <span className="mr-2">•</span>
+                <span>
+                  Puedes reagendar sin costo desde el enlace de tu reserva, con
+                  mínimo 5 días hábiles de anticipación.
+                </span>
+              </li>
+            )}
+          </ul>
+        </div>
 
         {/* Invitación a crear cuenta (solo para invitados en nueva reserva, no en reagendamiento) */}
         {isGuest && !guestTokenFromParams && reservation && (
@@ -529,69 +539,26 @@ function ConfirmacionContent() {
           </div>
         )}
 
-        {/* Información Importante */}
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-6">
-          <h3 className="mb-3 flex items-center text-lg font-semibold text-blue-900">
-            <svg
-              className="mr-2 h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            Información Importante
-          </h3>
-          <ul className="space-y-2 text-sm text-blue-800">
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                Recibirás un correo de confirmación con todos los detalles de tu
-                reserva.
-              </span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                Si utilizarás el vestidor, te recomendamos llegar 25 minutos
-                antes de tu cita.
-              </span>
-            </li>
-            {rescheduled !== "true" && (
-              <li className="flex items-start">
-                <span className="mr-2">•</span>
-                <span>
-                  Puedes reagendar sin costo desde el enlace de tu reserva, con
-                  mínimo 5 días hábiles de anticipación.
-                </span>
-              </li>
+        {/* Botón inferior: reagendo invitado → Volver; con cuenta → Ver mis reservas (oculto mientras hasAccount carga) */}
+        {showBottomFooter ? (
+          <div className="flex flex-col gap-4 sm:flex-row">
+            {guestTokenFromParams && guestReservationLink ? (
+              <Link
+                href={guestReservationLink}
+                className="flex-1 rounded-lg bg-[#103948] px-6 py-3 text-center font-semibold text-white transition-colors hover:bg-[#0d2d38]"
+              >
+                Volver a mi reserva
+              </Link>
+            ) : (
+              <Link
+                href="/account"
+                className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+              >
+                Ver mis reservas
+              </Link>
             )}
-          </ul>
-        </div>
-
-        {/* Botón de Acción: invitado → Ver/Volver a mi reserva; con cuenta → Ver mis reservas */}
-        <div className="flex flex-col gap-4 sm:flex-row">
-          {isGuest && guestReservationLink ? (
-            <Link
-              href={guestReservationLink}
-              className="flex-1 rounded-lg bg-[#103948] px-6 py-3 text-center font-semibold text-white transition-colors hover:bg-[#0d2d38]"
-            >
-              {guestTokenFromParams ? "Volver a mi reserva" : "Ver mi reserva"}
-            </Link>
-          ) : (
-            <Link
-              href="/account"
-              className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
-            >
-              Ver mis reservas
-            </Link>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
