@@ -14,6 +14,7 @@ import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
 import { buildRegisterHref } from "@/utils/register-url";
+import { AccountReservationNextStep } from "@/components/reservar/AccountReservationNextStep";
 import { GuestReservationNextStep } from "@/components/reservar/GuestReservationNextStep";
 
 function ConfirmacionContent() {
@@ -130,10 +131,15 @@ function ConfirmacionContent() {
       : "");
   const showGuestNextStep =
     isGuest && !guestTokenFromParams && Boolean(guestReservationLink);
-  const showNormalAccountBlock = user || !!hasAccount;
-  const showBottomFooter =
-    Boolean(guestTokenFromParams && guestReservationLink) ||
-    Boolean(user || hasAccount === true);
+  const showAccountNextStep = user || hasAccount === true;
+  const isReschedule = rescheduled === "true";
+  // Solo invitado sin cuenta en reagendo con token; si hasAccount/user, el módulo de cuenta basta
+  const showBottomFooter = Boolean(
+    guestTokenFromParams &&
+      guestReservationLink &&
+      !user &&
+      hasAccount !== true,
+  );
   const pointsEarned = Math.floor(Number(reservation?.price || 0) / 10);
 
   // Usar el nivel de los query params si está disponible, sino usar el cargado desde la API
@@ -253,8 +259,8 @@ function ConfirmacionContent() {
           </p>
         </div>
 
-        {/* Banner de puntos: usuario logueado o reserva creada como usuario (email ya registrado) */}
-        {(user || hasAccount) && rescheduled !== "true" && (
+        {/* Banner de puntos: solo si hay sesión (las monedas se acreditan con user_id) */}
+        {user && rescheduled !== "true" && (
           <div className="mt-3 mb-4 inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 border border-green-200">
             <span className="font-semibold">🎉 ¡Felicidades!</span>
             <span>
@@ -448,9 +454,18 @@ function ConfirmacionContent() {
           <GuestReservationNextStep
             manageHref={guestReservationLink}
             urlToCopy={urlToCopy}
-            guestEmail={reservation?.email}
+            guestEmail={reservation.email}
           />
         )}
+
+        {showAccountNextStep && (
+          <AccountReservationNextStep
+            reservationId={reservation.id}
+            variant={isReschedule ? "reschedule" : "new"}
+            requiresLogin={!user}
+          />
+        )}
+
         {/* Información Importante */}
         <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-6">
           <h3 className="mb-3 flex items-center text-lg font-semibold text-blue-900">
@@ -519,46 +534,14 @@ function ConfirmacionContent() {
           </div>
         )}
 
-        {/* Para usuarios autenticados o invitados cuyo email ya tiene cuenta: mostrar enlace a su cuenta */}
-        {showNormalAccountBlock && (
-          <div className="mb-6 rounded-lg border border-[#103948] bg-[#103948]/5 p-6">
-            <h3 className="mb-2 text-lg font-semibold text-[#103948]">
-              ¡Reserva agregada a tu cuenta!
-            </h3>
-            <p className="mb-4 text-sm text-zinc-700">
-              Puedes ver y gestionar todas tus reservas desde tu cuenta.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/reservaciones/${reservation.id}`}
-                className="inline-block bg-[#103948] text-white py-2 px-6 rounded-lg font-medium hover:bg-[#0d2d38] transition-colors"
-              >
-                Gestionar mi reserva
-              </Link>
-            </div>
-          </div>
+        {showBottomFooter && guestReservationLink && (
+          <Link
+            href={guestReservationLink}
+            className="flex w-full items-center justify-center rounded-lg bg-[#103948] px-6 py-3 text-center font-semibold text-white transition-colors hover:bg-[#0d2d38]"
+          >
+            Volver a mi reserva
+          </Link>
         )}
-
-        {/* Botón inferior: reagendo invitado → Volver; con cuenta → Ver mis reservas (oculto mientras hasAccount carga) */}
-        {showBottomFooter ? (
-          <div className="flex flex-col gap-4 sm:flex-row">
-            {guestTokenFromParams && guestReservationLink ? (
-              <Link
-                href={guestReservationLink}
-                className="flex-1 rounded-lg bg-[#103948] px-6 py-3 text-center font-semibold text-white transition-colors hover:bg-[#0d2d38]"
-              >
-                Volver a mi reserva
-              </Link>
-            ) : (
-              <Link
-                href="/account"
-                className="flex-1 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-center font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
-              >
-                Ver mis reservas
-              </Link>
-            )}
-          </div>
-        ) : null}
       </div>
     </div>
   );
