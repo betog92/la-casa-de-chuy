@@ -16,6 +16,7 @@ import axios from "axios";
 import { buildRegisterHref } from "@/utils/register-url";
 import { AccountReservationNextStep } from "@/components/reservar/AccountReservationNextStep";
 import { GuestReservationNextStep } from "@/components/reservar/GuestReservationNextStep";
+import { LoyaltyCongratulationsBanner } from "@/components/reservar/LoyaltyCongratulationsBanner";
 
 function ConfirmacionContent() {
   const searchParams = useSearchParams();
@@ -259,23 +260,15 @@ function ConfirmacionContent() {
           </p>
         </div>
 
-        {/* Banner de puntos: solo si hay sesión (las monedas se acreditan con user_id) */}
+        {/* Monedas / nivel: solo con sesión (las monedas se acreditan con user_id) */}
         {user && rescheduled !== "true" && (
-          <div className="mt-3 mb-4 inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 border border-green-200">
-            <span className="font-semibold">🎉 ¡Felicidades!</span>
-            <span>
-              Ganaste {pointsEarned}{" "}
-              {pointsEarned === 1 ? "Moneda Chuy" : "Monedas Chuy"}.
-            </span>
-            {loyaltyLevelChanged && displayLoyaltyLevel && (
-              <>
-                <span className="font-semibold">¡Subiste de nivel!</span>
-                <span className="font-semibold">
-                  Ahora eres: {displayLoyaltyLevel}
-                </span>
-              </>
-            )}
-          </div>
+          <LoyaltyCongratulationsBanner
+            pointsEarned={pointsEarned}
+            levelChanged={loyaltyLevelChanged}
+            newLevelName={
+              loyaltyLevelChanged ? displayLoyaltyLevel : null
+            }
+          />
         )}
 
         {/* Detalles de la Reserva */}
