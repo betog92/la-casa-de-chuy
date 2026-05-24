@@ -17,6 +17,10 @@ import {
   formatCurrency,
   formatBusinessDaysMessage,
 } from "@/utils/formatters";
+import {
+  getReservationStatusColor,
+  getReservationStatusLabel,
+} from "@/utils/reservation-status-display";
 import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
 import {
   isValidDiscount,
@@ -597,27 +601,18 @@ export default function ReservationDetailsPage() {
             <div>
               <p className="text-sm text-zinc-600 mb-1">Estado</p>
               <span
-                className={`inline-block px-3 py-1.5 text-sm font-medium rounded-full ${
-                  reservation.status === "confirmed" &&
-                  reservation.reschedule_count &&
-                  reservation.reschedule_count > 0
-                    ? "bg-orange-100 text-orange-800"
-                    : reservation.status === "confirmed"
-                    ? "bg-green-100 text-green-800"
-                    : reservation.status === "cancelled"
-                    ? "bg-red-100 text-red-800"
-                    : "bg-blue-100 text-blue-800"
-                }`}
+                className={`inline-block px-3 py-1.5 text-sm font-medium rounded-full ${getReservationStatusColor(
+                  reservation.status,
+                  {
+                    rescheduleCount: reservation.reschedule_count,
+                    sessionDate: reservation.date,
+                  },
+                )}`}
               >
-                {reservation.status === "confirmed" &&
-                reservation.reschedule_count &&
-                reservation.reschedule_count > 0
-                  ? "Reagendada"
-                  : reservation.status === "confirmed"
-                  ? "Confirmada"
-                  : reservation.status === "cancelled"
-                  ? "Cancelada"
-                  : "Completada"}
+                {getReservationStatusLabel(reservation.status, {
+                  rescheduleCount: reservation.reschedule_count,
+                  sessionDate: reservation.date,
+                })}
               </span>
             </div>
             <div className="text-right">

@@ -14,40 +14,16 @@ import {
 } from "@/utils/formatters";
 import type { Reservation } from "@/types/reservation";
 import { ReferralCodeCard } from "@/components/ReferralCodeCard";
+import {
+  getReservationStatusColor,
+  getReservationStatusLabel,
+} from "@/utils/reservation-status-display";
 
 interface UserProfile {
   email: string;
   name: string | null;
   phone: string | null;
 }
-
-const getStatusLabel = (status: string, rescheduleCount?: number): string => {
-  // Si la reserva fue reagendada y está confirmada, mostrar "Reagendada"
-  if (status === "confirmed" && rescheduleCount && rescheduleCount > 0) {
-    return "Reagendada";
-  }
-
-  const statusLabels: Record<string, string> = {
-    confirmed: "Confirmada",
-    cancelled: "Cancelada",
-    completed: "Completada",
-  };
-  return statusLabels[status] || status;
-};
-
-const getStatusColor = (status: string, rescheduleCount?: number): string => {
-  // Si la reserva fue reagendada y está confirmada, usar color diferente
-  if (status === "confirmed" && rescheduleCount && rescheduleCount > 0) {
-    return "bg-orange-100 text-orange-800";
-  }
-
-  const statusColors: Record<string, string> = {
-    confirmed: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-800",
-    completed: "bg-blue-100 text-blue-800",
-  };
-  return statusColors[status] || "bg-zinc-100 text-zinc-800";
-};
 
 // Formatear teléfono para mejor legibilidad (ej: "8116605611" -> "81 1660 5611")
 const formatPhone = (phone: string): string => {
@@ -266,7 +242,7 @@ export default function AccountPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-1 justify-center text-sm text-zinc-500">
                     <span
-                      title="Sube con reservas confirmadas: Elite 10+, VIP 5-9, Frecuente 1-4."
+                      title="Tu nivel sube con sesiones pagadas con tu cuenta (incluye las ya realizadas). Las de invitado no suman. Regalar Monedas Chuy no baja tu nivel. Elite 10+, VIP 5-9, Frecuente 1-4."
                       className="cursor-help"
                     >
                       Nivel de fidelización
@@ -385,15 +361,18 @@ export default function AccountPage() {
                         </div>
                       </div>
                       <span
-                        className={`px-3 py-1.5 text-sm font-medium rounded-full whitespace-nowrap self-center ${getStatusColor(
+                        className={`px-3 py-1.5 text-sm font-medium rounded-full whitespace-nowrap self-center ${getReservationStatusColor(
                           reservation.status,
-                          reservation.reschedule_count
+                          {
+                            rescheduleCount: reservation.reschedule_count,
+                            sessionDate: reservation.date,
+                          },
                         )}`}
                       >
-                        {getStatusLabel(
-                          reservation.status,
-                          reservation.reschedule_count
-                        )}
+                        {getReservationStatusLabel(reservation.status, {
+                          rescheduleCount: reservation.reschedule_count,
+                          sessionDate: reservation.date,
+                        })}
                       </span>
                     </div>
 

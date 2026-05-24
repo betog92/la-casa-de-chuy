@@ -9,6 +9,7 @@ import {
   validationErrorResponse,
 } from "@/utils/api-response";
 import { calculateLoyaltyLevel, type LoyaltyLevel } from "@/utils/loyalty";
+import { countLoyaltyTierReservations } from "@/lib/loyalty/tier-reservation-count";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -507,6 +508,11 @@ export async function GET(
       }
     }
 
+    const tierReservationCount = await countLoyaltyTierReservations(
+      supabase,
+      u.id,
+    );
+
     // Inferimos el tipo del literal para que satisfaga el constraint
     // `Record<string, unknown>` de successResponse (un interface explícito
     // tipado no lo hace estructuralmente).
@@ -524,7 +530,7 @@ export async function GET(
       summary: {
         reservationCount,
         totalSpent,
-        loyaltyLevel: calculateLoyaltyLevel(reservationCount),
+        loyaltyLevel: calculateLoyaltyLevel(tierReservationCount),
         loyaltyPointsAvailable,
         creditsAvailable,
         receivedSessionsCount,

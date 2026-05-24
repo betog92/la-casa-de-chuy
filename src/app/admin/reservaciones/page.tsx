@@ -24,6 +24,10 @@ import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
 import { calculatePriceWithCustom } from "@/utils/pricing";
 import type { TimeSlot } from "@/utils/availability";
 import {
+  getReservationStatusColor,
+  getReservationStatusLabel,
+} from "@/utils/reservation-status-display";
+import {
   ALVERO_DURATION_MIN,
   DEFAULT_DURATION_MIN,
   durationForVariant,
@@ -95,26 +99,6 @@ interface Reservation {
   import_type?: string | null;
   order_number?: string | null;
   google_event_id?: string | null;
-}
-
-const getStatusLabel = (status: string, rescheduleCount?: number): string => {
-  if (status === "confirmed" && rescheduleCount && rescheduleCount > 0) return "Reagendada";
-  const labels: Record<string, string> = {
-    confirmed: "Confirmada",
-    cancelled: "Cancelada",
-    completed: "Completada",
-  };
-  return labels[status] || status;
-};
-
-const getStatusColor = (status: string, rescheduleCount?: number): string => {
-  if (status === "confirmed" && rescheduleCount && rescheduleCount > 0) return "bg-orange-100 text-orange-800";
-  const colors: Record<string, string> = {
-    confirmed: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-800",
-    completed: "bg-blue-100 text-blue-800",
-  };
-  return colors[status] || "bg-zinc-100 text-zinc-800";
 }
 
 export default function AdminReservacionesPage() {
@@ -425,18 +409,14 @@ function AdminReservacionesPageInner() {
     setPickerTime(time);
     // Selección de slot libre: nunca es promoción, limpia el id.
     setSelectedReplacesId(null);
-    if (!pickerDate) return;
-    // Siempre actualizamos date + startTime al clicar un horario (si no,
-    // el submit falla con "Selecciona fecha y horario"). El precio
-    // calculado solo aplica a variant `cliente`; si falló el fetch de
-    // precio (pickerPrice null) o no es `cliente`, no tocamos `price`.
-    setNewForm((f) => ({
-      ...f,
-      date: format(pickerDate, "yyyy-MM-dd"),
-      startTime: time,
-      price:
-        pickerPrice !== null && f.variant === "cliente" ? pickerPrice : f.price,
-    }));
+    if (pickerDate && pickerPrice !== null) {
+      setNewForm((f) => ({
+        ...f,
+        date: format(pickerDate, "yyyy-MM-dd"),
+        startTime: time,
+        price: pickerPrice,
+      }));
+    }
   }, [pickerDate, pickerPrice]);
 
   // Selección de un "Espacio reservado para Alvero" → promoción en sitio.
@@ -802,8 +782,19 @@ function AdminReservacionesPageInner() {
                         <p className="text-sm text-zinc-500">{r.email}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusColor(r.status, r.reschedule_count)}`}>
-                          {getStatusLabel(r.status, r.reschedule_count)}
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getReservationStatusColor(
+                            r.status,
+                            {
+                              rescheduleCount: r.reschedule_count,
+                              sessionDate: r.date,
+                            },
+                          )}`}
+                        >
+                          {getReservationStatusLabel(r.status, {
+                            rescheduleCount: r.reschedule_count,
+                            sessionDate: r.date,
+                          })}
                         </span>
                       </td>
                       <td className="px-4 py-3">

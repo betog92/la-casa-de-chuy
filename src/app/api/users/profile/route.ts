@@ -7,6 +7,7 @@ import {
   unauthorizedResponse,
 } from "@/utils/api-response";
 import { calculateLoyaltyLevel } from "@/utils/loyalty";
+import { countLoyaltyTierReservations } from "@/lib/loyalty/tier-reservation-count";
 import type { Database } from "@/types/database.types";
 
 export async function GET(request: NextRequest) {
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Calcular saldos de puntos, créditos y nivel de fidelización
-    const [loyaltyAgg, creditsAgg, reservationsAgg] = await Promise.all([
+    const [loyaltyAgg, creditsAgg, tierReservationCount] = await Promise.all([
       supabase
         .from("loyalty_points")
         .select("points")
@@ -63,11 +64,7 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
         .eq("revoked", false)
         .eq("used", false),
-      supabase
-        .from("reservations")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("status", "confirmed"),
+      countLoyaltyTierReservations(supabase, user.id),
     ]);
 
     const loyaltyPoints =
@@ -86,7 +83,7 @@ export async function GET(request: NextRequest) {
           )
         : 0;
 
-    const confirmedCount = reservationsAgg.count || 0;
+    const confirmedCount = tierReservationCount;
 
     const loyaltyLevelName = calculateLoyaltyLevel(confirmedCount);
 
@@ -103,7 +100,7 @@ export async function GET(request: NextRequest) {
       loyaltyPoints,
       credits,
       loyaltyLevelName,
-      confirmedReservationCount: confirmedCount,
+      loyaltyTierReservationCount: confirmedCount,
     });
   } catch (error: unknown) {
     const errorMessage =

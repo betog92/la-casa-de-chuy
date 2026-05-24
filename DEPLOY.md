@@ -62,10 +62,11 @@ chargebacks. Si no se configura, las alertas se loguean pero no se envían.
 CRON_SECRET=secreto_para_proteger_endpoints_de_cron
 ```
 
-Vercel envía este valor en `Authorization: Bearer ...` para los crons
-configurados en `vercel.json`. El cron externo de huérfanos (cron-job.org;
-ver sección 7.bis) usa el mismo header. Sin él, los endpoints `/api/cron/*`
-rechazan las llamadas.
+Vercel envía este valor en `Authorization: Bearer ...` para el cron diario
+`materialize-transfers` en `vercel.json`. Los jobs en **cron-job.org**
+(huérfanos, retry-failed-refunds, complete-past-sessions; ver 7.bis, 7.ter y
+7.cuatro) usan el mismo header. Sin él, los endpoints `/api/cron/*` rechazan
+las llamadas.
 Generalo con `openssl rand -base64 32`.
 
 #### Variable de Autenticación:
@@ -275,6 +276,45 @@ responder. Si vuelven a fallar, el cron las recoge según el nuevo
 reserva (`/reservaciones/[id]`) en una sesión admin: aparece como
 "Reintentar reembolso" si el estado es `failed` o "Procesar reembolso
 ahora" si está `pending`.
+
+### 7.cuatro Cron de sesiones realizadas (`complete-past-sessions`) con cron-job.org
+
+Las reservas `confirmed` cuya **fecha de sesión ya pasó** (respecto a hoy en
+America/Monterrey) se marcan en BD como `completed`. Así el admin puede filtrar
+"Completadas" y el nivel de fidelización sigue contando esas sesiones. La UI
+del cliente ya muestra el chip azul **"Realizada"** aunque el cron no haya
+corrido; este job alinea la base de datos.
+
+**Qué hace el endpoint:** `UPDATE` de `confirmed` → `completed` donde
+`date < hoy` (Monterrey), excluyendo bloques `import_type = manual_available`.
+
+**Configuración en [cron-job.org](https://console.cron-job.org/) (resumen):**
+
+1. Crea un **cron job** nuevo (además de huérfanos y retry-failed-refunds).
+2. **URL:** `https://<tu-dominio-prod>/api/cron/complete-past-sessions`
+3. **Método:** GET o POST (ambos válidos).
+4. **Cabecera:** `Authorization` = `Bearer <CRON_SECRET>` (el mismo
+   `CRON_SECRET` que en Vercel; sin comillas en el valor del header).
+5. **Programación:** una vez al día por la mañana en **America/Monterrey**
+   (por ejemplo **08:00**). Idempotente: si vuelve a correr el mismo día,
+   no cambia filas que ya están en `completed`.
+6. Activa **notificaciones de fallo** del job (email) si el status no es 2xx.
+
+**Primera vez / backfill:** tras el deploy, ejecuta el job **una vez a mano**
+desde cron-job.org ("Run now") para marcar todas las sesiones pasadas que
+sigan en `confirmed`. La UI ya las mostraba como realizadas; esto actualiza
+el estado en Supabase.
+
+**Prueba local:**
+
+```bash
+curl -H "Authorization: Bearer <CRON_SECRET>" \
+  https://<tu-dominio-prod>/api/cron/complete-past-sessions
+```
+
+**Nota:** `materialize-transfers` sigue en el cron **diario de Vercel**
+(`vercel.json`). No dupliques `complete-past-sessions` en Vercel si ya está
+en cron-job.org.
 
 ### 8. Testing en Producción
 

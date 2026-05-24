@@ -25,9 +25,11 @@ export function pluralizeLoyalty(amount: number): string {
 }
 
 /**
- * Calcula el nivel de fidelización basado en el número de reservas confirmadas
+ * Calcula el nivel de fidelización según reservas elegibles para tier.
  *
- * @param confirmedCount - Número de reservas confirmadas
+ * @param confirmedCount - Reservas confirmadas que otorgaron Monedas Chuy
+ *   (pagadas con cuenta; no incluye invitado vinculado). Incluye sesiones
+ *   realizadas (`completed`). Transferir monedas no resta nivel.
  * @returns Nombre del nivel de fidelización
  */
 export function calculateLoyaltyLevel(confirmedCount: number): LoyaltyLevel {

@@ -7,6 +7,7 @@ import {
   unauthorizedResponse,
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
+import { withEffectiveReservationStatus } from "@/utils/reservation-status-display";
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,7 +53,10 @@ export async function GET(request: NextRequest) {
       return errorResponse("Error al cargar tus reservas", 500);
     }
 
-    return successResponse({ reservations: reservations || [] });
+    const rows = (reservations || []) as { status: string; date: string }[];
+    return successResponse({
+      reservations: rows.map(withEffectiveReservationStatus),
+    });
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error

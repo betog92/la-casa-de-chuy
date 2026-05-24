@@ -11,6 +11,7 @@ import {
   loyaltyLevelRank,
   type LoyaltyLevel,
 } from "@/utils/loyalty";
+import { aggregateLoyaltyTierCounts } from "@/lib/loyalty/tier-reservation-count";
 
 /**
  * Resumen de un cliente o fotógrafo para el listado de admin.
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
       usersRes,
       reservationsRes,
       pointsRes,
+      tierEarnedRes,
       creditsRes,
       transfersRes,
     ] = await Promise.all([
@@ -161,6 +163,12 @@ export async function GET(request: NextRequest) {
         // Las Monedas Chuy no caducan (NULL = perpetuas).
         // Mantenemos compatibilidad con registros viejos que aún tengan fecha.
         .or(`expires_at.is.null,expires_at.gte.${today}`)
+        .limit(50000),
+      supabase
+        .from("loyalty_points")
+        .select("user_id, reservation_id")
+        .gt("points", 0)
+        .not("reservation_id", "is", null)
         .limit(50000),
       supabase
         .from("credits")
@@ -190,6 +198,10 @@ export async function GET(request: NextRequest) {
       console.error("Error cargando loyalty_points:", pointsRes.error);
       return errorResponse("Error al cargar Monedas Chuy", 500);
     }
+    if (tierEarnedRes.error) {
+      console.error("Error cargando loyalty tier earned:", tierEarnedRes.error);
+      return errorResponse("Error al cargar nivel de fidelización", 500);
+    }
     if (creditsRes.error) {
       console.error("Error cargando credits:", creditsRes.error);
       return errorResponse("Error al cargar créditos", 500);
@@ -202,8 +214,17 @@ export async function GET(request: NextRequest) {
     const users = (usersRes.data || []) as UserLite[];
     const reservations = (reservationsRes.data || []) as ReservationLite[];
     const points = (pointsRes.data || []) as PointsAggRow[];
+    const tierEarnedRows = tierEarnedRes.data || [];
     const credits = (creditsRes.data || []) as CreditsAggRow[];
     const transfers = (transfersRes.data || []) as BenefitTransferLite[];
+
+    const confirmedForTier = reservations.filter(
+      (r) => r.status === "confirmed" || r.status === "completed",
+    );
+    const tierCountByUser = aggregateLoyaltyTierCounts(
+      tierEarnedRows,
+      confirmedForTier,
+    );
 
     // Mapas de agregación O(1)
     const pointsByUser = new Map<string, number>();
@@ -301,7 +322,8 @@ export async function GET(request: NextRequest) {
 
       const reservationCount = agg?.count || 0;
       const totalSpent = agg?.total || 0;
-      const level = calculateLoyaltyLevel(reservationCount);
+      const tierCount = tierCountByUser.get(userKey) || 0;
+      const level = calculateLoyaltyLevel(tierCount);
       const emailKey = u.email.trim().toLowerCase();
       accountedEmails.add(emailKey);
 

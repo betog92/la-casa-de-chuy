@@ -11,6 +11,10 @@ import {
   formatTimeRange,
   formatReservationId,
 } from "@/utils/formatters";
+import {
+  getReservationStatusColor,
+  getReservationStatusLabel,
+} from "@/utils/reservation-status-display";
 
 type LoyaltyLevel = "Elite" | "VIP" | "Frecuente" | "Inicial";
 // Las Monedas Chuy no caducan: solo earned / used / revoked.
@@ -183,31 +187,6 @@ const sessionTypeLabel: Record<
   xv_anos: "XV años",
   boda: "Boda",
   casual: "Casual",
-};
-
-const reservationStatusLabel = (
-  status: "confirmed" | "cancelled" | "completed",
-  rescheduleCount: number
-): string => {
-  if (status === "confirmed" && rescheduleCount > 0) return "Reagendada";
-  return {
-    confirmed: "Confirmada",
-    cancelled: "Cancelada",
-    completed: "Completada",
-  }[status];
-};
-
-const reservationStatusClass = (
-  status: "confirmed" | "cancelled" | "completed",
-  rescheduleCount: number
-): string => {
-  if (status === "confirmed" && rescheduleCount > 0)
-    return "bg-orange-100 text-orange-800";
-  return {
-    confirmed: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-800",
-    completed: "bg-blue-100 text-blue-800",
-  }[status];
 };
 
 const formatPhoneShort = (phone: string | null): string => {
@@ -609,12 +588,18 @@ export default function AdminClienteDetailPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${reservationStatusClass(
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${getReservationStatusColor(
                         r.status,
-                        r.rescheduleCount
+                        {
+                          rescheduleCount: r.rescheduleCount,
+                          sessionDate: r.date,
+                        },
                       )}`}
                     >
-                      {reservationStatusLabel(r.status, r.rescheduleCount)}
+                      {getReservationStatusLabel(r.status, {
+                        rescheduleCount: r.rescheduleCount,
+                        sessionDate: r.date,
+                      })}
                     </span>
                   </td>
                   <td className="px-4 py-3">

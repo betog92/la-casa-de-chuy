@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth/guest-tokens";
 import { sendReservationConfirmation } from "@/lib/email";
 import { calculateLoyaltyLevel, type LoyaltyLevel } from "@/utils/loyalty";
+import { countLoyaltyTierReservations } from "@/lib/loyalty/tier-reservation-count";
 import { pickContactFieldsToFill } from "@/lib/user-profile-contact";
 import { computeAuthoritativeReservationPrice } from "@/lib/payments/pricing-server";
 import {
@@ -253,15 +254,10 @@ export async function finalizeReservationFromPayload(
     );
   }
 
-  // 5. Contar reservas previas para nivel de fidelización.
+  // 5. Contar reservas previas elegibles para nivel (con Monedas otorgadas).
   let previousCount = 0;
   if (userId) {
-    const { count } = await supabase
-      .from("reservations")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("status", "confirmed");
-    previousCount = count ?? 0;
+    previousCount = await countLoyaltyTierReservations(supabase, userId);
   }
 
   // 6. Releer monedas para consumir.
@@ -534,32 +530,39 @@ export async function finalizeReservationFromPayload(
 
   const pointsToGrant =
     userId && finalPrice > 0 ? Math.floor(Number(finalPrice) / 10) : 0;
-  const newLoyaltyLevel = userId ? calculateLoyaltyLevel(previousCount + 1) : null;
+
+  let loyaltyGrantOk = false;
+  if (userId && pointsToGrant > 0) {
+    try {
+      const { error: grantError } = await supabase.from("loyalty_points").insert({
+        user_id: userId,
+        points: pointsToGrant,
+        expires_at: null,
+        reservation_id: reservationId,
+        used: false,
+        revoked: false,
+      } as never);
+      if (grantError) {
+        console.error("Error otorgando Monedas Chuy:", grantError);
+      } else {
+        loyaltyGrantOk = true;
+      }
+    } catch (err) {
+      console.error("Error inesperado otorgando Monedas Chuy:", err);
+    }
+  }
+
+  // Solo sube el tier si las Monedas se guardaron (mismo criterio que el conteo).
+  const tierCountAfterBooking =
+    userId && loyaltyGrantOk ? previousCount + 1 : previousCount;
+  const newLoyaltyLevel = userId
+    ? calculateLoyaltyLevel(tierCountAfterBooking)
+    : null;
   const previousLoyaltyLevel = userId ? calculateLoyaltyLevel(previousCount) : null;
   const loyaltyLevelChanged =
     newLoyaltyLevel !== null && newLoyaltyLevel !== previousLoyaltyLevel;
 
   const postInsertTasks: Promise<void>[] = [];
-
-  if (userId && pointsToGrant > 0) {
-    postInsertTasks.push(
-      (async () => {
-        try {
-          const { error: e } = await supabase.from("loyalty_points").insert({
-            user_id: userId,
-            points: pointsToGrant,
-            expires_at: null,
-            reservation_id: reservationId,
-            used: false,
-            revoked: false,
-          } as never);
-          if (e) console.error("Error otorgando Monedas Chuy:", e);
-        } catch (err) {
-          console.error("Error inesperado otorgando Monedas Chuy:", err);
-        }
-      })(),
-    );
-  }
 
   if (userId) {
     postInsertTasks.push(

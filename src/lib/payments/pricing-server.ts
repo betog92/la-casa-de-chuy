@@ -10,6 +10,7 @@ import {
   validateReferralForReservationPrice,
   REFERRAL_REFERRER_CREDIT_MXN,
 } from "@/lib/payments/referral-validation";
+import { countLoyaltyTierReservations } from "@/lib/loyalty/tier-reservation-count";
 
 /**
  * Cálculo de precio AUTORITATIVO en el servidor para reservas nuevas.
@@ -150,7 +151,7 @@ export async function computeAuthoritativeReservationPrice(
   let availableCredits = 0;
   let confirmedReservationCount = 0;
   if (resolvedUserId) {
-    const [pointsRes, creditsRes, countRes] = await Promise.all([
+    const [pointsRes, creditsRes, tierCount] = await Promise.all([
       supabase
         .from("loyalty_points")
         .select("points")
@@ -163,11 +164,7 @@ export async function computeAuthoritativeReservationPrice(
         .eq("user_id", resolvedUserId)
         .eq("revoked", false)
         .eq("used", false),
-      supabase
-        .from("reservations")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", resolvedUserId)
-        .eq("status", "confirmed"),
+      countLoyaltyTierReservations(supabase, resolvedUserId),
     ]);
     availablePoints =
       (pointsRes.data as { points: number }[] | null | undefined)?.reduce(
@@ -179,7 +176,7 @@ export async function computeAuthoritativeReservationPrice(
         (sum, r) => sum + Number(r.amount || 0),
         0,
       ) ?? 0;
-    confirmedReservationCount = countRes.count ?? 0;
+    confirmedReservationCount = tierCount;
   }
 
   // 3. Beneficios solicitados → si no alcanzan, fallar (no cobrar de más en silencio)

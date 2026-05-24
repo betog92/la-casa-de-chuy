@@ -23,6 +23,7 @@ import {
 import { sendRescheduleConfirmation } from "@/lib/email";
 import { verifyGuestToken, generateGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
 import { requireAdmin } from "@/lib/auth/admin";
+import { isReservationSessionPast } from "@/lib/reservations/session-lifecycle";
 import type { Database } from "@/types/database.types";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
@@ -164,6 +165,13 @@ export async function POST(
       return errorResponse(
         "Solo se pueden reagendar reservas confirmadas",
         400
+      );
+    }
+
+    if (!isAdmin && isReservationSessionPast(reservationRow.date)) {
+      return errorResponse(
+        "No se puede reagendar una sesión que ya pasó. Si necesitas ayuda, contáctanos.",
+        400,
       );
     }
 

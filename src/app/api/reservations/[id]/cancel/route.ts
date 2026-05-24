@@ -25,6 +25,7 @@ import {
 } from "@/lib/email";
 import { verifyGuestToken, generateGuestReservationUrl } from "@/lib/auth/guest-tokens";
 import { requireAdmin } from "@/lib/auth/admin";
+import { isReservationSessionPast } from "@/lib/reservations/session-lifecycle";
 import type { Database } from "@/types/database.types";
 import {
   processRefundRow,
@@ -162,6 +163,13 @@ export async function POST(
     // Verificar que el status es 'confirmed'
     if (reservationRow.status !== "confirmed") {
       return errorResponse("Solo se pueden cancelar reservas confirmadas", 400);
+    }
+
+    if (!isAdmin && isReservationSessionPast(reservationRow.date)) {
+      return errorResponse(
+        "No se puede cancelar una sesión que ya pasó. Si necesitas ayuda, contáctanos.",
+        400,
+      );
     }
 
     // Calcular días hábiles desde mañana hasta la fecha de la reserva

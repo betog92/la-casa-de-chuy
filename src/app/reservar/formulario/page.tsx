@@ -216,8 +216,14 @@ function FormularioReservaContent() {
           if (typeof profile.credits === "number") {
             setAvailableCredits(profile.credits);
           }
-          if (typeof profile.confirmedReservationCount === "number") {
-            setReservationCount(profile.confirmedReservationCount);
+          const tierCount =
+            typeof profile.loyaltyTierReservationCount === "number"
+              ? profile.loyaltyTierReservationCount
+              : typeof profile.confirmedReservationCount === "number"
+                ? profile.confirmedReservationCount
+                : undefined;
+          if (typeof tierCount === "number") {
+            setReservationCount(tierCount);
           }
         }
       } catch (error) {

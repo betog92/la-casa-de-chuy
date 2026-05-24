@@ -12,6 +12,7 @@ import {
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
 import { isSessionType } from "@/utils/session-type";
+import { getEffectiveReservationStatus } from "@/lib/reservations/session-lifecycle";
 
 type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
 
@@ -148,6 +149,10 @@ export async function GET(
 
     const reservation = {
       ...reservationData,
+      status: getEffectiveReservationStatus(
+        reservationData.status,
+        reservationData.date,
+      ),
       created_by,
       rescheduled_by,
       cancelled_by,
