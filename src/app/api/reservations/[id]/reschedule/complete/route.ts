@@ -315,6 +315,9 @@ export async function POST(
       end_time: endTime,
       reschedule_count: (reservationRow.reschedule_count || 0) + 1,
     };
+    if (isAdmin && user) {
+      updateData.rescheduled_by_user_id = user.id;
+    }
 
     if (serverAdditionalAmount > 0 && paymentId) {
       updateData.additional_payment_id = paymentId;
@@ -391,14 +394,13 @@ export async function POST(
         .eq("status", "pending_payment");
     }
 
-    // Registrar en historial de reagendamientos (cliente, pago en línea).
-    // `rescheduled_by_user_id`: si hay usuario autenticado lo guardamos; si
-    // es invitado (guestToken), queda null porque no hay row en `users`.
+    // Registrar en historial (cliente con pago en línea). Solo admins en
+    // `rescheduled_by_user_id` (igual que POST /reschedule sin complete).
     const hasAdditional = serverAdditionalAmount > 0 && !!paymentId;
     const prevTime = String(reservationRow.start_time ?? "00:00").trim() || "00:00";
     await supabase.from("reservation_reschedule_history").insert({
       reservation_id: reservationId,
-      rescheduled_by_user_id: user?.id ?? null,
+      rescheduled_by_user_id: isAdmin && user ? user.id : null,
       previous_date: reservationRow.date,
       previous_start_time: formatTimeToSeconds(prevTime),
       new_date: date,

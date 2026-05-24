@@ -33,6 +33,7 @@ export interface Reservation {
   /** Resuelto por la API cuando hay payment_validated_by_user_id */
   payment_validated_by?: { id: string; name: string | null; email: string } | null;
   status: "confirmed" | "cancelled" | "completed";
+  user_id?: string | null;
   created_at: string;
   // Campos de descuentos
   last_minute_discount?: number;

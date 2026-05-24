@@ -31,6 +31,10 @@ import { DiscountRow } from "@/components/DiscountRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import type { Reservation } from "@/types/reservation";
+import {
+  formatRescheduleAttribution,
+  shouldShowRescheduleActor,
+} from "@/utils/reschedule-display";
 import { sessionTypeLabel } from "@/utils/session-type";
 import { durationMinutesBetween } from "@/utils/reservation-helpers";
 
@@ -648,7 +652,7 @@ export default function GuestReservationPage() {
                           {formatCurrency(h.additional_payment_amount ?? 0)}{" "}
                           MXN
                         </p>
-                        {h.rescheduled_by && h.additional_payment_method && (
+                        {h.additional_payment_method && (
                           <p className="text-orange-900 mb-1">
                             Método:{" "}
                             {h.additional_payment_method === "conekta"
@@ -659,7 +663,11 @@ export default function GuestReservationPage() {
                                   h.additional_payment_method.slice(1)}
                           </p>
                         )}
-                        {!h.rescheduled_by &&
+                        {!shouldShowRescheduleActor(
+                          h.rescheduled_by,
+                          reservation.user_id,
+                          reservation.email,
+                        ) &&
                           reservation.additional_payment_id &&
                           idx === (reservation.reschedule_history ?? []).length - 1 && (
                             <p className="text-orange-900 font-mono text-xs mt-1">
@@ -668,19 +676,14 @@ export default function GuestReservationPage() {
                           )}
                       </div>
                     )}
-                    {h.rescheduled_by && (
-                      <p className="text-orange-900 font-semibold pt-1">
-                        Realizado por:{" "}
-                        {h.rescheduled_by.name?.trim() ||
-                          h.rescheduled_by.email}{" "}
-                        ·{" "}
-                        {format(
-                          new Date(h.rescheduled_at),
-                          "d 'de' MMMM 'a las' h:mm a",
-                          { locale: es }
-                        )}
-                      </p>
-                    )}
+                    <p className="text-orange-900 font-semibold pt-1">
+                      {formatRescheduleAttribution(
+                        h.rescheduled_at,
+                        h.rescheduled_by,
+                        reservation.user_id,
+                        reservation.email,
+                      )}
+                    </p>
                   </div>
                 </div>
               </div>
