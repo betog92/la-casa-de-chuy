@@ -43,13 +43,24 @@ async function runCron(request: NextRequest) {
     const supabase = createServiceRoleClient();
     const todayStr = getMonterreyTodayDateString();
 
-    const { data, error } = await supabase
-      .from("reservations")
-      .update({ status: "completed" } as never)
-      .eq("status", "confirmed")
-      .lt("date", todayStr)
+    const baseUpdate = () =>
+      supabase
+        .from("reservations")
+        .update({ status: "completed" } as never)
+        .eq("status", "confirmed")
+        .lt("date", todayStr);
+
+    let { data, error } = await baseUpdate()
       .or("import_type.is.null,import_type.neq.manual_available")
       .select("id");
+
+    // Prod sin migración 19: columna import_type ausente (Postgres 42703).
+    if (error?.code === "42703") {
+      console.warn(
+        "[complete-past-sessions] import_type missing, retrying without filter",
+      );
+      ({ data, error } = await baseUpdate().select("id"));
+    }
 
     if (error) {
       console.error("[complete-past-sessions] update error:", error);
