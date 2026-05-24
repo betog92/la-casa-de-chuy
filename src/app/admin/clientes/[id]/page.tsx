@@ -80,7 +80,6 @@ interface Transfer {
   fromUserId: string | null;
   toEmail: string;
   toUserId: string | null;
-  toStudioName: string | null;
   status: TransferStatus;
   transferredPoints: number;
   createdAt: string;
@@ -761,8 +760,7 @@ function TransferTable({
       {transfers.map((t) => {
         const info = transferStatusInfo[t.status];
         const otherEmail = direction === "outgoing" ? t.toEmail : t.fromEmail;
-        const otherName =
-          direction === "outgoing" ? t.toStudioName || otherEmail : otherEmail;
+        const otherName = otherEmail;
         const dateStr = t.materializedAt || t.cancelledAt || t.createdAt;
         return (
           <tr key={t.id} className="border-b border-zinc-100 last:border-0">
@@ -780,10 +778,7 @@ function TransferTable({
               )}
             </td>
             <td className="px-4 py-2.5 text-zinc-700">
-              <p className="font-medium">{otherName}</p>
-              {direction === "outgoing" && t.toStudioName && (
-                <p className="text-xs text-zinc-500">{t.toEmail}</p>
-              )}
+              <p className="font-medium break-all">{otherName}</p>
             </td>
             <td className="px-4 py-2.5 text-zinc-700">
               <p>

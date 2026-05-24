@@ -25,7 +25,7 @@ import {
 // /api/reservations/[id]/transfer-monedas
 // =====================================================
 // Permite al cliente regalarle las Monedas Chuy ganadas
-// por una reserva al fotógrafo/estudio que lo trajo.
+// por una reserva al fotógrafo que lo trajo.
 // La transferencia se materializa después de que pasa la
 // fecha de la sesión (ver /api/cron/materialize-transfers).
 //
@@ -222,7 +222,7 @@ export async function GET(
         supabase
           .from("benefit_transfers")
           .select(
-            "id, status, transferred_points, to_email, to_studio_name, created_at, materialized_at, claimed_at, cancelled_at, reverted_at",
+            "id, status, transferred_points, to_email, created_at, materialized_at, claimed_at, cancelled_at, reverted_at",
           )
           .eq("reservation_id", reservationId)
           .order("created_at", { ascending: false }),
@@ -242,7 +242,6 @@ export async function GET(
       status: string;
       transferred_points: number | null;
       to_email: string;
-      to_studio_name: string | null;
       created_at: string;
       materialized_at: string | null;
       claimed_at: string | null;
@@ -263,7 +262,6 @@ export async function GET(
             status: active.status,
             transferredPoints: active.transferred_points || 0,
             toEmail: active.to_email,
-            toStudioName: active.to_studio_name,
             createdAt: active.created_at,
             materializedAt: active.materialized_at,
             claimedAt: active.claimed_at,
@@ -274,7 +272,6 @@ export async function GET(
         status: r.status,
         transferredPoints: r.transferred_points || 0,
         toEmail: r.to_email,
-        toStudioName: r.to_studio_name,
         createdAt: r.created_at,
         materializedAt: r.materialized_at,
         claimedAt: r.claimed_at,
@@ -304,7 +301,6 @@ export async function POST(
 
     const body = (await request.json().catch(() => ({}))) as {
       to_email?: unknown;
-      to_studio_name?: unknown;
       token?: unknown;
     };
 
@@ -312,7 +308,7 @@ export async function POST(
     const toEmail = toEmailRaw.toLowerCase().trim();
     if (!toEmail) {
       return validationErrorResponse(
-        "Falta el correo del fotógrafo o estudio.",
+        "Falta el correo del fotógrafo.",
       );
     }
     // RFC simplificado: validación liviana suficiente para emails normales
@@ -320,12 +316,6 @@ export async function POST(
     if (!emailRegex.test(toEmail) || toEmail.length > 254) {
       return validationErrorResponse("El correo no parece válido.");
     }
-
-    const toStudioRaw =
-      typeof body.to_studio_name === "string" ? body.to_studio_name : null;
-    const toStudio = toStudioRaw
-      ? toStudioRaw.trim().slice(0, 200) || null
-      : null;
 
     const guestToken = typeof body.token === "string" ? body.token : undefined;
 
@@ -441,13 +431,12 @@ export async function POST(
         from_user_id: auth.fromUserId,
         from_email: fromEmail,
         to_email: toEmail,
-        to_studio_name: toStudio,
         status: "pending",
         transferred_points: revokeRes.totalPoints,
         revoked_loyalty_point_ids: revokeRes.revokedIds,
       } as never)
       .select(
-        "id, status, transferred_points, to_email, to_studio_name, created_at",
+        "id, status, transferred_points, to_email, created_at",
       )
       .single();
 
@@ -480,7 +469,6 @@ export async function POST(
       status: string;
       transferred_points: number;
       to_email: string;
-      to_studio_name: string | null;
       created_at: string;
     };
     const row = inserted as InsertedRow;
@@ -492,7 +480,6 @@ export async function POST(
           status: row.status,
           transferredPoints: row.transferred_points,
           toEmail: row.to_email,
-          toStudioName: row.to_studio_name,
           createdAt: row.created_at,
         },
       },

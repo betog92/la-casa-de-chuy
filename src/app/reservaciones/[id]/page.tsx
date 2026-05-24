@@ -600,7 +600,8 @@ export default function ReservationDetailsPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 sm:p-8 space-y-6">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+          <div className="space-y-6 p-6 sm:p-8">
           {/* Estado de la reserva e ID */}
           <div className="flex items-center justify-between pb-4 border-b border-zinc-200">
             <div>
@@ -1463,26 +1464,27 @@ export default function ReservationDetailsPage() {
             </div>
           )}
 
-          {/* Navegación */}
-          <div className="pt-6 border-t border-zinc-200">
+          {/* Pie: volver */}
+          <div className="border-t border-zinc-200 pt-5">
             <Link
               href={isAdmin ? "/admin/reservaciones" : "/account"}
-              className="block w-full text-center rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+              className="block w-full rounded-lg border border-zinc-300 bg-white py-3 px-4 text-center font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
             >
               {isAdmin ? "Volver a reservaciones" : "Volver a mis reservas"}
             </Link>
           </div>
-        </div>
-
-        {/* Monedas Chuy: cliente puede regalar; admin ve historial / estado en solo lectura */}
-        {reservation.status === "confirmed" && adminMeResolved && (
-          <div className="mt-6">
-            <TransferMonedasPanel
-              reservationId={reservation.id}
-              adminReadOnly={isAdmin}
-            />
           </div>
-        )}
+
+          {reservation.status === "confirmed" &&
+            reservation.user_id &&
+            adminMeResolved && (
+              <TransferMonedasPanel
+                reservationId={reservation.id}
+                adminReadOnly={isAdmin}
+                variant="embedded"
+              />
+            )}
+        </div>
       </div>
 
       {/* Modal de confirmación de cancelación */}

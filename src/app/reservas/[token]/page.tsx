@@ -353,7 +353,8 @@ export default function GuestReservationPage() {
           <p className="text-zinc-600">Gestiona tu reserva desde aquí</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 sm:p-8 space-y-6">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+          <div className="space-y-6 p-6 sm:p-8">
           {/* Estado de la reserva e ID */}
           <div className="flex items-center justify-between pb-4 border-b border-zinc-200">
             <div>
@@ -829,35 +830,32 @@ export default function GuestReservationPage() {
             </div>
           )}
 
-          {/* Navegación */}
-          <div>
+          {/* Pie: crear cuenta */}
+          <div className="border-t border-zinc-200 pt-5">
             <Link
               href={buildRegisterHref({
                 email: reservation.email,
                 name: reservation.name,
                 phone: reservation.phone ?? undefined,
               })}
-              className="block w-full text-center rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+              className="block w-full rounded-lg border border-zinc-300 bg-white py-3 px-4 text-center font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
             >
               Crear cuenta
             </Link>
-            <p className="mt-2 text-xs text-zinc-600">
+            <p className="mt-2 text-xs leading-snug text-zinc-600">
               Al crear cuenta disfruta de descuentos por fidelización, Monedas Chuy, créditos y más beneficios.
             </p>
           </div>
-        </div>
+          </div>
 
-        {/* Regalar Monedas Chuy al fotógrafo: solo aplica cuando la reserva
-            ganó Monedas (caso "guest cuyo email ya tenía cuenta") y sigue
-            confirmada. El propio componente se oculta si no hay Monedas. */}
-        {reservation.status === "confirmed" && (
-          <div className="mt-6">
+          {reservation.status === "confirmed" && reservation.user_id && (
             <TransferMonedasPanel
               reservationId={reservation.id}
               guestToken={token}
+              variant="embedded"
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Modal de confirmación de cancelación */}

@@ -38,7 +38,6 @@ interface PendingTransfer {
   from_user_id: string | null;
   from_email: string;
   to_email: string;
-  to_studio_name: string | null;
   transferred_points: number | null;
 }
 
@@ -76,7 +75,7 @@ async function handle(request: NextRequest) {
     const { data: pendingRows, error: pendingError } = await supabase
       .from("benefit_transfers")
       .select(
-        "id, reservation_id, from_user_id, from_email, to_email, to_studio_name, transferred_points",
+        "id, reservation_id, from_user_id, from_email, to_email, transferred_points",
       )
       .eq("status", "pending");
     if (pendingError) {
@@ -278,7 +277,6 @@ async function handle(request: NextRequest) {
           recipientName: toUser.name?.trim() || null,
           fromName,
           points: realPoints,
-          studioName: t.to_studio_name,
         })
           .then((r2) => {
             if (!r2.ok) {
@@ -359,7 +357,6 @@ async function handle(request: NextRequest) {
           to: toEmail,
           fromName,
           points: snapshotPoints,
-          studioName: t.to_studio_name,
           claimUrl,
         })
           .then((r2) => {

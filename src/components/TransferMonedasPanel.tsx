@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { format, isValid, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatDisplayDateTimeCompact } from "@/utils/formatters";
 import { pluralizeLoyalty } from "@/utils/loyalty";
 
 // =====================================================
 // <TransferMonedasPanel />
 // =====================================================
 // Panel reutilizable para que el cliente regale las Monedas
-// Chuy de una reserva a su fotógrafo / estudio.
+// Chuy de una reserva a su fotógrafo.
 // Se usa en /reservaciones/[id] y /reservas/[token] (invitado con token). En
 // /reservaciones/[id] con adminReadOnly el staff ve historial y estado
 // sin poder crear ni cancelar transferencias.
@@ -36,7 +35,6 @@ interface ActiveTransfer {
   status: TransferStatus;
   transferredPoints: number;
   toEmail: string;
-  toStudioName: string | null;
   createdAt: string;
   materializedAt: string | null;
   claimedAt: string | null;
@@ -47,7 +45,6 @@ export interface TransferHistoryItem {
   status: TransferStatus;
   transferredPoints: number;
   toEmail: string;
-  toStudioName: string | null;
   createdAt: string;
   materializedAt: string | null;
   claimedAt: string | null;
@@ -71,14 +68,22 @@ interface Props {
    * Variante visual:
    *  - "card": tarjeta independiente (default).
    *  - "compact": embebido en otra sección.
+   *  - "embedded": franja inferior de la tarjeta de detalle (ancho completo, borde ámbar).
    */
-  variant?: "card" | "compact";
+  variant?: "card" | "compact" | "embedded";
   /**
    * Vista de administración: solo lectura + historial; sin crear ni
    * cancelar transferencias en nombre del cliente.
    */
   adminReadOnly?: boolean;
 }
+
+const BTN_PRIMARY =
+  "w-full cursor-pointer rounded-lg bg-[#103948] py-3 px-4 font-medium text-white transition-colors hover:bg-[#0d2d38] disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_SECONDARY =
+  "w-full cursor-pointer rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_DANGER_SOFT =
+  "w-full cursor-pointer rounded-lg border border-red-300 bg-white py-3 px-4 font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50";
 
 const STATUS_LABEL: Record<
   TransferStatus,
@@ -152,30 +157,18 @@ const ADMIN_STATUS_LABEL: Record<
   },
 };
 
-function formatHistoryWhen(iso: string | null): string | null {
-  if (!iso) return null;
-  try {
-    const d = parseISO(iso);
-    if (!isValid(d)) return null;
-    return format(d, "d MMM yyyy, HH:mm", { locale: es });
-  } catch {
-    return null;
-  }
-}
-
 /** Texto de auditoría por fila de `benefit_transfers` (orden API: más reciente primero). */
 function transferHistorySentence(h: TransferHistoryItem): string {
   const pts = h.transferredPoints;
   const coins = `${pts} ${pluralizeLoyalty(pts)}`;
-  const email = h.toEmail;
-  const studio = h.toStudioName?.trim();
-  const dest = studio ? `${email} (${studio})` : email;
-  const when =
-    formatHistoryWhen(h.claimedAt) ??
-    formatHistoryWhen(h.materializedAt) ??
-    formatHistoryWhen(h.cancelledAt) ??
-    formatHistoryWhen(h.revertedAt) ??
-    formatHistoryWhen(h.createdAt);
+  const dest = h.toEmail;
+  const whenIso =
+    h.claimedAt ??
+    h.materializedAt ??
+    h.cancelledAt ??
+    h.revertedAt ??
+    h.createdAt;
+  const when = whenIso ? formatDisplayDateTimeCompact(whenIso) : null;
 
   const prefix = when ? `${when} — ` : "";
 
@@ -211,7 +204,6 @@ export default function TransferMonedasPanel({
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [toEmail, setToEmail] = useState("");
-  const [toStudio, setToStudio] = useState("");
   const [showForm, setShowForm] = useState(false);
 
   const buildUrl = useCallback(
@@ -226,9 +218,12 @@ export default function TransferMonedasPanel({
     [reservationId, guestToken],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await fetch(buildUrl(), { method: "GET" });
       const json = (await res.json()) as ApiResponse;
@@ -251,7 +246,7 @@ export default function TransferMonedasPanel({
       console.error("Error cargando transferencia:", e);
       setError("No se pudo cargar la transferencia.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [buildUrl]);
 
@@ -275,7 +270,6 @@ export default function TransferMonedasPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to_email: email,
-          to_studio_name: toStudio.trim() || null,
           token: guestToken ?? undefined,
         }),
       });
@@ -286,8 +280,7 @@ export default function TransferMonedasPanel({
       }
       setShowForm(false);
       setToEmail("");
-      setToStudio("");
-      await load();
+      await load({ silent: true });
     } catch (err) {
       console.error("Error creando transferencia:", err);
       setError("No se pudo crear la transferencia.");
@@ -319,7 +312,7 @@ export default function TransferMonedasPanel({
         setError(json.error || "No se pudo cancelar la transferencia.");
         return;
       }
-      await load();
+      await load({ silent: true });
     } catch (err) {
       console.error("Error cancelando transferencia:", err);
       setError("No se pudo cancelar la transferencia.");
@@ -352,21 +345,21 @@ export default function TransferMonedasPanel({
 
   return (
     <Wrapper variant={variant}>
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
-          <span className="text-xl" aria-hidden>
+      <div className="flex items-start gap-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+          <span className="text-lg" aria-hidden>
             🎁
           </span>
         </div>
-        <div className="flex-1">
-          <h3 className="text-base font-semibold text-zinc-900 sm:text-lg">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-semibold text-zinc-900">
             {active
               ? labelFor(active.status).title
               : adminReadOnly
                 ? "Monedas Chuy — transferencias"
                 : "Regálale tus Monedas Chuy a tu fotógrafo"}
           </h3>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-0.5 text-sm leading-snug text-zinc-600">
             {active ? (
               labelFor(active.status).description
             ) : adminReadOnly ? (
@@ -387,42 +380,49 @@ export default function TransferMonedasPanel({
       )}
 
       {active ? (
-        <div className="mt-4 rounded-md bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+        <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
           <div className="flex justify-between gap-4">
-            <span className="text-zinc-500">Monedas Chuy:</span>
+            <span className="text-zinc-500">Monedas Chuy</span>
             <span className="font-semibold text-zinc-900">
               {active.transferredPoints}
             </span>
           </div>
-          <div className="mt-1 flex justify-between gap-4">
-            <span className="text-zinc-500">Para:</span>
-            <span className="text-right text-zinc-900 break-all">
+          <div className="mt-2 flex justify-between gap-4 border-t border-zinc-100 pt-2">
+            <span className="text-zinc-500">Para</span>
+            <span className="text-right font-medium text-zinc-900 break-all">
               {active.toEmail}
             </span>
           </div>
-          {active.toStudioName && (
-            <div className="mt-1 flex justify-between gap-4">
-              <span className="text-zinc-500">Estudio:</span>
-              <span className="text-right text-zinc-900">
-                {active.toStudioName}
-              </span>
-            </div>
-          )}
-          {active.status === "pending" && !adminReadOnly && (
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={cancelling}
-              className="mt-3 text-sm font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+        </div>
+      ) : null}
+
+      {active?.status === "pending" && !adminReadOnly && (
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={cancelling}
+            className={BTN_DANGER_SOFT}
+            aria-busy={cancelling}
+            aria-describedby={
+              cancelling ? undefined : "transfer-cancel-hint"
+            }
+          >
+            {cancelling ? "Cancelando transferencia…" : "Cancelar transferencia"}
+          </button>
+          {!cancelling && (
+            <p
+              id="transfer-cancel-hint"
+              className="mt-2 text-xs leading-snug text-zinc-600"
             >
-              {cancelling
-                ? "Cancelando…"
-                : "Cancelar transferencia (Monedas vuelven a tu saldo)"}
-            </button>
+              Las Monedas Chuy volverán a tu saldo.
+            </p>
           )}
         </div>
-      ) : showForm && !adminReadOnly ? (
-        <form onSubmit={onSubmit} className="mt-4 space-y-3">
+      )}
+
+      {!active && showForm && !adminReadOnly ? (
+        <form onSubmit={onSubmit} className="mt-3 space-y-2.5">
           <div>
             <label
               htmlFor="transfer-email"
@@ -443,36 +443,18 @@ export default function TransferMonedasPanel({
               maxLength={254}
             />
           </div>
-          <div>
-            <label
-              htmlFor="transfer-studio"
-              className="block text-sm font-medium text-zinc-700"
-            >
-              Nombre del estudio{" "}
-              <span className="text-zinc-400">(opcional)</span>
-            </label>
-            <input
-              id="transfer-studio"
-              type="text"
-              value={toStudio}
-              onChange={(e) => setToStudio(e.target.value)}
-              placeholder="Ej. Foto Sonrisas"
-              className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-              maxLength={200}
-            />
-          </div>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs leading-snug text-zinc-600">
             Se reservarán <strong>{earnedPoints}</strong>{" "}
             {pluralizeLoyalty(earnedPoints)} para tu fotógrafo y dejarán de
             aparecer en tu saldo. Se le enviarán cuando pase la fecha de tu
             sesión. Puedes cancelar antes si cambias de opinión y volverán a
             tu saldo.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2">
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-md bg-[#103948] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0d2d38] disabled:opacity-50"
+              className={BTN_PRIMARY}
             >
               {submitting ? "Enviando…" : "Confirmar transferencia"}
             </button>
@@ -483,18 +465,18 @@ export default function TransferMonedasPanel({
                 setError(null);
               }}
               disabled={submitting}
-              className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
+              className={BTN_SECONDARY}
             >
               Cerrar
             </button>
           </div>
         </form>
-      ) : !adminReadOnly ? (
-        <div className="mt-4">
+      ) : !active && !adminReadOnly ? (
+        <div className="mt-3">
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className="rounded-md bg-[#103948] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0d2d38]"
+            className={BTN_PRIMARY}
           >
             Regalar mis {earnedPoints} {pluralizeLoyalty(earnedPoints)}
           </button>
@@ -502,11 +484,11 @@ export default function TransferMonedasPanel({
       ) : null}
 
       {historyRows.length > 0 && (
-        <div className="mt-5 border-t border-amber-200/80 pt-4">
+        <div className="mt-4 border-t border-amber-200/80 pt-3">
           <h4 className="text-sm font-semibold text-zinc-800">
             Historial de transferencias
           </h4>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 text-xs leading-snug text-zinc-600">
             Registro de intentos y entregas de Monedas Chuy ligadas a esta
             reserva (más reciente primero).
           </p>
@@ -530,11 +512,18 @@ function Wrapper({
   variant,
   children,
 }: {
-  variant: "card" | "compact";
+  variant: "card" | "compact" | "embedded";
   children: React.ReactNode;
 }) {
   if (variant === "compact") {
     return <div className="rounded-md bg-amber-50 p-4">{children}</div>;
+  }
+  if (variant === "embedded") {
+    return (
+      <div className="border-t border-amber-200/70 bg-amber-50 px-6 py-4 sm:px-8">
+        {children}
+      </div>
+    );
   }
   return (
     <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-6">

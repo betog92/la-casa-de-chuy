@@ -310,8 +310,6 @@ export interface SendTransferReceivedParams {
   fromName: string | null;
   /** Cantidad de Monedas Chuy acreditadas */
   points: number;
-  /** Nombre del estudio (opcional, lo escribió el cliente) */
-  studioName: string | null;
 }
 
 /**
@@ -326,9 +324,9 @@ export async function sendTransferReceived(
   if (!params.to?.trim()) return { ok: false, error: "Destinatario faltante" };
 
   const to = params.to.trim();
-  const { recipientName, fromName, points, studioName } = params;
-  const greetingName = (recipientName || studioName || "").trim() || "Hola";
-  const greeting = recipientName || studioName ? `Hola ${greetingName}` : "Hola";
+  const { recipientName, fromName, points } = params;
+  const greetingName = (recipientName || "").trim();
+  const greeting = greetingName ? `Hola ${greetingName}` : "Hola";
   const fromLabel = (fromName || "Un cliente").trim() || "Un cliente";
   const pointsLabel = `${points} ${points === 1 ? "Moneda Chuy" : "Monedas Chuy"}`;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://lacasadechuyelrico.com";
@@ -389,8 +387,6 @@ export interface SendTransferClaimParams {
   fromName: string | null;
   /** Cantidad de Monedas Chuy a reclamar */
   points: number;
-  /** Nombre del estudio (opcional, lo escribió el cliente) */
-  studioName: string | null;
   /** URL completa del magic link de reclamo */
   claimUrl: string;
 }
@@ -407,9 +403,8 @@ export async function sendTransferClaim(
   if (!params.to?.trim()) return { ok: false, error: "Destinatario faltante" };
 
   const to = params.to.trim();
-  const { fromName, points, studioName, claimUrl } = params;
-  const greetingName = (studioName || "").trim();
-  const greeting = greetingName ? `Hola ${greetingName}` : "Hola";
+  const { fromName, points, claimUrl } = params;
+  const greeting = "Hola";
   const fromLabel = (fromName || "Un cliente").trim() || "Un cliente";
   const pointsLabel = `${points} ${points === 1 ? "Moneda Chuy" : "Monedas Chuy"}`;
 

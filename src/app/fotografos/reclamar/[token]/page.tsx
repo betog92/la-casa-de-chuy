@@ -37,7 +37,6 @@ interface TransferInfo {
     | "reverted";
   transferredPoints: number;
   toEmail: string;
-  toStudioName: string | null;
   fromName: string | null;
   materializedAt: string | null;
   claimedAt: string | null;
@@ -143,7 +142,6 @@ export default function ReclamarMonedasPage() {
   const points = info.transferredPoints || 0;
   const pointsLabel = `${points} ${pluralizeLoyalty(points)}`;
   const fromLabel = info.fromName?.trim() || "Un cliente";
-  const studioLabel = info.toStudioName?.trim() || null;
 
   // Caso: ya reclamada / auto-acreditada
   if (info.status === "claimed" || info.status === "auto_credited") {
@@ -242,13 +240,6 @@ export default function ReclamarMonedasPage() {
               <strong>{fromLabel}</strong> te regaló{" "}
               <strong>{pointsLabel}</strong> tras su sesión en La Casa de Chuy
               el Rico.
-              {studioLabel && (
-                <>
-                  {" "}
-                  El cliente registró tu estudio como{" "}
-                  <strong>{studioLabel}</strong>.
-                </>
-              )}
             </p>
             <p className="mt-2 text-sm text-zinc-500">
               Cada Moneda Chuy vale $1 MXN para descuentos en futuras reservas.

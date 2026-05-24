@@ -83,7 +83,6 @@ export interface CustomerTransferLite {
   fromUserId: string | null;
   toEmail: string;
   toUserId: string | null;
-  toStudioName: string | null;
   status:
     | "pending"
     | "cancelled"
@@ -217,7 +216,7 @@ export async function GET(
       supabase
         .from("benefit_transfers")
         .select(
-          "id, reservation_id, from_user_id, from_email, to_user_id, to_email, to_studio_name, status, transferred_points, created_at, materialized_at, claimed_at, cancelled_at"
+          "id, reservation_id, from_user_id, from_email, to_user_id, to_email, status, transferred_points, created_at, materialized_at, claimed_at, cancelled_at"
         )
         .eq("from_user_id", id)
         .order("created_at", { ascending: false })
@@ -225,7 +224,7 @@ export async function GET(
       supabase
         .from("benefit_transfers")
         .select(
-          "id, reservation_id, from_user_id, from_email, to_user_id, to_email, to_studio_name, status, transferred_points, created_at, materialized_at, claimed_at, cancelled_at"
+          "id, reservation_id, from_user_id, from_email, to_user_id, to_email, status, transferred_points, created_at, materialized_at, claimed_at, cancelled_at"
         )
         .eq("to_user_id", id)
         .order("created_at", { ascending: false })
@@ -371,7 +370,6 @@ export async function GET(
       from_email: string;
       to_user_id: string | null;
       to_email: string;
-      to_studio_name: string | null;
       status:
         | "pending"
         | "cancelled"
@@ -433,7 +431,6 @@ export async function GET(
         fromUserId: t.from_user_id,
         toEmail: t.to_email,
         toUserId: t.to_user_id,
-        toStudioName: t.to_studio_name,
         status: t.status,
         transferredPoints: Number(t.transferred_points) || 0,
         createdAt: t.created_at,

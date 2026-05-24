@@ -3,7 +3,7 @@
 -- =====================================================
 -- Registra el "intento" de un cliente de transferir las
 -- Monedas Chuy (loyalty_points) generadas por una reserva
--- al fotógrafo/estudio que lo trajo. La transferencia se
+-- al fotógrafo que lo trajo. La transferencia se
 -- materializa después de que pasa la fecha de la sesión
 -- (cron job) para evitar conflictos con cancelaciones y
 -- reagendamientos.
@@ -32,10 +32,9 @@ CREATE TABLE IF NOT EXISTS benefit_transfers (
   from_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   from_email TEXT NOT NULL,
 
-  -- Destinatario (fotógrafo o estudio)
+  -- Destinatario (correo del fotógrafo)
   to_email TEXT NOT NULL,                                 -- normalizado a lowercase por la app
   to_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- se llena al materializar
-  to_studio_name TEXT,                                    -- opcional, lo escribe el cliente
 
   -- Magic link para reclamo (solo si el fotógrafo no tenía cuenta al materializar)
   claim_token UUID UNIQUE,

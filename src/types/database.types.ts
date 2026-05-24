@@ -692,7 +692,6 @@ export interface Database {
           from_email: string;
           to_email: string;
           to_user_id: string | null;
-          to_studio_name: string | null;
           claim_token: string | null;
           claim_token_sent_at: string | null;
           status:
@@ -717,7 +716,6 @@ export interface Database {
           from_email: string;
           to_email: string;
           to_user_id?: string | null;
-          to_studio_name?: string | null;
           claim_token?: string | null;
           claim_token_sent_at?: string | null;
           status?:
@@ -742,7 +740,6 @@ export interface Database {
           from_email?: string;
           to_email?: string;
           to_user_id?: string | null;
-          to_studio_name?: string | null;
           claim_token?: string | null;
           claim_token_sent_at?: string | null;
           status?:

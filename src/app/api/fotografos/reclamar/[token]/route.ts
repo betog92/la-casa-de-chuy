@@ -44,7 +44,6 @@ interface TransferRow {
   from_email: string;
   to_email: string;
   to_user_id: string | null;
-  to_studio_name: string | null;
   status: string;
   transferred_points: number | null;
   claim_token: string | null;
@@ -60,7 +59,7 @@ async function loadTransferByToken(
   const { data, error } = await supabase
     .from("benefit_transfers")
     .select(
-      "id, reservation_id, from_user_id, from_email, to_email, to_user_id, to_studio_name, status, transferred_points, claim_token, created_at, materialized_at, claimed_at",
+      "id, reservation_id, from_user_id, from_email, to_email, to_user_id, status, transferred_points, claim_token, created_at, materialized_at, claimed_at",
     )
     .eq("claim_token", claimToken)
     .maybeSingle();
@@ -110,7 +109,6 @@ export async function GET(
         status: transfer.status,
         transferredPoints: transfer.transferred_points || 0,
         toEmail: transfer.to_email,
-        toStudioName: transfer.to_studio_name,
         fromName,
         materializedAt: transfer.materialized_at,
         claimedAt: transfer.claimed_at,

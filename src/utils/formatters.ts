@@ -200,6 +200,26 @@ export function formatDisplayDateTime(isoString: string): string | null {
   }
 }
 
+/**
+ * Fecha corta + hora 12h en Monterrey (p. ej. historial de transferencias).
+ * @example "2026-05-24T08:55:00.000Z" -> "24 may 2026, 2:55 am"
+ */
+export function formatDisplayDateTimeCompact(isoString: string): string | null {
+  try {
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return null;
+    const datePart = formatInTimeZone(d, APP_TIMEZONE, "d MMM yyyy", {
+      locale: es,
+    });
+    const timePart = formatInTimeZone(d, APP_TIMEZONE, "h:mm a", {
+      locale: es,
+    }).toLowerCase();
+    return `${datePart}, ${timePart}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Fecha y hora corta en Monterrey (sin año; p. ej. pie «Cancelado por»). */
 export function formatDisplayDateTimeShort(isoString: string): string | null {
   try {

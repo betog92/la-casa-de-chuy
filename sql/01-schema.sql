@@ -216,7 +216,6 @@ CREATE TABLE IF NOT EXISTS benefit_transfers (
 
   to_email TEXT NOT NULL,                                       -- normalizado a lowercase por la app
   to_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL, -- se llena al materializar
-  to_studio_name TEXT,                                          -- opcional, lo escribe el cliente
 
   -- Magic link de reclamo (solo si el fotógrafo no tenía cuenta al materializar)
   claim_token UUID UNIQUE,
