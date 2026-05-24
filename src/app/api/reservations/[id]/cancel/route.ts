@@ -8,9 +8,9 @@ import {
   getMonterreyToday,
 } from "@/utils/business-days";
 import {
-  buildRefundPlan,
-  calculateRefundAmount,
-  getTotalConektaPaid,
+  getCancellationRefundPreview,
+  isRefundPlanConsistentWithTotal,
+  sumRefundPlanPaidMxn,
 } from "@/utils/refunds";
 import {
   successResponse,
@@ -192,30 +192,28 @@ export async function POST(
     }
 
     // Reembolso solo por lo cobrado en Conekta (`price` = orden real, no original_price)
-    const totalConektaPaid = getTotalConektaPaid(
-      reservationRow.payment_method,
-      reservationRow.price,
-      historyList
-    );
-    const refundPlan = buildRefundPlan({
-      payment_method: reservationRow.payment_method,
-      payment_id: reservationRow.payment_id,
-      original_price: reservationRow.original_price,
-      price: reservationRow.price,
-      additional_payment_id: reservationRow.additional_payment_id,
-      additional_payment_amount: reservationRow.additional_payment_amount,
-      additional_payment_method: reservationRow.additional_payment_method,
-    });
+    const { totalConektaPaid, refundAmount: refundAmountForClient, refundPlan } =
+      getCancellationRefundPreview({
+        payment_method: reservationRow.payment_method,
+        payment_id: reservationRow.payment_id,
+        price: reservationRow.price,
+        additional_payment_id: reservationRow.additional_payment_id,
+        additional_payment_amount: reservationRow.additional_payment_amount,
+        additional_payment_method: reservationRow.additional_payment_method,
+        reschedule_history: historyList,
+      });
 
-    const refundAmountFromPlan = refundPlan.reduce(
-      (sum, item) => sum + item.amountMxn,
-      0,
-    );
-    /** Monto mostrado al cliente (email/UI): plan por órdenes, o 80% del total Conekta si no hay órdenes. */
-    const refundAmountForClient =
-      refundPlan.length > 0
-        ? refundAmountFromPlan
-        : calculateRefundAmount(totalConektaPaid);
+    if (
+      refundPlan.length > 0 &&
+      !isRefundPlanConsistentWithTotal(refundPlan, totalConektaPaid)
+    ) {
+      console.warn("[cancel] Plan de reembolso inconsistente con total Conekta", {
+        reservationId,
+        totalConektaPaid,
+        planPaidMxn: sumRefundPlanPaidMxn(refundPlan),
+        refundPlan,
+      });
+    }
 
     /** Pagos Conekta detectados en negocio pero sin órdenes en DB → no se puede reembolsar automáticamente. */
     const corruptConektaData =
@@ -310,23 +308,23 @@ export async function POST(
       });
     }
 
-    await Promise.all(
-      insertedRefundRows.map(async (rr) => {
-        try {
-          await processRefundRow(supabase, rr);
-        } catch (err) {
-          console.error(
-            "[cancel] processRefundRow excepción (se reintentará vía cron):",
-            {
-              reservationId,
-              refundRowId: rr.id,
-              paymentId: rr.payment_id,
-              err,
-            },
-          );
-        }
-      }),
-    );
+    // Secuencial (como admin/retry): menos presión a Conekta y orden predecible
+    // initial → additional cuando hay dos órdenes.
+    for (const rr of insertedRefundRows) {
+      try {
+        await processRefundRow(supabase, rr);
+      } catch (err) {
+        console.error(
+          "[cancel] processRefundRow excepción (se reintentará vía cron):",
+          {
+            reservationId,
+            refundRowId: rr.id,
+            paymentId: rr.payment_id,
+            err,
+          },
+        );
+      }
+    }
     if (insertedRefundRows.length > 0) {
       await recomputeReservationRefundStatus(supabase, reservationId);
     }

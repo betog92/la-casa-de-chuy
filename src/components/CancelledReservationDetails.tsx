@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 import {
+  REFUND_PENDING_BANK_NOTE,
+  REFUND_PROCESSED_BANK_NOTE,
+} from "@/constants/refund-copy";
+import {
   formatCurrency,
   formatDisplayDateTime,
   formatDisplayDateTimeShort,
@@ -112,20 +116,14 @@ export function CancelledReservationDetails({
               ) : refundStatus === "processed" ? (
                 <ul className="space-y-1.5 text-red-800 list-disc list-inside">
                   <li>El reembolso ya fue enviado a tu banco o tarjeta.</li>
-                  <li>
-                    Puede tardar de 5 a 10 días hábiles en verse en tu estado de
-                    cuenta.
-                  </li>
+                  <li>{REFUND_PROCESSED_BANK_NOTE}</li>
                 </ul>
               ) : (
                 <ul className="space-y-1.5 text-red-800 list-disc list-inside">
                   <li>
                     Estamos procesando el reembolso a tu método de pago original.
                   </li>
-                  <li>
-                    Una vez enviado al banco, puede tardar de 5 a 10 días hábiles
-                    en verse en tu estado de cuenta.
-                  </li>
+                  <li>{REFUND_PENDING_BANK_NOTE}</li>
                 </ul>
               )}
             </div>

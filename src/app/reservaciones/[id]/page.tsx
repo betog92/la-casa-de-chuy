@@ -33,10 +33,12 @@ import {
   isValidDiscountCode,
 } from "@/utils/discounts";
 import {
-  calculateRefundAmount,
-  getTotalConektaPaid,
-} from "@/utils/refunds";
+  REFUND_CANCEL_MODAL_POLICY,
+  REFUND_CANCEL_MODAL_TIMEFRAME_NOTE,
+} from "@/constants/refund-copy";
+import { getCancellationRefundPreview } from "@/utils/refunds";
 import { DiscountRow } from "@/components/DiscountRow";
+import { RescheduleAdditionalRow } from "@/components/RescheduleAdditionalRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import type { Reservation } from "@/types/reservation";
@@ -1122,33 +1124,26 @@ export default function ReservationDetailsPage() {
                 )}
 
                 {!hasDiscounts && hasAdditionalPayment && (
-                  <>
-                    <div className="flex justify-between text-zinc-700">
-                      <span>Precio de la reserva:</span>
-                      <span>
-                        ${formatCurrency(originalPriceForBreakdown)}
-                      </span>
-                    </div>
-                    {rescheduleHistoryWithPayment.map((h, idx) => (
-                      <div
-                        key={idx}
-                        className="flex justify-between text-sm text-zinc-700"
-                      >
-                        <span>
-                          Pago adicional por reagendamiento
-                          {rescheduleHistoryWithPayment.length > 1
-                            ? ` (${idx + 1})`
-                            : ""}
-                          :
-                        </span>
-                        <span className="text-[#103948]">
-                          +
-                          ${formatCurrency(h.additional_payment_amount ?? 0)}
-                        </span>
-                      </div>
-                    ))}
-                  </>
+                  <div className="flex justify-between text-zinc-700">
+                    <span>Precio de la reserva:</span>
+                    <span>
+                      ${formatCurrency(originalPriceForBreakdown)}
+                    </span>
+                  </div>
                 )}
+
+                {hasAdditionalPayment &&
+                  rescheduleHistoryWithPayment.map((h, idx) => (
+                    <RescheduleAdditionalRow
+                      key={idx}
+                      label={`Pago adicional por reagendamiento${
+                        rescheduleHistoryWithPayment.length > 1
+                          ? ` (${idx + 1})`
+                          : ""
+                      }`}
+                      amount={h.additional_payment_amount ?? 0}
+                    />
+                  ))}
 
                 <div className="pt-5 border-t border-zinc-200 flex justify-between font-semibold text-lg">
                   <span>Total pagado:</span>
@@ -1499,29 +1494,33 @@ export default function ReservationDetailsPage() {
             </p>
             {reservation &&
               (() => {
-                // Reembolso solo por lo pagado con Conekta (tarjeta)
-                const totalConektaPaid = getTotalConektaPaid(
-                  reservation.payment_method ?? null,
-                  reservation.price ?? 0,
-                  reservation.reschedule_history ?? []
-                );
-                const refundAmount = calculateRefundAmount(totalConektaPaid);
+                const { totalConektaPaid, refundAmount } =
+                  getCancellationRefundPreview({
+                    payment_method: reservation.payment_method ?? null,
+                    payment_id: reservation.payment_id ?? null,
+                    price: reservation.price ?? 0,
+                    additional_payment_id:
+                      reservation.additional_payment_id ?? null,
+                    additional_payment_amount:
+                      reservation.additional_payment_amount ?? null,
+                    additional_payment_method:
+                      reservation.additional_payment_method ?? null,
+                    reschedule_history: reservation.reschedule_history ?? [],
+                  });
 
                 return (
                   <div className="mb-4 p-4 bg-zinc-50 rounded-lg">
                     {totalConektaPaid > 0 ? (
                       <>
                         <p className="text-sm text-zinc-600 mb-2">
-                          <strong>Reembolso:</strong> Recibirás el 80% del
-                          monto pagado con tarjeta (Conekta).
+                          <strong>Reembolso:</strong> {REFUND_CANCEL_MODAL_POLICY}
                         </p>
                         <p className="text-lg font-semibold text-[#103948]">
                           Monto a reembolsar: $
                           {formatCurrency(refundAmount)} MXN
                         </p>
                         <p className="text-xs text-zinc-500 mt-2">
-                          El reembolso se procesará en un plazo de 5-7 días
-                          hábiles al método de pago original.
+                          {REFUND_CANCEL_MODAL_TIMEFRAME_NOTE}
                         </p>
                       </>
                     ) : (
