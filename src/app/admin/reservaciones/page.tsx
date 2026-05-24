@@ -409,14 +409,16 @@ function AdminReservacionesPageInner() {
     setPickerTime(time);
     // Selección de slot libre: nunca es promoción, limpia el id.
     setSelectedReplacesId(null);
-    if (pickerDate && pickerPrice !== null) {
-      setNewForm((f) => ({
-        ...f,
-        date: format(pickerDate, "yyyy-MM-dd"),
-        startTime: time,
-        price: pickerPrice,
-      }));
-    }
+    if (!pickerDate) return;
+    setNewForm((f) => ({
+      ...f,
+      date: format(pickerDate, "yyyy-MM-dd"),
+      startTime: time,
+      // Solo cliente usa precio del calendario; Alvero/reservado permiten precio manual o 0.
+      ...(f.variant === "cliente" && pickerPrice !== null
+        ? { price: pickerPrice }
+        : {}),
+    }));
   }, [pickerDate, pickerPrice]);
 
   // Selección de un "Espacio reservado para Alvero" → promoción en sitio.
