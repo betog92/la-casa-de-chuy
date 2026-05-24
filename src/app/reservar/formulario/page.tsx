@@ -1185,7 +1185,11 @@ function FormularioReservaContent() {
                           )}
                           {useCredits > 0 && (
                             <div className="flex justify-between text-green-600">
-                              <span>Créditos aplicados</span>
+                              <span>
+                                Créditos aplicados (
+                                {Math.round(useCredits).toLocaleString("es-MX")}
+                                )
+                              </span>
                               <span>
                                 -${useCredits.toLocaleString("es-MX")}
                               </span>
@@ -1870,7 +1874,10 @@ function FormularioReservaContent() {
                     )}
                     {useCredits > 0 && (
                       <div className="flex justify-between text-green-600">
-                        <span>Créditos aplicados</span>
+                        <span>
+                          Créditos aplicados (
+                          {Math.round(useCredits).toLocaleString("es-MX")})
+                        </span>
                         <span>-${useCredits.toLocaleString("es-MX")}</span>
                       </div>
                     )}

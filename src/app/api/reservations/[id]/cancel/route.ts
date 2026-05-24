@@ -191,12 +191,10 @@ export async function POST(
       );
     }
 
-    // Reembolso solo por lo pagado con Conekta (órdenes conocidas en la reserva)
-    const originalPrice =
-      reservationRow.original_price ?? reservationRow.price ?? 0;
+    // Reembolso solo por lo cobrado en Conekta (`price` = orden real, no original_price)
     const totalConektaPaid = getTotalConektaPaid(
       reservationRow.payment_method,
-      originalPrice,
+      reservationRow.price,
       historyList
     );
     const refundPlan = buildRefundPlan({

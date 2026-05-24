@@ -28,13 +28,12 @@ export function calculateTotalPaid(
 }
 
 /**
- * Total pagado solo por Conekta (reservación inicial + pagos adicionales por Conekta).
- * Se usa para calcular el reembolso: solo se reembolsa lo pagado con tarjeta.
- * Acepta originalPrice null/undefined (reservas antiguas) y normaliza payment_method a minúsculas.
+ * Total cobrado por Conekta (orden inicial + pagos adicionales en reagendos).
+ * Usar `reservations.price` (monto de la orden), no `original_price` (antes de descuentos).
  */
 export function getTotalConektaPaid(
   paymentMethod: string | null | undefined,
-  originalPrice: number | null | undefined,
+  initialChargeMxn: number | null | undefined,
   rescheduleHistory: {
     additional_payment_amount: number | null;
     additional_payment_method: string | null;
@@ -42,7 +41,7 @@ export function getTotalConektaPaid(
 ): number {
   const method = (paymentMethod ?? "").toLowerCase();
   const initial =
-    method === "conekta" ? (originalPrice ?? 0) : 0;
+    method === "conekta" ? (initialChargeMxn ?? 0) : 0;
   const fromHistory = (rescheduleHistory ?? []).reduce(
     (sum, h) =>
       sum +
@@ -81,10 +80,9 @@ export function buildRefundPlan(args: {
   additional_payment_method: string | null;
 }): RefundPlanItem[] {
   const out: RefundPlanItem[] = [];
-  const originalPrice = args.original_price ?? args.price ?? 0;
   const pid = (args.payment_id || "").trim();
   if ((args.payment_method ?? "").toLowerCase() === "conekta" && pid) {
-    const paid = Number(originalPrice);
+    const paid = Number(args.price ?? 0);
     if (Number.isFinite(paid) && paid > 0) {
       out.push({
         paymentId: pid,

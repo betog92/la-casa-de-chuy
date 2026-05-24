@@ -519,7 +519,7 @@ export default function GuestReservationPage() {
                       calculatePointsDiscount(reservation.loyalty_points_used)
                     ) && (
                       <DiscountRow
-                        label="Descuento con Monedas Chuy"
+                        label={`Monedas Chuy usadas (${reservation.loyalty_points_used ?? 0})`}
                         amount={
                           calculatePointsDiscount(
                             reservation.loyalty_points_used
@@ -530,7 +530,9 @@ export default function GuestReservationPage() {
 
                     {isValidDiscount(reservation.credits_used) && (
                       <DiscountRow
-                        label="Créditos utilizados"
+                        label={`Créditos usados (${Math.round(
+                          Number(reservation.credits_used),
+                        )})`}
                         amount={reservation.credits_used!}
                       />
                     )}
@@ -873,7 +875,7 @@ export default function GuestReservationPage() {
                 // Reembolso solo por lo pagado con Conekta (tarjeta)
                 const totalConektaPaid = getTotalConektaPaid(
                   reservation.payment_method ?? null,
-                  reservation.original_price ?? 0,
+                  reservation.price ?? 0,
                   reservation.reschedule_history ?? []
                 );
                 const refundAmount = calculateRefundAmount(totalConektaPaid);

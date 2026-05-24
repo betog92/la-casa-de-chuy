@@ -37,7 +37,7 @@ export type FinalizeReservationSupabase = ReturnType<
  * - Validación de disponibilidad del slot.
  * - Recalculo autoritativo de precio.
  * - Inserción en `reservations`.
- * - Consumo atómico de Monedas Chuy.
+ * - Consumo atómico de Monedas Chuy y créditos.
  * - Tareas post-insert (email, registro de uso de código, guest token).
  * - Marcar `pending_reservations.consumed_reservation_id`.
  * - Reembolso automático si algo falla DESPUÉS de cobrar.
@@ -46,6 +46,8 @@ export type FinalizeReservationSupabase = ReturnType<
  */
 
 const PHOTOGRAPHER_STUDIO_MAX = 500;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface FinalizeReservationInput {
   email: string;
@@ -260,10 +262,18 @@ export async function finalizeReservationFromPayload(
     previousCount = await countLoyaltyTierReservations(supabase, userId);
   }
 
-  // 6. Releer monedas para consumir.
+  // 6. Releer monedas y créditos para consumir.
   type LoyaltyRow = { id: string; points: number; expires_at: string | null };
+  type CreditRow = {
+    id: string;
+    amount: number;
+    expires_at: string | null;
+    source: string;
+  };
   let loyaltyRowsForConsumption: LoyaltyRow[] = [];
+  let creditRowsForConsumption: CreditRow[] = [];
   const pointsToConsume = priceResult.loyaltyPointsUsed;
+  const creditsToConsume = priceResult.creditsUsed;
   if (userId && pointsToConsume > 0) {
     const { data: pointsRows, error: pointsError } = await supabase
       .from("loyalty_points")
@@ -280,6 +290,23 @@ export async function finalizeReservationFromPayload(
       );
     }
     loyaltyRowsForConsumption = (pointsRows as LoyaltyRow[] | null) ?? [];
+  }
+  if (userId && creditsToConsume > 0) {
+    const { data: creditRows, error: creditsError } = await supabase
+      .from("credits")
+      .select("id, amount, expires_at, source")
+      .eq("user_id", userId)
+      .eq("used", false)
+      .eq("revoked", false)
+      .order("created_at", { ascending: true });
+    if (creditsError) {
+      console.error("Error consultando créditos:", creditsError);
+      return rejectAndRefund(
+        "No se pudo verificar el saldo de créditos. Intenta de nuevo.",
+        500,
+      );
+    }
+    creditRowsForConsumption = (creditRows as CreditRow[] | null) ?? [];
   }
 
   // 7. INSERT reserva con valores autoritativos.
@@ -520,6 +547,115 @@ export async function finalizeReservationFromPayload(
         "reservationId:",
         reservationId,
         ").",
+      );
+    }
+  }
+
+  // 8b. Consumo atómico de créditos (mismo patrón que Monedas Chuy).
+  if (userId && creditsToConsume > 0) {
+    if (creditRowsForConsumption.length === 0) {
+      return rejectAndRefund(
+        "Los créditos ya no están disponibles. Intenta de nuevo.",
+        500,
+      );
+    }
+
+    let remaining = creditsToConsume;
+
+    const correctReservationCreditsUsed = async (actual: number) => {
+      await supabase
+        .from("reservations")
+        .update({ credits_used: Math.max(0, round2(actual)) } as never)
+        .eq("id", reservationId);
+    };
+
+    for (const row of creditRowsForConsumption) {
+      if (remaining <= 0) break;
+      const rowAmount = round2(Number(row.amount) || 0);
+      if (rowAmount <= 0) continue;
+      if (rowAmount <= remaining) {
+        const { data: updated, error: updateError } = await supabase
+          .from("credits")
+          .update({
+            used: true,
+            reservation_id: reservationId,
+          } as never)
+          .eq("id", row.id)
+          .eq("used", false)
+          .select("id")
+          .maybeSingle();
+        if (updateError || !updated) {
+          console.error(
+            "Error o fila ya usada al marcar créditos (id:",
+            row.id,
+            "):",
+            updateError || "0 rows",
+          );
+          await correctReservationCreditsUsed(creditsToConsume - remaining);
+          return {
+            ok: false,
+            status: 500,
+            message:
+              "Los créditos ya no están disponibles. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+            refunded: false,
+          };
+        }
+        remaining = round2(remaining - rowAmount);
+      } else {
+        const consumeAmount = round2(remaining);
+        const { data: updated, error: updateError } = await supabase
+          .from("credits")
+          .update({ amount: round2(rowAmount - consumeAmount) } as never)
+          .eq("id", row.id)
+          .eq("used", false)
+          .select("id")
+          .maybeSingle();
+        if (updateError || !updated) {
+          console.error(
+            "Error o fila ya usada al partir créditos (id:",
+            row.id,
+            "):",
+            updateError || "0 rows",
+          );
+          await correctReservationCreditsUsed(creditsToConsume - remaining);
+          return {
+            ok: false,
+            status: 500,
+            message:
+              "Los créditos ya no están disponibles. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+            refunded: false,
+          };
+        }
+        const { error: insertError } = await supabase.from("credits").insert({
+          user_id: userId,
+          amount: consumeAmount,
+          source: row.source,
+          expires_at: row.expires_at,
+          used: true,
+          reservation_id: reservationId,
+          revoked: false,
+        } as never);
+        if (insertError) {
+          console.error("Error al insertar fila de créditos consumidos:", insertError);
+          await correctReservationCreditsUsed(creditsToConsume - remaining);
+          return {
+            ok: false,
+            status: 500,
+            message:
+              "Error al aplicar los créditos. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+            refunded: false,
+          };
+        }
+        remaining = 0;
+      }
+    }
+
+    if (round2(remaining) > 0) {
+      const actualConsumed = round2(creditsToConsume - remaining);
+      await correctReservationCreditsUsed(actualConsumed);
+      return rejectAndRefund(
+        "No se pudieron aplicar todos los créditos. La reserva fue creada; contacta a soporte si tu saldo no se actualizó.",
+        500,
       );
     }
   }
