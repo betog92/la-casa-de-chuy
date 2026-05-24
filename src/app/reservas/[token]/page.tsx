@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { format, parse, addDays, startOfDay, isValid } from "date-fns";
-import { es } from "date-fns/locale";
+import { parse, addDays, startOfDay } from "date-fns";
 import Link from "next/link";
 import { buildRegisterHref } from "@/utils/register-url";
 import {
@@ -17,6 +16,7 @@ import {
   formatCurrency,
   formatBusinessDaysMessage,
 } from "@/utils/formatters";
+import { CancelledReservationDetails } from "@/components/CancelledReservationDetails";
 import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
 import {
   isValidDiscount,
@@ -752,105 +752,14 @@ export default function GuestReservationPage() {
           {/* Estado de cancelación */}
           {reservation.status === "cancelled" && (
             <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
-              <div className="bg-red-50 rounded-lg p-4 mx-6 sm:mx-8">
-                <h3 className="text-lg font-semibold text-red-900 mb-3">
-                  Reserva Cancelada
-                </h3>
-                {reservation.cancelled_at && (
-                  <div className="mb-2">
-                    <p className="text-sm text-red-700">
-                      <strong>Fecha de cancelación:</strong>{" "}
-                      {format(
-                        new Date(reservation.cancelled_at),
-                        "d 'de' MMMM 'de' yyyy 'a las' h:mm a",
-                        { locale: es }
-                      )}
-                    </p>
-                  </div>
-                )}
-                {reservation.refund_amount && reservation.refund_amount > 0 && (
-                  <div className="space-y-2 text-sm text-red-800">
-                    <div>
-                      <strong>Monto del reembolso:</strong> $
-                      {formatCurrency(reservation.refund_amount)} MXN
-                    </div>
-                    {(reservation.refund_id || reservation.refund_status) && (
-                      <div className="space-y-1">
-                        {reservation.refund_id && (
-                          <div className="text-red-700">
-                            <span className="font-medium">ID de reembolso:</span>{" "}
-                            <span className="font-mono text-xs text-red-900">
-                              {reservation.refund_id}
-                            </span>
-                          </div>
-                        )}
-                        {reservation.refund_status && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-red-700 font-medium text-sm">
-                              Estado del reembolso:
-                            </span>
-                            <span
-                              className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full ${
-                                reservation.refund_status === "processed"
-                                  ? "bg-green-100 text-green-800"
-                                  : reservation.refund_status === "failed"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-amber-100 text-amber-800"
-                              }`}
-                            >
-                              {reservation.refund_status === "processed"
-                                ? "Procesado"
-                                : reservation.refund_status === "failed"
-                                  ? "Fallido"
-                                  : "Pendiente"}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="mt-3">
-                      <p className="text-xs text-red-700 font-medium mb-1">
-                        <strong>Información sobre el reembolso:</strong>
-                      </p>
-                      {reservation.refund_status === "failed" ? (
-                        <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
-                          <li>
-                            El reembolso automático no pudo completarse. El
-                            equipo de soporte te contactará para resolverlo
-                            manualmente.
-                          </li>
-                        </ul>
-                      ) : (
-                        <ul className="mt-2 space-y-1 text-xs text-red-600 list-disc list-inside">
-                          <li>
-                            El reembolso se procesará en un plazo de 5-7 días
-                            hábiles.
-                          </li>
-                          <li>
-                            El monto se reembolsará al método de pago original
-                            utilizado para la reserva.
-                          </li>
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {reservation.cancelled_by && (
-                  <p className="mt-3 text-sm text-red-800 font-semibold pt-2 border-t border-red-200">
-                    Cancelado por:{" "}
-                    {reservation.cancelled_by.name?.trim() ||
-                      reservation.cancelled_by.email}
-                    {reservation.cancelled_at &&
-                    isValid(new Date(reservation.cancelled_at))
-                      ? ` · ${format(
-                          new Date(reservation.cancelled_at),
-                          "d 'de' MMMM 'a las' h:mm a",
-                          { locale: es }
-                        )}`
-                      : ""}
-                  </p>
-                )}
-              </div>
+              <CancelledReservationDetails
+                className="mx-6 sm:mx-8"
+                cancelledAt={reservation.cancelled_at}
+                refundAmount={reservation.refund_amount}
+                refundId={reservation.refund_id}
+                refundStatus={reservation.refund_status}
+                cancelledBy={reservation.cancelled_by}
+              />
             </div>
           )}
 

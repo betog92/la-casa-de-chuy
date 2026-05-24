@@ -181,6 +181,42 @@ export function formatDisplayDateShort(dateString: string): string {
 }
 
 /**
+ * Fecha y hora ISO en **America/Monterrey**, con día de la semana (como `formatDisplayDate`).
+ * @example "2026-05-22T18:12:00.000Z" -> "Viernes, 22 de mayo de 2026 a las 12:12 PM"
+ */
+export function formatDisplayDateTime(isoString: string): string | null {
+  try {
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return null;
+    const formatted = formatInTimeZone(
+      d,
+      APP_TIMEZONE,
+      "EEEE, d 'de' MMMM 'de' yyyy 'a las' h:mm a",
+      { locale: es },
+    );
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+/** Fecha y hora corta en Monterrey (sin año; p. ej. pie «Cancelado por»). */
+export function formatDisplayDateTimeShort(isoString: string): string | null {
+  try {
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return null;
+    return formatInTimeZone(
+      d,
+      APP_TIMEZONE,
+      "d 'de' MMMM 'a las' h:mm a",
+      { locale: es },
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Formatea un rango de hora en **America/Monterrey**.
  * Si se pasa endTime, lo interpreta el mismo día `calendarDate` salvo que quede antes que start (entonces día siguiente).
  * Si no hay endTime, suma 1 hora al inicio.
