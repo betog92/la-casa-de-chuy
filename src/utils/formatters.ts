@@ -220,20 +220,28 @@ export function formatDisplayDateTimeCompact(isoString: string): string | null {
   }
 }
 
-/** Fecha y hora corta en Monterrey (sin año; p. ej. pie «Cancelado por»). */
-export function formatDisplayDateTimeShort(isoString: string): string | null {
+/**
+ * Fecha y hora en Monterrey para pies de atribución
+ * (p. ej. «Reagendado el 24 de mayo de 2026 a las 1:47 PM»).
+ */
+export function formatAttributionDateTime(isoString: string): string | null {
   try {
     const d = new Date(isoString);
     if (Number.isNaN(d.getTime())) return null;
     return formatInTimeZone(
       d,
       APP_TIMEZONE,
-      "d 'de' MMMM 'a las' h:mm a",
+      "d 'de' MMMM 'de' yyyy 'a las' h:mm a",
       { locale: es },
     );
   } catch {
     return null;
   }
+}
+
+/** @deprecated Usar `formatAttributionDateTime`. */
+export function formatDisplayDateTimeShort(isoString: string): string | null {
+  return formatAttributionDateTime(isoString);
 }
 
 /**

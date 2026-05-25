@@ -56,7 +56,7 @@ export function ReservationSpaceUsage({
     >
       <li className="flex justify-between gap-3">
         <span className="flex min-w-0 flex-wrap items-center gap-2 text-zinc-700">
-          <span aria-hidden>⏱</span>
+          <span aria-hidden>🏠</span>
           <span className="font-medium">Interior</span>
           <span
             className={`${chipClass} bg-zinc-200 text-zinc-800 ring-1 ring-zinc-300/90`}
@@ -90,14 +90,7 @@ export function ReservationSpaceUsage({
       <div className="mb-3">
         <div className="mb-3 flex justify-between gap-3">
           <span className="font-medium text-zinc-900">Horario</span>
-          <div className="text-right">
-            <span className="tabular-nums text-zinc-800">{u.total}</span>
-            <span
-              className={`ml-2 ${chipClass} bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200/80`}
-            >
-              {u.totalMinutes} min
-            </span>
-          </div>
+          <span className="tabular-nums text-zinc-800">{u.total}</span>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 p-3 sm:p-3.5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">

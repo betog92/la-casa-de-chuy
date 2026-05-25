@@ -1,5 +1,4 @@
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatAttributionDateTime } from "@/utils/formatters";
 
 type RescheduleActor = { id: string; name?: string | null; email?: string };
 
@@ -24,8 +23,6 @@ export function shouldShowRescheduleActor(
   return true;
 }
 
-const RESCHEDULE_DATE_FORMAT = "d 'de' MMMM 'a las' h:mm a";
-
 /** Etiqueta de quién/cuándo reagendó (para bloques de historial). */
 export function formatRescheduleAttribution(
   rescheduledAt: string,
@@ -33,9 +30,8 @@ export function formatRescheduleAttribution(
   reservationUserId: string | null | undefined,
   reservationEmail?: string | null,
 ): string {
-  const when = format(new Date(rescheduledAt), RESCHEDULE_DATE_FORMAT, {
-    locale: es,
-  });
+  const when =
+    formatAttributionDateTime(rescheduledAt) ?? rescheduledAt;
   if (
     shouldShowRescheduleActor(
       rescheduledBy,

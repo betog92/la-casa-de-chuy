@@ -11,7 +11,6 @@ import {
 } from "@/utils/formatters";
 import { ReservationSpaceUsage } from "@/components/ReservationSpaceUsage";
 import type { Reservation } from "@/types/reservation";
-import { sessionTypeLabel } from "@/utils/session-type";
 import axios from "axios";
 import { buildRegisterHref } from "@/utils/register-url";
 import { AccountReservationNextStep } from "@/components/reservar/AccountReservationNextStep";
@@ -300,26 +299,14 @@ function ConfirmacionContent() {
                 </div>
               </>
             )}
-            {(reservation.session_type || reservation.photographer_studio) && (
-              <>
-                {reservation.session_type ? (
-                  <div className="flex justify-between">
-                    <span className="font-medium">Tipo de sesión:</span>
-                    <span>{sessionTypeLabel(reservation.session_type)}</span>
-                  </div>
-                ) : null}
-                {reservation.photographer_studio ? (
-                  <div className="flex justify-between gap-4">
-                    <span className="font-medium shrink-0">
-                      Fotógrafo / estudio:
-                    </span>
-                    <span className="text-right text-zinc-800">
-                      {reservation.photographer_studio}
-                    </span>
-                  </div>
-                ) : null}
-              </>
-            )}
+            {reservation.photographer_studio ? (
+              <div className="flex justify-between gap-4">
+                <span className="font-medium shrink-0">Fotógrafo / estudio:</span>
+                <span className="text-right text-zinc-800">
+                  {reservation.photographer_studio}
+                </span>
+              </div>
+            ) : null}
             <div className="border-t border-zinc-200 pt-4">
               <div className="mb-3 flex justify-between">
                 <span className="font-medium">Fecha:</span>

@@ -7,7 +7,7 @@ interface RescheduleAdditionalRowProps {
 
 /**
  * Fila de pago adicional por reagendamiento en el desglose de precios.
- * Color naranja para alinearlo con la sección "Información de Reagendamiento".
+ * Color naranja para alinearlo con la sección "Información de reagendamiento".
  */
 export function RescheduleAdditionalRow({
   label,

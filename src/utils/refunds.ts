@@ -35,8 +35,13 @@ function isConektaMethod(method: string | null | undefined): boolean {
 }
 
 /**
- * Suma pagos adicionales cobrados por Conekta en el historial de reagendos.
- * Si el historial está vacío, usa el último adicional en la fila de reserva.
+ * Monto del único pago adicional Conekta por reagendo (si existe).
+ *
+ * Negocio: el cliente solo puede reagendar una vez; la reserva guarda un solo
+ * `additional_payment_id` / `additional_payment_amount` y `buildRefundPlan` solo
+ * emite una fila `charge_kind: additional`. El historial puede tener varias
+ * filas (reagendos admin sin cobro, etc.), pero para reembolsos y totales
+ * usamos la fila de reserva como fuente canónica cuando está presente.
  */
 export function sumConektaAdditionalPaid(
   rescheduleHistory: ReschedulePaymentHistoryRow[],
@@ -45,7 +50,28 @@ export function sumConektaAdditionalPaid(
     additional_payment_method: string | null;
   }
 ): number {
-  const fromHistory = (rescheduleHistory ?? []).reduce(
+  if (fallback && isConektaMethod(fallback.additional_payment_method)) {
+    const amt = Number(fallback.additional_payment_amount ?? 0);
+    if (Number.isFinite(amt) && amt > 0) {
+      const fromHistory = (rescheduleHistory ?? []).reduce(
+        (sum, h) =>
+          sum +
+          (isConektaMethod(h.additional_payment_method)
+            ? (h.additional_payment_amount ?? 0)
+            : 0),
+        0
+      );
+      if (fromHistory > amt + 0.01) {
+        console.warn(
+          "[refunds] Historial suma más adicionales Conekta que additional_payment_amount en reserva; usando fila de reserva (un solo reembolso adicional).",
+          { fromHistory, reservationAdditional: amt }
+        );
+      }
+      return amt;
+    }
+  }
+
+  return (rescheduleHistory ?? []).reduce(
     (sum, h) =>
       sum +
       (isConektaMethod(h.additional_payment_method)
@@ -53,14 +79,6 @@ export function sumConektaAdditionalPaid(
         : 0),
     0
   );
-  if (fromHistory > 0) {
-    return fromHistory;
-  }
-  if (fallback && isConektaMethod(fallback.additional_payment_method)) {
-    const amt = Number(fallback.additional_payment_amount ?? 0);
-    return Number.isFinite(amt) && amt > 0 ? amt : 0;
-  }
-  return 0;
 }
 
 /**
@@ -130,8 +148,8 @@ export interface RefundPlanItem {
 
 /**
  * Construye el plan de reembolsos por cancelación: hasta dos órdenes Conekta
- * (pago inicial y pago adicional de reagendo). Debe alinearse con
- * `getTotalConektaPaid`.
+ * (pago inicial y, como máximo, un pago adicional de reagendo). Debe alinearse
+ * con `getTotalConektaPaid` (véase `sumConektaAdditionalPaid`).
  */
 export function buildRefundPlan(args: {
   payment_method: string | null;

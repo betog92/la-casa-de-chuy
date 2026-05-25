@@ -28,6 +28,12 @@ import {
   REFUND_CANCEL_MODAL_TIMEFRAME_NOTE,
 } from "@/constants/refund-copy";
 import { getCancellationRefundPreview } from "@/utils/refunds";
+import {
+  PRICE_BREAKDOWN_CREDITOS_LABEL,
+  PRICE_BREAKDOWN_MONEDAS_LABEL,
+  PRICE_BREAKDOWN_SECTION_TITLE,
+  RESCHEDULE_INFO_SECTION_TITLE,
+} from "@/constants/price-breakdown-copy";
 import { DiscountRow } from "@/components/DiscountRow";
 import { RescheduleAdditionalRow } from "@/components/RescheduleAdditionalRow";
 import RescheduleModal from "@/components/RescheduleModal";
@@ -248,27 +254,40 @@ export default function GuestReservationPage() {
   const isPastDeadline = businessDays !== null && businessDays < 5;
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
-  const hasAdditionalPayment =
-    (reservation?.additional_payment_amount ?? 0) > 0 ||
-    (reservation?.reschedule_history?.some(
-      (h) => (h.additional_payment_amount ?? 0) > 0
-    ) ?? false);
-  const showPriceBreakdown = hasDiscounts || hasAdditionalPayment;
   const paidMethods = ["conekta", "efectivo", "transferencia"] as const;
-  const isPaidAdditional = (h: { additional_payment_amount?: number | null; additional_payment_method?: string | null }) =>
+  const isPaidAdditional = (h: {
+    additional_payment_amount?: number | null;
+    additional_payment_method?: string | null;
+  }) =>
     (h.additional_payment_amount ?? 0) > 0 &&
     h.additional_payment_method != null &&
-    paidMethods.includes(h.additional_payment_method as (typeof paidMethods)[number]);
-  const additionalFromHistory = (reservation?.reschedule_history ?? []).reduce(
-    (sum, h) => sum + (isPaidAdditional(h) ? (h.additional_payment_amount ?? 0) : 0),
+    paidMethods.includes(
+      h.additional_payment_method as (typeof paidMethods)[number]
+    );
+  const rescheduleHistoryWithPayment = (
+    reservation?.reschedule_history ?? []
+  ).filter((h) => isPaidAdditional(h));
+  const reservationPaidAdditional = isPaidAdditional({
+    additional_payment_amount: reservation?.additional_payment_amount,
+    additional_payment_method: reservation?.additional_payment_method,
+  });
+  const hasPaidAdditionalPayment =
+    reservationPaidAdditional || rescheduleHistoryWithPayment.length > 0;
+  const showPriceBreakdown = hasDiscounts || hasPaidAdditionalPayment;
+  const additionalFromHistory = rescheduleHistoryWithPayment.reduce(
+    (sum, h) => sum + (h.additional_payment_amount ?? 0),
     0
+  );
+  const additionalOnReservation = reservationPaidAdditional
+    ? (reservation?.additional_payment_amount ?? 0)
+    : 0;
+  const totalAdditionalForBreakdown = Math.max(
+    additionalFromHistory,
+    additionalOnReservation
   );
   const originalPriceForBreakdown = Math.max(
     0,
-    (reservation?.price ?? 0) - additionalFromHistory
-  );
-  const rescheduleHistoryWithPayment = (reservation?.reschedule_history ?? []).filter(
-    (h) => isPaidAdditional(h)
+    (reservation?.price ?? 0) - totalAdditionalForBreakdown
   );
 
   if (loading) {
@@ -466,7 +485,7 @@ export default function GuestReservationPage() {
           {showPriceBreakdown && (
             <div className="pt-4 border-t border-zinc-200">
               <h3 className="text-lg font-semibold text-[#103948] mb-4">
-                Desglose de Precios
+                {PRICE_BREAKDOWN_SECTION_TITLE}
               </h3>
               <div className="space-y-2">
                 {hasDiscounts && (
@@ -522,7 +541,7 @@ export default function GuestReservationPage() {
                       calculatePointsDiscount(reservation.loyalty_points_used)
                     ) && (
                       <DiscountRow
-                        label={`Monedas Chuy usadas (${reservation.loyalty_points_used ?? 0})`}
+                        label={PRICE_BREAKDOWN_MONEDAS_LABEL}
                         amount={
                           calculatePointsDiscount(
                             reservation.loyalty_points_used
@@ -533,23 +552,21 @@ export default function GuestReservationPage() {
 
                     {isValidDiscount(reservation.credits_used) && (
                       <DiscountRow
-                        label={`Créditos usados (${Math.round(
-                          Number(reservation.credits_used),
-                        )})`}
+                        label={PRICE_BREAKDOWN_CREDITOS_LABEL}
                         amount={reservation.credits_used!}
                       />
                     )}
                   </>
                 )}
 
-                {!hasDiscounts && hasAdditionalPayment && (
+                {!hasDiscounts && hasPaidAdditionalPayment && (
                   <div className="flex justify-between text-zinc-700">
                     <span>Precio de la reserva:</span>
                     <span>${formatCurrency(originalPriceForBreakdown)}</span>
                   </div>
                 )}
 
-                {hasAdditionalPayment &&
+                {hasPaidAdditionalPayment &&
                   rescheduleHistoryWithPayment.map((h, idx) => (
                     <RescheduleAdditionalRow
                       key={idx}
@@ -607,7 +624,7 @@ export default function GuestReservationPage() {
               >
                 <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
                   <h3 className="text-lg font-semibold text-orange-900 mb-3">
-                    Información de Reagendamiento
+                    {RESCHEDULE_INFO_SECTION_TITLE}
                   </h3>
                   <div className="space-y-3 text-sm">
                     <div>
@@ -693,7 +710,7 @@ export default function GuestReservationPage() {
               <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
                 <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
                   <h3 className="text-lg font-semibold text-orange-900 mb-3">
-                    Información de Reagendamiento
+                    {RESCHEDULE_INFO_SECTION_TITLE}
                   </h3>
                   <div className="space-y-3 text-sm">
                     {reservation.original_date &&
@@ -757,6 +774,8 @@ export default function GuestReservationPage() {
                 refundId={reservation.refund_id}
                 refundStatus={reservation.refund_status}
                 cancelledBy={reservation.cancelled_by}
+                reservationUserId={reservation.user_id}
+                reservationEmail={reservation.email}
               />
             </div>
           )}

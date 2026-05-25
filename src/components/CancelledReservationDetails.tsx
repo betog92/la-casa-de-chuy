@@ -3,13 +3,10 @@ import {
   REFUND_PENDING_BANK_NOTE,
   REFUND_PROCESSED_BANK_NOTE,
 } from "@/constants/refund-copy";
-import {
-  formatCurrency,
-  formatDisplayDateTime,
-  formatDisplayDateTimeShort,
-} from "@/utils/formatters";
+import { formatCancellationAttribution } from "@/utils/cancellation-display";
+import { formatCurrency } from "@/utils/formatters";
 
-type CancelledBy = { name: string | null; email: string };
+type CancelledBy = { id: string; name: string | null; email: string };
 
 export type CancelledReservationDetailsProps = {
   cancelledAt?: string | null;
@@ -17,6 +14,8 @@ export type CancelledReservationDetailsProps = {
   refundId?: string | null;
   refundStatus?: string | null;
   cancelledBy?: CancelledBy | null;
+  reservationUserId?: string | null;
+  reservationEmail?: string | null;
   /** Solo en detalle con sesión admin (reintentar reembolso, etc.) */
   adminSection?: ReactNode;
   className?: string;
@@ -47,33 +46,31 @@ export function CancelledReservationDetails({
   refundId,
   refundStatus,
   cancelledBy,
+  reservationUserId,
+  reservationEmail,
   adminSection,
   className = "",
 }: CancelledReservationDetailsProps) {
   const hasRefund = (refundAmount ?? 0) > 0;
-  const cancelledAtValid = cancelledAt
-    ? formatDisplayDateTime(cancelledAt)
-    : null;
-  const cancelledAtShort = cancelledAt
-    ? formatDisplayDateTimeShort(cancelledAt)
-    : null;
+  const cancellationFooter =
+    cancelledAt != null && cancelledAt !== ""
+      ? formatCancellationAttribution(
+          cancelledAt,
+          cancelledBy,
+          reservationUserId,
+          reservationEmail,
+        )
+      : null;
 
   return (
     <div
       className={`bg-red-50 rounded-lg p-4 sm:p-5 ${className}`.trim()}
     >
       <h3 className="text-lg font-semibold text-red-900 mb-4">
-        Reserva Cancelada
+        Información de cancelación
       </h3>
 
       <div className="space-y-3 text-sm">
-        {cancelledAtValid && (
-          <div>
-            <p className="text-red-700 font-medium mb-1">Fecha de cancelación</p>
-            <p className="text-red-900">{cancelledAtValid}</p>
-          </div>
-        )}
-
         {hasRefund && (
           <>
             <div>
@@ -134,12 +131,9 @@ export function CancelledReservationDetails({
           <div className="pt-3 border-t border-red-200/70">{adminSection}</div>
         ) : null}
 
-        {cancelledBy && (
-          <p className="text-red-900 font-semibold pt-3 border-t border-red-200/70">
-            Cancelado por: {cancelledBy.name?.trim() || cancelledBy.email}
-            {cancelledAtShort ? ` · ${cancelledAtShort}` : ""}
-          </p>
-        )}
+        {cancellationFooter ? (
+          <p className="text-red-900 font-semibold pt-1">{cancellationFooter}</p>
+        ) : null}
       </div>
     </div>
   );
