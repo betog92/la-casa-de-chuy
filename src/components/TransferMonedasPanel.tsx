@@ -82,6 +82,9 @@ const BTN_PRIMARY =
   "w-full cursor-pointer rounded-lg bg-[#103948] py-3 px-4 font-medium text-white transition-colors hover:bg-[#0d2d38] disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_SECONDARY =
   "w-full cursor-pointer rounded-lg border border-zinc-300 bg-white py-3 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
+/** CTA de regalo: visible pero por debajo de Reagendar/Cancelar */
+const BTN_GIFT =
+  "w-full cursor-pointer rounded-lg border-2 border-[#103948] bg-white py-3 px-4 font-medium text-[#103948] transition-colors hover:bg-[#103948]/5 disabled:cursor-not-allowed disabled:opacity-50";
 const BTN_DANGER_SOFT =
   "w-full cursor-pointer rounded-lg border border-red-300 bg-white py-3 px-4 font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -352,7 +355,7 @@ export default function TransferMonedasPanel({
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-zinc-900">
+          <h3 className="text-base font-semibold text-[#103948]">
             {active
               ? labelFor(active.status).title
               : adminReadOnly
@@ -365,9 +368,14 @@ export default function TransferMonedasPanel({
             ) : adminReadOnly ? (
               "Registro de transferencias de Monedas Chuy en esta reserva."
             ) : (
-              `Tienes ${earnedPoints} ${pluralizeLoyalty(
-                earnedPoints,
-              )} de esta reserva. Si quieres, podemos enviárselas al fotógrafo después de tu sesión.`
+              <>
+                De esta reserva te quedan{" "}
+                <span className="font-medium text-zinc-800">
+                  {earnedPoints} {pluralizeLoyalty(earnedPoints)}
+                </span>{" "}
+                en tu saldo; si quieres, puedes regalárselas a tu fotógrafo y se
+                le enviarán después de tu sesión.
+              </>
             )}
           </p>
         </div>
@@ -476,7 +484,7 @@ export default function TransferMonedasPanel({
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className={BTN_PRIMARY}
+            className={variant === "embedded" ? BTN_GIFT : BTN_PRIMARY}
           >
             Regalar mis {earnedPoints} {pluralizeLoyalty(earnedPoints)}
           </button>
@@ -520,7 +528,7 @@ function Wrapper({
   }
   if (variant === "embedded") {
     return (
-      <div className="border-t border-amber-200/70 bg-amber-50 px-6 py-4 sm:px-8">
+      <div className="border-t border-amber-200/70 bg-amber-50 px-6 py-3 sm:px-8 sm:py-3.5">
         {children}
       </div>
     );

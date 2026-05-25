@@ -34,6 +34,86 @@ function isConektaMethod(method: string | null | undefined): boolean {
   return (method ?? "").toLowerCase() === "conekta";
 }
 
+const PAID_ADDITIONAL_METHODS = [
+  "conekta",
+  "efectivo",
+  "transferencia",
+] as const;
+
+/** Métodos de pago adicional ya cobrados (desglose y reembolsos no pendientes). */
+export function isPaidAdditionalPaymentMethod(
+  method: string | null | undefined,
+): boolean {
+  const m = (method ?? "").toLowerCase();
+  return (PAID_ADDITIONAL_METHODS as readonly string[]).includes(m);
+}
+
+/**
+ * Monto de pago adicional cobrado para desglose de precio (Conekta, efectivo,
+ * transferencia). Misma regla que `sumConektaAdditionalPaid`: la fila en
+ * `reservations` es canónica cuando tiene pago adicional cobrado; el historial
+ * solo se usa si la reserva no tiene ninguno.
+ */
+export function sumPaidAdditionalForBreakdown(
+  rescheduleHistory: ReschedulePaymentHistoryRow[],
+  fallback?: {
+    additional_payment_amount: number | null;
+    additional_payment_method: string | null;
+  },
+): number {
+  const sumFromHistory = () =>
+    (rescheduleHistory ?? []).reduce((sum, h) => {
+      if (
+        !isPaidAdditionalPaymentMethod(h.additional_payment_method) ||
+        (h.additional_payment_amount ?? 0) <= 0
+      ) {
+        return sum;
+      }
+      return sum + (h.additional_payment_amount ?? 0);
+    }, 0);
+
+  if (
+    fallback &&
+    isPaidAdditionalPaymentMethod(fallback.additional_payment_method)
+  ) {
+    const amt = Number(fallback.additional_payment_amount ?? 0);
+    if (Number.isFinite(amt) && amt > 0) {
+      const fromHistory = sumFromHistory();
+      if (fromHistory > amt + 0.01) {
+        console.warn(
+          "[refunds] Historial suma más adicionales cobrados que additional_payment_amount en reserva; usando fila de reserva para desglose.",
+          { fromHistory, reservationAdditional: amt },
+        );
+      }
+      return amt;
+    }
+  }
+
+  return sumFromHistory();
+}
+
+/**
+ * Precio acumulativo antes de restar pagos adicionales por reagendamiento (UI).
+ */
+export function getPriceBeforePaidAdditionals(
+  priceCumulative: number | null | undefined,
+  rescheduleHistory: ReschedulePaymentHistoryRow[],
+  fallbackAdditional?: {
+    additional_payment_amount: number | null;
+    additional_payment_method: string | null;
+  },
+): number {
+  const total = Number(priceCumulative ?? 0);
+  if (!Number.isFinite(total) || total <= 0) {
+    return 0;
+  }
+  const additional = sumPaidAdditionalForBreakdown(
+    rescheduleHistory,
+    fallbackAdditional,
+  );
+  return Math.max(0, total - additional);
+}
+
 /**
  * Monto del único pago adicional Conekta por reagendo (si existe).
  *

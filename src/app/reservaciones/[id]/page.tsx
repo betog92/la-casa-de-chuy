@@ -36,7 +36,11 @@ import {
   REFUND_CANCEL_MODAL_POLICY,
   REFUND_CANCEL_MODAL_TIMEFRAME_NOTE,
 } from "@/constants/refund-copy";
-import { getCancellationRefundPreview } from "@/utils/refunds";
+import {
+  getCancellationRefundPreview,
+  getPriceBeforePaidAdditionals,
+  isPaidAdditionalPaymentMethod,
+} from "@/utils/refunds";
 import {
   PRICE_BREAKDOWN_CREDITOS_LABEL,
   PRICE_BREAKDOWN_MONEDAS_LABEL,
@@ -527,16 +531,12 @@ export default function ReservationDetailsPage() {
   const isPastDeadline = businessDays !== null && businessDays < 5;
   const totalDiscounts = calculateTotalDiscounts();
   const hasDiscounts = totalDiscounts > 0;
-  const paidMethods = ["conekta", "efectivo", "transferencia"] as const;
   const isPaidAdditional = (h: {
     additional_payment_amount?: number | null;
     additional_payment_method?: string | null;
   }) =>
     (h.additional_payment_amount ?? 0) > 0 &&
-    h.additional_payment_method != null &&
-    paidMethods.includes(
-      h.additional_payment_method as (typeof paidMethods)[number]
-    );
+    isPaidAdditionalPaymentMethod(h.additional_payment_method);
   const rescheduleHistoryWithPayment = (
     reservation?.reschedule_history ?? []
   ).filter((h) => isPaidAdditional(h));
@@ -547,20 +547,13 @@ export default function ReservationDetailsPage() {
   const hasPaidAdditionalPayment =
     reservationPaidAdditional || rescheduleHistoryWithPayment.length > 0;
   const showPriceBreakdown = hasDiscounts || hasPaidAdditionalPayment;
-  const additionalFromHistory = rescheduleHistoryWithPayment.reduce(
-    (sum, h) => sum + (h.additional_payment_amount ?? 0),
-    0
-  );
-  const additionalOnReservation = reservationPaidAdditional
-    ? (reservation?.additional_payment_amount ?? 0)
-    : 0;
-  const totalAdditionalForBreakdown = Math.max(
-    additionalFromHistory,
-    additionalOnReservation
-  );
-  const originalPriceForBreakdown = Math.max(
-    0,
-    (reservation?.price ?? 0) - totalAdditionalForBreakdown
+  const originalPriceForBreakdown = getPriceBeforePaidAdditionals(
+    reservation?.price,
+    reservation?.reschedule_history ?? [],
+    {
+      additional_payment_amount: reservation?.additional_payment_amount ?? null,
+      additional_payment_method: reservation?.additional_payment_method ?? null,
+    },
   );
 
   if (loading || authLoading) {
@@ -1016,9 +1009,12 @@ export default function ReservationDetailsPage() {
                   </span>
                 </div>
                 {reservation.payment_id && (
-                  <p className="mt-2 text-sm text-zinc-500 font-mono">
-                    ID de pago: {reservation.payment_id}
-                  </p>
+                  <div className="mt-2 flex justify-between gap-3 text-sm">
+                    <span className="text-zinc-500">ID de pago:</span>
+                    <span className="max-w-[58%] shrink-0 break-all text-right font-mono text-zinc-500">
+                      {reservation.payment_id}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -1034,9 +1030,12 @@ export default function ReservationDetailsPage() {
                 </span>
               </div>
               {reservation.payment_id && (
-                <p className="mt-2 text-sm text-zinc-500 font-mono">
-                  ID de pago: {reservation.payment_id}
-                </p>
+                <div className="mt-2 flex justify-between gap-3 text-sm">
+                  <span className="text-zinc-500">ID de pago:</span>
+                  <span className="max-w-[58%] shrink-0 break-all text-right font-mono text-zinc-500">
+                    {reservation.payment_id}
+                  </span>
+                </div>
               )}
             </div>
           )}
@@ -1284,36 +1283,17 @@ export default function ReservationDetailsPage() {
                   {rescheduling ? "Reagendando..." : "Reagendar"}
                 </button>
                 {isAdmin ? (
-                  <p className="mt-2 text-xs text-zinc-600">
+                  <p className="mt-2 text-xs leading-snug text-zinc-600">
                     Como administrador puedes reagendar en cualquier momento y sin
                     límite de intentos. Si la nueva fecha tiene mayor costo, se
                     asignará como pago pendiente.
                   </p>
-                ) : (
-                  <p className="mt-2 text-xs text-zinc-600">
-                    {hasReachedRescheduleLimit ? (
-                      "Ya has utilizado tu único intento de reagendamiento permitido para esta reserva."
-                    ) : (
-                      <>
-                        El reagendamiento solo está disponible con al menos 5 días
-                        hábiles de anticipación.
-                        {businessDays !== null && (
-                          <>
-                            {" "}
-                            <span
-                              className={
-                                isPastDeadline ? "text-red-600" : "text-zinc-600"
-                              }
-                            >
-                              {formatBusinessDaysMessage(businessDays)}
-                            </span>
-                            .
-                          </>
-                        )}
-                      </>
-                    )}
+                ) : hasReachedRescheduleLimit ? (
+                  <p className="mt-2 text-xs leading-snug text-zinc-600">
+                    Ya has utilizado tu único intento de reagendamiento permitido
+                    para esta reserva.
                   </p>
-                )}
+                ) : null}
               </div>
               <div>
                 <button
@@ -1324,41 +1304,34 @@ export default function ReservationDetailsPage() {
                   Cancelar Reserva
                 </button>
                 {isAdmin ? (
-                  <p className="mt-2 text-xs text-zinc-600">
+                  <p className="mt-2 text-xs leading-snug text-zinc-600">
                     Como administrador puedes cancelar en cualquier momento.
                   </p>
-                ) : (
-                  <p className="mt-2 text-xs text-zinc-600">
-                    La cancelación solo está disponible con al menos 5 días
-                    hábiles de anticipación.
-                    {businessDays !== null && (
-                      <>
-                        {" "}
-                        <span
-                          className={
-                            isPastDeadline ? "text-red-600" : "text-zinc-600"
-                          }
-                        >
-                          {formatBusinessDaysMessage(businessDays)}
-                        </span>
-                        .
-                      </>
-                    )}
-                  </p>
-                )}
+                ) : null}
               </div>
+              {!isAdmin && reservation.source !== "google_import" && (
+                <p className="text-xs leading-snug text-zinc-600">
+                  {hasReachedRescheduleLimit
+                    ? "La cancelación solo está disponible con al menos 5 días hábiles de anticipación."
+                    : "Reagendar y cancelar requieren al menos 5 días hábiles de anticipación."}
+                  {businessDays !== null && (
+                    <>
+                      {" "}
+                      <span
+                        className={
+                          isPastDeadline ? "text-red-600" : "text-zinc-600"
+                        }
+                      >
+                        {formatBusinessDaysMessage(businessDays)}
+                      </span>
+                      .
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Pie: volver */}
-          <div className="border-t border-zinc-200 pt-5">
-            <Link
-              href={isAdmin ? "/admin/reservaciones" : "/account"}
-              className="block w-full rounded-lg border border-zinc-300 bg-white py-3 px-4 text-center font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
-            >
-              {isAdmin ? "Volver a reservaciones" : "Volver a mis reservas"}
-            </Link>
-          </div>
           </div>
 
           {reservation.status === "confirmed" &&
@@ -1370,6 +1343,16 @@ export default function ReservationDetailsPage() {
                 variant="embedded"
               />
             )}
+
+          {/* Pie: volver */}
+          <div className="border-t border-zinc-200 px-6 pt-4 pb-5 sm:px-8 sm:pb-6">
+            <Link
+              href={isAdmin ? "/admin/reservaciones" : "/account"}
+              className="block w-full rounded-lg border border-zinc-300 bg-white py-3 px-4 text-center font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+            >
+              {isAdmin ? "Volver a reservaciones" : "Volver a mis reservas"}
+            </Link>
+          </div>
         </div>
       </div>
 
