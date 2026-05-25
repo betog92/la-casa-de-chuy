@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { format, parse, addDays, startOfDay, isValid } from "date-fns";
+import { format, parse, addDays, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
@@ -47,8 +47,8 @@ import { DiscountRow } from "@/components/DiscountRow";
 import { RescheduleAdditionalRow } from "@/components/RescheduleAdditionalRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import TransferMonedasPanel from "@/components/TransferMonedasPanel";
+import { AdminReservationInternalInfo } from "@/components/admin/AdminReservationInternalInfo";
 import type { Reservation } from "@/types/reservation";
-import { sessionTypeLabel } from "@/utils/session-type";
 import { durationMinutesBetween } from "@/utils/reservation-helpers";
 
 export default function ReservationDetailsPage() {
@@ -489,6 +489,40 @@ export default function ReservationDetailsPage() {
     ? true
     : businessDays !== null && businessDays >= 5 && !hasReachedRescheduleLimit;
 
+  const isManualAvailableBlock =
+    reservation != null &&
+    (reservation.source === "google_import" ||
+      reservation.source === "admin") &&
+    reservation.import_type === "manual_available";
+  const showAdminInternalBlock = isAdmin && !isManualAvailableBlock;
+  const showAdminPhotographerEditor =
+    showAdminInternalBlock &&
+    reservation != null &&
+    !(
+      (reservation.source === "google_import" ||
+        reservation.source === "admin") &&
+      reservation.import_type === "manual_client"
+    );
+
+  const hasRescheduleInfoBlock =
+    (reservation?.reschedule_history?.length ?? 0) > 0 ||
+    ((reservation?.reschedule_count ?? 0) > 0 &&
+      (reservation?.reschedule_history?.length ?? 0) === 0);
+
+  const showAdminActionButtons =
+    isAdmin && reservation?.status === "confirmed";
+
+  const adminFlowsIntoActionButtons =
+    showAdminActionButtons &&
+    showAdminInternalBlock &&
+    !hasRescheduleInfoBlock;
+
+  /** Evita hueco + doble borde entre bloque admin y la primera sección siguiente. */
+  const fullBleedSectionClass = (firstAfterAdmin: boolean) =>
+    firstAfterAdmin && showAdminInternalBlock
+      ? "pt-4 -mx-6 sm:-mx-8 -mt-6"
+      : "pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8";
+
   // Determinar si el texto debe ser rojo (menos de 5 días hábiles)
   const isPastDeadline = businessDays !== null && businessDays < 5;
   const totalDiscounts = calculateTotalDiscounts();
@@ -678,6 +712,15 @@ export default function ReservationDetailsPage() {
               />
             </div>
 
+            {!isAdmin && reservation.photographer_studio ? (
+              <div>
+                <p className="text-sm text-zinc-600 mb-1">Fotógrafo / estudio</p>
+                <p className="text-lg font-medium text-[#103948] whitespace-pre-line">
+                  {reservation.photographer_studio}
+                </p>
+              </div>
+            ) : null}
+
             {/* Datos de contacto: editable solo para admin en citas de Alberto */}
             {isAdmin && (
               <div className="pt-4 border-t border-zinc-200 space-y-3">
@@ -711,24 +754,6 @@ export default function ReservationDetailsPage() {
                         {reservation.phone || "No proporcionado"}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Tipo de sesión</p>
-                      <p className="text-lg font-medium text-[#103948]">
-                        {reservation.session_type
-                          ? sessionTypeLabel(reservation.session_type)
-                          : "—"}
-                      </p>
-                    </div>
-                    {reservation.photographer_studio ? (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">
-                          Fotógrafo / estudio
-                        </p>
-                        <p className="text-lg font-medium text-[#103948] whitespace-pre-line">
-                          {reservation.photographer_studio}
-                        </p>
-                      </div>
-                    ) : null}
                     {(reservation.order_number || reservation.google_event_id) && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
@@ -738,19 +763,11 @@ export default function ReservationDetailsPage() {
                       </div>
                     )}
                     <div>
-                      <label htmlFor="edit-notes" className="text-sm text-zinc-600 mb-1 block">Detalles de la cita</label>
-                      <textarea
-                        id="edit-notes"
-                        value={editForm.import_notes}
-                        onChange={(e) => setEditForm((f) => ({ ...f, import_notes: e.target.value }))}
-                        rows={4}
-                        maxLength={10000}
-                        className="w-full rounded border border-zinc-300 px-3 py-2 text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="admin-photographer-studio-import" className="text-sm text-zinc-600 mb-1 block">
-                        Nombre del fotógrafo / estudio (opcional)
+                      <label
+                        htmlFor="admin-photographer-studio-import"
+                        className="text-sm text-zinc-600 mb-1 block"
+                      >
+                        Fotógrafo / estudio
                       </label>
                       <input
                         id="admin-photographer-studio-import"
@@ -765,6 +782,17 @@ export default function ReservationDetailsPage() {
                         }
                         className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
                         placeholder="Ej. Estudio Luz o nombre del fotógrafo"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="edit-notes" className="text-sm text-zinc-600 mb-1 block">Detalles de la cita</label>
+                      <textarea
+                        id="edit-notes"
+                        value={editForm.import_notes}
+                        onChange={(e) => setEditForm((f) => ({ ...f, import_notes: e.target.value }))}
+                        rows={4}
+                        maxLength={10000}
+                        className="w-full rounded border border-zinc-300 px-3 py-2 text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
                       />
                     </div>
                     {editDetailError && (
@@ -823,8 +851,8 @@ export default function ReservationDetailsPage() {
                     </button>
                     {reservation.import_notes_edited_at && (() => {
                       const editedAt = new Date(reservation.import_notes_edited_at);
-                      const isValid = !Number.isNaN(editedAt.getTime());
-                      return isValid ? (
+                      const editedAtValid = !Number.isNaN(editedAt.getTime());
+                      return editedAtValid ? (
                         <p className="text-xs text-zinc-500 mt-2">
                           Editado por última vez por{" "}
                           {reservation.import_notes_edited_by?.name ?? "—"}{" "}
@@ -849,106 +877,6 @@ export default function ReservationDetailsPage() {
                         {reservation.phone || "No proporcionado"}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Tipo de sesión</p>
-                      <p className="text-lg font-medium text-[#103948]">
-                        {reservation.session_type
-                          ? sessionTypeLabel(reservation.session_type)
-                          : "—"}
-                      </p>
-                    </div>
-                    {reservation.photographer_studio ? (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">
-                          Fotógrafo / estudio
-                        </p>
-                        <p className="text-lg font-medium text-[#103948] whitespace-pre-line">
-                          {reservation.photographer_studio}
-                        </p>
-                      </div>
-                    ) : null}
-                    {isAdmin && reservation.source === "web" && (
-                      <div className="pt-3 border-t border-zinc-200 space-y-2">
-                        <label
-                          htmlFor="admin-photographer-studio"
-                          className="text-sm text-zinc-600 block"
-                        >
-                          Nombre del fotógrafo / estudio (solo administración;
-                          puedes completar o corregir)
-                        </label>
-                        <input
-                          id="admin-photographer-studio"
-                          type="text"
-                          maxLength={500}
-                          value={editForm.photographer_studio}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              photographer_studio: e.target.value,
-                            }))
-                          }
-                          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-                          placeholder="Ej. Estudio Luz o nombre del fotógrafo"
-                        />
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setEditDetailError(null);
-                            setSaveDetailSuccess(false);
-                            setSavingDetail(true);
-                            try {
-                              const res = await fetch(
-                                `/api/reservations/${reservation.id}`,
-                                {
-                                  method: "PATCH",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    photographer_studio:
-                                      editForm.photographer_studio.trim() ||
-                                      null,
-                                  }),
-                                }
-                              );
-                              const data = await res.json();
-                              if (!data.success) {
-                                setEditDetailError(
-                                  data.error || "Error al guardar"
-                                );
-                                return;
-                              }
-                              const updated = data.reservation;
-                              setReservation((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      photographer_studio:
-                                        updated.photographer_studio ??
-                                        prev.photographer_studio ??
-                                        null,
-                                    }
-                                  : null
-                              );
-                              setSaveDetailSuccess(true);
-                            } catch {
-                              setEditDetailError("Error de conexión");
-                            } finally {
-                              setSavingDetail(false);
-                            }
-                          }}
-                          disabled={savingDetail}
-                          className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
-                        >
-                          {savingDetail ? "Guardando…" : "Guardar fotógrafo / estudio"}
-                        </button>
-                        {saveDetailSuccess && (
-                          <p className="text-sm text-green-600 font-medium">
-                            Fotógrafo / estudio guardado correctamente.
-                          </p>
-                        )}
-                      </div>
-                    )}
                     {(reservation.source === "google_import" || reservation.source === "admin") && (reservation.order_number || reservation.google_event_id) && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
@@ -965,93 +893,12 @@ export default function ReservationDetailsPage() {
                         </p>
                       </div>
                     )}
-                    {(reservation.source === "web" || reservation.source === "admin") && (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">Creada el</p>
-                        <p className="text-lg font-medium text-[#103948]">
-                          {format(
-                            new Date(reservation.created_at),
-                            "d 'de' MMMM yyyy, h:mm a",
-                            { locale: es }
-                          )}
-                        </p>
-                      </div>
-                    )}
                     {reservation.created_by && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">Creada por</p>
                         <p className="text-lg font-medium text-[#103948]">
                           {reservation.created_by.name?.trim() || reservation.created_by.email}
                         </p>
-                      </div>
-                    )}
-                    {isAdmin && (
-                      (reservation.source === "admin" && reservation.import_type == null && reservation.payment_method) ||
-                      (reservation.source === "web" && (reservation.payment_method === "conekta" || reservation.payment_id))
-                    ) && (
-                      <div className="pt-3 border-t border-zinc-100">
-                        <p className="text-sm text-zinc-600 mb-1">Estado del pago</p>
-                        {reservation.source === "web" && (reservation.payment_method === "conekta" || reservation.payment_id) && (
-                          <p className="text-lg font-medium text-emerald-700">Pagado (en línea)</p>
-                        )}
-                        {reservation.source === "admin" && reservation.payment_status === "pending" && (
-                          <>
-                            <p className="text-lg font-medium text-amber-700">Pago pendiente</p>
-                            {isSuperAdmin && (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  setValidatingPayment(true);
-                                  setActionError(null);
-                                  try {
-                                    const res = await fetch(`/api/admin/reservations/${reservation.id}/payment-status`, { method: "PATCH" });
-                                    const data = await res.json();
-                                    if (!data.success) {
-                                      setActionError(data.error || "Error al validar pago");
-                                      return;
-                                    }
-                                    const detailRes = await fetch(`/api/reservations/${reservation.id}`);
-                                    if (detailRes.ok) {
-                                      const detailData = await detailRes.json();
-                                      if (detailData.reservation) {
-                                        setReservation(detailData.reservation as Reservation);
-                                      } else {
-                                        setReservation((prev) => (prev ? { ...prev, payment_status: "paid" as const } : null));
-                                      }
-                                    } else {
-                                      setReservation((prev) => (prev ? { ...prev, payment_status: "paid" as const } : null));
-                                    }
-                                  } catch {
-                                    setActionError("Error de conexión");
-                                  } finally {
-                                    setValidatingPayment(false);
-                                  }
-                                }}
-                                disabled={validatingPayment}
-                                className="mt-2 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-50"
-                              >
-                                {validatingPayment ? "Validando…" : "Validar / Marcar como pagado"}
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {reservation.source === "admin" && reservation.payment_status === "paid" && (
-                          <>
-                            <p className="text-lg font-medium text-emerald-700">Pagado (validado)</p>
-                            {reservation.payment_validated_at && reservation.payment_validated_by && (() => {
-                              const validatedAt = new Date(reservation.payment_validated_at);
-                              return (
-                                <p className="text-sm text-zinc-500 mt-1">
-                                  Validado por {reservation.payment_validated_by.name || reservation.payment_validated_by.email}
-                                  {isValid(validatedAt) ? ` el ${format(validatedAt, "d 'de' MMMM 'de' yyyy 'a las' h:mm a", { locale: es })}` : ""}.
-                                </p>
-                              );
-                            })()}
-                          </>
-                        )}
-                        {reservation.source === "admin" && (reservation.payment_status == null || reservation.payment_status === "not_applicable") && (
-                          <p className="text-zinc-500 text-sm">—</p>
-                        )}
                       </div>
                     )}
                   </>
@@ -1062,7 +909,7 @@ export default function ReservationDetailsPage() {
 
           {/* Desglose de precios (descuentos y/o pago adicional por reagendamiento) */}
           {showPriceBreakdown && (
-            <div className="pt-4 border-t border-zinc-200">
+            <div className="border-t border-zinc-200 pt-4">
               <h3 className="text-lg font-semibold text-[#103948] mb-4">
                 {PRICE_BREAKDOWN_SECTION_TITLE}
               </h3>
@@ -1179,7 +1026,7 @@ export default function ReservationDetailsPage() {
 
           {/* Precio sin descuentos ni pago adicional */}
           {!showPriceBreakdown && (
-            <div className="pt-5 border-t border-zinc-200">
+            <div className="border-t border-zinc-200 pt-5">
               <div className="flex justify-between font-semibold text-lg">
                 <span>Precio total:</span>
                 <span className="text-[#103948]">
@@ -1194,12 +1041,31 @@ export default function ReservationDetailsPage() {
             </div>
           )}
 
+          {showAdminInternalBlock && (
+            <div className="-mx-6 sm:-mx-8">
+              <AdminReservationInternalInfo
+                reservation={reservation}
+                isSuperAdmin={isSuperAdmin}
+                editForm={editForm}
+                setEditForm={setEditForm}
+                savingDetail={savingDetail}
+                setSavingDetail={setSavingDetail}
+                editDetailError={editDetailError}
+                setEditDetailError={setEditDetailError}
+                setReservation={setReservation}
+                validatingPayment={validatingPayment}
+                setValidatingPayment={setValidatingPayment}
+                showPhotographerEditor={showAdminPhotographerEditor}
+              />
+            </div>
+          )}
+
           {/* Un bloque completo por cada reagendamiento */}
           {(reservation.reschedule_history?.length ?? 0) > 0 &&
             (reservation.reschedule_history ?? []).map((h, idx) => (
               <div
                 key={idx}
-                className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8"
+                className={fullBleedSectionClass(idx === 0)}
               >
                 <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
                   <h3 className="text-lg font-semibold text-orange-900 mb-3">
@@ -1286,7 +1152,7 @@ export default function ReservationDetailsPage() {
           {/* Fallback: sin historial (reservas reagendadas antes de migración 15) */}
           {(reservation.reschedule_count ?? 0) > 0 &&
             (reservation.reschedule_history?.length ?? 0) === 0 && (
-              <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
+              <div className={fullBleedSectionClass(true)}>
                 <div className="bg-orange-50 rounded-lg p-4 mx-6 sm:mx-8">
                   <h3 className="text-lg font-semibold text-orange-900 mb-3">
                     {RESCHEDULE_INFO_SECTION_TITLE}
@@ -1345,7 +1211,7 @@ export default function ReservationDetailsPage() {
 
           {/* Estado de cancelación */}
           {reservation.status === "cancelled" && (
-            <div className="pt-4 border-t border-zinc-200 -mx-6 sm:-mx-8">
+            <div className={fullBleedSectionClass(!hasRescheduleInfoBlock)}>
               <CancelledReservationDetails
                 className="mx-6 sm:mx-8"
                 cancelledAt={reservation.cancelled_at}
@@ -1397,7 +1263,13 @@ export default function ReservationDetailsPage() {
 
           {/* Botones de acción */}
           {reservation.status === "confirmed" && (
-            <div className="pt-6 border-t border-zinc-200 space-y-4">
+            <div
+              className={
+                adminFlowsIntoActionButtons
+                  ? "space-y-4 -mt-6 pt-5"
+                  : "space-y-4 border-t border-zinc-200 pt-6"
+              }
+            >
               {reservation.source === "google_import" && !isAdmin && (
                 <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                   Esta cita fue importada de la web anterior y no puede reagendarse ni cancelarse desde aquí.

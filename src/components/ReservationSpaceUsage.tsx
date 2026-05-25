@@ -55,30 +55,30 @@ export function ReservationSpaceUsage({
       aria-label="Desglose de tiempo en interior y jardín"
     >
       <li className="flex justify-between gap-3">
-        <span className="flex min-w-0 flex-wrap items-center gap-2 text-zinc-700">
+        <span className="flex min-w-0 flex-wrap items-center gap-2 text-zinc-800">
           <span aria-hidden>🏠</span>
-          <span className="font-medium">Interior</span>
+          <span className="font-medium text-zinc-800">Interior</span>
           <span
             className={`${chipClass} bg-zinc-200 text-zinc-800 ring-1 ring-zinc-300/90`}
           >
             {u.interiorMinutes} min
           </span>
         </span>
-        <span className="shrink-0 text-right tabular-nums text-zinc-800">
+        <span className="shrink-0 text-right tabular-nums text-zinc-600">
           {u.interior}
         </span>
       </li>
       <li className="flex justify-between gap-3">
-        <span className="flex min-w-0 flex-wrap items-center gap-2 text-zinc-700">
+        <span className="flex min-w-0 flex-wrap items-center gap-2 text-zinc-800">
           <span aria-hidden>🌿</span>
-          <span className="font-medium">Jardín</span>
+          <span className="font-medium text-zinc-800">Jardín</span>
           <span
             className={`${chipClass} bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80`}
           >
             {u.exteriorMinutes} min
           </span>
         </span>
-        <span className="shrink-0 text-right tabular-nums text-zinc-800">
+        <span className="shrink-0 text-right tabular-nums text-zinc-600">
           {u.garden}
         </span>
       </li>
@@ -88,12 +88,12 @@ export function ReservationSpaceUsage({
   if (variant === "confirm") {
     return (
       <div className="mb-3">
-        <div className="mb-3 flex justify-between gap-3">
-          <span className="font-medium text-zinc-900">Horario</span>
-          <span className="tabular-nums text-zinc-800">{u.total}</span>
+        <div className="mb-3 flex justify-between gap-3 text-sm">
+          <span className="font-medium text-zinc-600">Horario:</span>
+          <span className="text-right tabular-nums text-zinc-800">{u.total}</span>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 p-3 sm:p-3.5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-600">
             Cómo usamos el espacio
           </p>
           {timeline}
@@ -113,41 +113,27 @@ export function ReservationSpaceUsage({
         className={`rounded-lg border border-zinc-200 bg-zinc-50/90 ${pad} ring-1 ring-zinc-100/80`}
       >
         <p
-          className={`${titleSize} mb-2 font-semibold uppercase tracking-wide text-zinc-500`}
+          className={`${titleSize} mb-2 font-semibold uppercase tracking-wide text-zinc-600`}
         >
           Horario de tu sesión
         </p>
-        <div className="mb-3 flex flex-wrap items-baseline gap-2">
-          <span
-            className={`font-semibold tabular-nums text-zinc-900 ${totalSize}`}
-          >
-            {u.total}
-          </span>
-          <span
-            className={`${chipClass} bg-white text-zinc-600 ring-1 ring-zinc-200`}
-          >
-            {u.totalMinutes} min totales
-          </span>
-        </div>
+        <p
+          className={`mb-3 font-semibold tabular-nums text-[#103948] ${totalSize}`}
+        >
+          {u.total}
+        </p>
         {timeline}
         {rows}
       </div>
     );
   }
 
-  // detail (invitado / cuenta)
+  // detail (invitado / cuenta / admin)
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <p className="text-lg font-medium tabular-nums text-[#103948]">
-          {u.total}
-        </p>
-        <span
-          className={`${chipClass} bg-[#103948]/10 text-[#103948] ring-1 ring-[#103948]/15`}
-        >
-          {u.totalMinutes} min
-        </span>
-      </div>
+      <p className="text-lg font-medium tabular-nums text-[#103948]">
+        {u.total}
+      </p>
       <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 sm:p-3.5">
         <p className="mb-2 text-xs font-medium text-zinc-600">
           Interior y jardín

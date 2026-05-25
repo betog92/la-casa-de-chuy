@@ -832,11 +832,15 @@ function FormularioReservaContent() {
                 {isSummaryOpen && (
                   <div className="border-t border-zinc-200 p-4 space-y-4">
                     {/* Detalles */}
-                    <div className="space-y-3 text-sm text-zinc-700">
+                    <div className="space-y-3">
                       <div>
-                        <p className="font-medium text-zinc-900 mb-1">Fecha:</p>
-                        <p className="text-zinc-600">
-                          {formatDisplayDate(reservationData.date)}
+                        <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
+                          <span className="font-medium text-zinc-800">
+                            Fecha:
+                          </span>
+                          <span className="text-zinc-700">
+                            {formatDisplayDate(reservationData.date)}
+                          </span>
                         </p>
                         <div className="mt-3">
                           <ReservationSpaceUsage
@@ -851,10 +855,10 @@ function FormularioReservaContent() {
 
                     {/* Código de Descuento/Referido */}
                     <div className="mb-4 pb-4 border-b border-zinc-200">
-                      <label className="block text-sm font-medium text-zinc-700 mb-2">
+                      <label className="block text-sm font-medium text-zinc-800 mb-2">
                         ¿Tienes un código?
                       </label>
-                      <p className="mb-2 text-xs text-zinc-500">
+                      <p className="mb-2 text-xs leading-snug text-zinc-600">
                         Primero ingresa tu correo; los códigos de referido lo
                         requieren para validarse.
                       </p>
@@ -939,7 +943,7 @@ function FormularioReservaContent() {
                       <div className="flex items-center justify-between py-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-zinc-900">
+                            <span className="text-sm font-medium text-zinc-800">
                               Descuento por fidelización
                             </span>
                             {useLoyaltyDiscount && (
@@ -959,7 +963,7 @@ function FormularioReservaContent() {
                             )}
                           </div>
                           {reservationCount >= 1 ? (
-                            <p className="text-xs text-zinc-500 mt-0.5">
+                            <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                               {reservationCount === 1 &&
                                 "3% de descuento (2da reserva)"}
                               {reservationCount >= 2 &&
@@ -972,7 +976,7 @@ function FormularioReservaContent() {
                                 "5% de descuento (10ma reserva)"}
                             </p>
                           ) : (
-                            <p className="text-xs text-zinc-500 mt-0.5">
+                            <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                               Disponible desde tu 2da reserva
                             </p>
                           )}
@@ -994,7 +998,7 @@ function FormularioReservaContent() {
                       <div className="flex items-center justify-between py-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-zinc-900">
+                            <span className="text-sm font-medium text-zinc-800">
                               Monedas Chuy
                             </span>
                             {useLoyaltyPoints > 0 && (
@@ -1014,7 +1018,7 @@ function FormularioReservaContent() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-xs text-zinc-500">
+                            <span className="text-xs text-zinc-600">
                               {availablePoints} disponible{availablePoints === 1 ? "" : "s"}
                             </span>
                             {useLoyaltyPoints > 0 && (
@@ -1024,7 +1028,7 @@ function FormularioReservaContent() {
                             )}
                           </div>
                           {availablePoints <= 0 && (
-                            <p className="text-xs text-zinc-500 mt-0.5">
+                            <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                               Gana 1 Moneda Chuy por cada $10 gastados
                             </p>
                           )}
@@ -1050,7 +1054,7 @@ function FormularioReservaContent() {
                       <div className="flex items-center justify-between py-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-zinc-900">
+                            <span className="text-sm font-medium text-zinc-800">
                               Créditos
                             </span>
                             {useCredits > 0 && (
@@ -1070,7 +1074,7 @@ function FormularioReservaContent() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-xs text-zinc-500">
+                            <span className="text-xs text-zinc-600">
                               ${availableCredits.toLocaleString("es-MX")}{" "}
                               disponibles
                             </span>
@@ -1081,7 +1085,7 @@ function FormularioReservaContent() {
                             )}
                           </div>
                           {availableCredits === 0 && (
-                            <p className="text-xs text-zinc-500 mt-0.5">
+                            <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                               Gana $200 por cada amigo que refieras
                             </p>
                           )}
@@ -1105,7 +1109,7 @@ function FormularioReservaContent() {
                     {/* Descuentos Aplicados */}
                     {priceCalculation && priceCalculation.totalDiscount > 0 && (
                       <div className="mb-4 pb-4 border-b border-zinc-200">
-                        <p className="text-sm font-medium text-zinc-900 mb-2">
+                        <p className="text-sm font-medium text-zinc-800 mb-2">
                           Descuentos aplicados
                         </p>
                         <div className="space-y-1 text-sm">
@@ -1201,9 +1205,9 @@ function FormularioReservaContent() {
 
                     {/* Precio Base */}
                     <div className="mb-2">
-                      <div className="flex justify-between text-sm text-zinc-600">
-                        <span>Precio base</span>
-                        <span>
+                      <div className="flex justify-between text-sm text-zinc-700">
+                        <span className="text-zinc-600">Precio base</span>
+                        <span className="tabular-nums text-zinc-800">
                           $
                           {(
                             priceCalculation?.basePrice || reservationData.price
@@ -1214,10 +1218,10 @@ function FormularioReservaContent() {
 
                     {/* Total */}
                     <div className="flex items-center justify-between border-t border-zinc-200 pt-4">
-                      <span className="text-base font-semibold text-zinc-900">
+                      <span className="text-base font-semibold text-zinc-800">
                         Total
                       </span>
-                      <span className="text-base font-semibold text-zinc-900">
+                      <span className="text-base font-semibold tabular-nums text-[#103948]">
                         MXN $
                         {(
                           priceCalculation?.finalPrice || reservationData.price
@@ -1226,9 +1230,9 @@ function FormularioReservaContent() {
                     </div>
 
                     {!user && (
-                      <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-center gap-1.5 text-xs text-zinc-500">
+                      <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-center gap-1.5 text-xs text-zinc-600">
                         <svg
-                          className="w-3.5 h-3.5 flex-shrink-0 text-zinc-500"
+                          className="h-3.5 w-3.5 shrink-0 text-zinc-400"
                           fill="none"
                           viewBox="0 0 24 24"
                           strokeWidth="2"
@@ -1244,7 +1248,7 @@ function FormularioReservaContent() {
                         <span>
                           <Link
                             href="/auth/login"
-                            className="text-[#103948] hover:underline"
+                            className="font-medium text-[#103948] hover:underline"
                           >
                             Inicia sesión
                           </Link>{" "}
@@ -1531,16 +1535,18 @@ function FormularioReservaContent() {
           {/* Columna derecha: Resumen (35-40%) - Solo visible en desktop */}
           <div className="hidden lg:block lg:w-[35%] lg:max-w-md">
             <div className="bg-white rounded-lg border border-zinc-200 p-6 sticky top-6">
-              <h2 className="text-lg font-semibold text-zinc-900 mb-4">
+              <h2 className="text-lg font-semibold text-[#103948] mb-4">
                 Reservación
               </h2>
 
               {/* Detalles */}
-              <div className="space-y-3 text-sm text-zinc-700 mb-4">
+              <div className="space-y-3 mb-4">
                 <div>
-                  <p className="font-medium text-zinc-900 mb-1">Fecha:</p>
-                  <p className="text-zinc-600">
-                    {formatDisplayDate(reservationData.date)}
+                  <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
+                    <span className="font-medium text-zinc-800">Fecha:</span>
+                    <span className="text-zinc-700">
+                      {formatDisplayDate(reservationData.date)}
+                    </span>
                   </p>
                   <div className="mt-3">
                     <ReservationSpaceUsage
@@ -1554,10 +1560,10 @@ function FormularioReservaContent() {
 
               {/* Código de Descuento/Referido */}
               <div className="mb-4 pb-4 border-b border-zinc-200">
-                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                <label className="block text-sm font-medium text-zinc-800 mb-2">
                   ¿Tienes un código?
                 </label>
-                <p className="mb-2 text-xs text-zinc-500">
+                <p className="mb-2 text-xs leading-snug text-zinc-600">
                   Primero ingresa tu correo; los códigos de referido lo requieren
                   para validarse.
                 </p>
@@ -1642,7 +1648,7 @@ function FormularioReservaContent() {
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-900">
+                      <span className="text-sm font-medium text-zinc-800">
                         Descuento por fidelización
                       </span>
                       {useLoyaltyDiscount && (
@@ -1662,7 +1668,7 @@ function FormularioReservaContent() {
                       )}
                     </div>
                     {reservationCount >= 1 ? (
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                         {reservationCount === 1 &&
                           "3% de descuento (2da reserva)"}
                         {reservationCount >= 2 &&
@@ -1675,7 +1681,7 @@ function FormularioReservaContent() {
                           "5% de descuento (10ma reserva)"}
                       </p>
                     ) : (
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                         Disponible desde tu 2da reserva
                       </p>
                     )}
@@ -1695,7 +1701,7 @@ function FormularioReservaContent() {
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-900">
+                      <span className="text-sm font-medium text-zinc-800">
                         Monedas Chuy
                       </span>
                       {useLoyaltyPoints > 0 && (
@@ -1715,7 +1721,7 @@ function FormularioReservaContent() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-xs text-zinc-500">
+                      <span className="text-xs text-zinc-600">
                         {availablePoints} disponible{availablePoints === 1 ? "" : "s"}
                       </span>
                       {useLoyaltyPoints > 0 && (
@@ -1725,7 +1731,7 @@ function FormularioReservaContent() {
                       )}
                     </div>
                     {availablePoints <= 0 && (
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                         Gana 1 Moneda Chuy por cada $10 gastados
                       </p>
                     )}
@@ -1751,7 +1757,7 @@ function FormularioReservaContent() {
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-900">
+                      <span className="text-sm font-medium text-zinc-800">
                         Créditos
                       </span>
                       {useCredits > 0 && (
@@ -1771,7 +1777,7 @@ function FormularioReservaContent() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-xs text-zinc-500">
+                      <span className="text-xs text-zinc-600">
                         ${availableCredits.toLocaleString("es-MX")} disponibles
                       </span>
                       {useCredits > 0 && (
@@ -1781,7 +1787,7 @@ function FormularioReservaContent() {
                       )}
                     </div>
                     {availableCredits === 0 && (
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
                         Gana $200 por cada amigo que refieras
                       </p>
                     )}
@@ -1803,7 +1809,7 @@ function FormularioReservaContent() {
               {/* Descuentos Aplicados */}
               {priceCalculation && priceCalculation.totalDiscount > 0 && (
                 <div className="mb-4 pb-4 border-b border-zinc-200">
-                  <p className="text-sm font-medium text-zinc-900 mb-2">
+                  <p className="text-sm font-medium text-zinc-800 mb-2">
                     Descuentos aplicados
                   </p>
                   <div className="space-y-1 text-sm">
@@ -1887,9 +1893,9 @@ function FormularioReservaContent() {
 
               {/* Precio Base */}
               <div className="mb-2">
-                <div className="flex justify-between text-sm text-zinc-600">
-                  <span>Precio base</span>
-                  <span>
+                <div className="flex justify-between text-sm text-zinc-700">
+                  <span className="text-zinc-600">Precio base</span>
+                  <span className="tabular-nums text-zinc-800">
                     $
                     {(
                       priceCalculation?.basePrice || reservationData.price
@@ -1900,10 +1906,10 @@ function FormularioReservaContent() {
 
               {/* Total */}
               <div className="flex items-center justify-between border-t border-zinc-200 pt-4">
-                <span className="text-base font-semibold text-zinc-900">
+                <span className="text-base font-semibold text-zinc-800">
                   Total
                 </span>
-                <span className="text-base font-semibold text-zinc-900">
+                <span className="text-base font-semibold tabular-nums text-[#103948]">
                   MXN $
                   {(
                     priceCalculation?.finalPrice || reservationData.price
@@ -1912,9 +1918,9 @@ function FormularioReservaContent() {
               </div>
 
               {!user && (
-                <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-center gap-1.5 text-xs text-zinc-500">
+                <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-center gap-1.5 text-xs text-zinc-600">
                   <svg
-                    className="w-3.5 h-3.5 flex-shrink-0 text-zinc-500"
+                    className="h-3.5 w-3.5 shrink-0 text-zinc-400"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth="2"
@@ -1930,7 +1936,7 @@ function FormularioReservaContent() {
                   <span>
                     <Link
                       href="/auth/login"
-                      className="text-[#103948] hover:underline"
+                      className="font-medium text-[#103948] hover:underline"
                     >
                       Inicia sesión
                     </Link>{" "}

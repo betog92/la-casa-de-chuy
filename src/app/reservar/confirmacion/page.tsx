@@ -225,6 +225,19 @@ function ConfirmacionContent() {
     );
   }
 
+  const showAdditionalPayment =
+    rescheduled === "true" && additionalAmountThisReschedule > 0;
+  const showTotalPaid = rescheduled !== "true" && !hasPendingFromBefore;
+  const showPaymentId =
+    rescheduled !== "true" && Boolean(reservation.payment_id);
+  const showAdditionalPaymentId =
+    showAdditionalPayment && Boolean(additionalPaymentId);
+  const showPaymentFooter =
+    showAdditionalPayment ||
+    showTotalPaid ||
+    showPaymentId ||
+    showAdditionalPaymentId;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white py-6 sm:py-12">
       <div className="container mx-auto px-4 max-w-2xl">
@@ -245,12 +258,12 @@ function ConfirmacionContent() {
               />
             </svg>
           </div>
-          <h1 className="mb-2 text-3xl font-bold text-zinc-900 sm:text-4xl">
+          <h1 className="mb-2 text-3xl font-bold text-[#103948] sm:text-4xl">
             {rescheduled === "true"
               ? "¡Reserva Reagendada!"
               : "¡Reserva Confirmada!"}
           </h1>
-          <p className="text-zinc-600">
+          <p className="text-zinc-700">
             {rescheduled === "true"
               ? paid === "true"
                 ? "Tu reserva ha sido reagendada exitosamente. Se ha procesado el pago adicional."
@@ -272,125 +285,108 @@ function ConfirmacionContent() {
 
         {/* Detalles de la Reserva */}
         <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-zinc-900">
+          <h2 className="mb-4 text-xl font-semibold text-[#103948]">
             Detalles de tu Reserva
           </h2>
-          <div className="space-y-4 text-zinc-700">
-            <div className="flex justify-between">
-              <span className="font-medium">Reserva ID:</span>
-              <span className="font-mono text-sm text-zinc-600">
-                {formatReservationId(reservation.id)}
-              </span>
-            </div>
-            {/* Nombre, email y teléfono solo para invitados (usuarios con cuenta ya los conocen) */}
-            {rescheduled !== "true" && isGuest && (
-              <>
-                <div className="flex justify-between">
-                  <span className="font-medium">Nombre:</span>
-                  <span>{reservation.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Email:</span>
-                  <span>{reservation.email}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Teléfono:</span>
-                  <span>{reservation.phone}</span>
-                </div>
-              </>
-            )}
-            {reservation.photographer_studio ? (
-              <div className="flex justify-between gap-4">
-                <span className="font-medium shrink-0">Fotógrafo / estudio:</span>
-                <span className="text-right text-zinc-800">
-                  {reservation.photographer_studio}
+          <div className="divide-y divide-zinc-100">
+            <div className="space-y-4 pb-4">
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="font-medium text-zinc-600">Reserva ID:</span>
+                <span className="font-mono text-zinc-700">
+                  {formatReservationId(reservation.id)}
                 </span>
               </div>
-            ) : null}
-            <div className="border-t border-zinc-200 pt-4">
-              <div className="mb-3 flex justify-between">
-                <span className="font-medium">Fecha:</span>
-                <span>{formatDisplayDate(reservation.date)}</span>
+              {/* Nombre, email y teléfono solo para invitados (usuarios con cuenta ya los conocen) */}
+              {rescheduled !== "true" && isGuest && (
+                <>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="font-medium text-zinc-600">Nombre:</span>
+                    <span className="text-right text-zinc-800">
+                      {reservation.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="font-medium text-zinc-600">Email:</span>
+                    <span className="text-right text-zinc-800">
+                      {reservation.email}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="font-medium text-zinc-600">Teléfono:</span>
+                    <span className="text-right text-zinc-800">
+                      {reservation.phone}
+                    </span>
+                  </div>
+                </>
+              )}
+              {reservation.photographer_studio ? (
+                <div className="flex justify-between gap-4 text-sm">
+                  <span className="shrink-0 font-medium text-zinc-600">
+                    Fotógrafo / estudio:
+                  </span>
+                  <span className="text-right text-zinc-800">
+                    {reservation.photographer_studio}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-3 py-4">
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="font-medium text-zinc-600">Fecha:</span>
+                <span className="text-right text-zinc-800">
+                  {formatDisplayDate(reservation.date)}
+                </span>
               </div>
               <ReservationSpaceUsage
                 startTime={reservation.start_time}
                 calendarDate={reservation.date}
                 variant="confirm"
               />
-              {(() => {
-                // Este reagendo generó pago/pendiente: mostrar "Pago adicional"
-                if (rescheduled === "true" && additionalAmountThisReschedule > 0) {
-                  return (
-                    <div className="flex justify-between border-t border-zinc-200 pt-3">
-                      <span className="font-semibold text-lg">
-                        Pago Adicional:
+            </div>
+
+            {showPaymentFooter && (
+              <div className="pt-4">
+                <div className="rounded-lg bg-zinc-50/90 px-4 py-3.5 ring-1 ring-inset ring-zinc-100">
+                  {showAdditionalPayment && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-base font-semibold text-zinc-800">
+                        Pago adicional:
                       </span>
-                      <span className="font-semibold text-lg">
+                      <span className="text-base font-semibold tabular-nums text-[#103948]">
                         ${formatCurrency(additionalAmountThisReschedule)} MXN
                       </span>
                     </div>
-                  );
-                }
-
-                // Este reagendo no generó pago pero hay deuda anterior: no mostrar aquí (va en callout abajo)
-                if (hasPendingFromBefore) return null;
-
-                // Si no es reagendado, mostrar total pagado
-                if (rescheduled !== "true") {
-                  return (
-                    <div className="flex justify-between border-t border-zinc-200 pt-3">
-                      <span className="font-semibold text-lg">
-                        Total Pagado:
+                  )}
+                  {showTotalPaid && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-base font-semibold text-zinc-800">
+                        Total pagado:
                       </span>
-                      <span className="font-semibold text-lg">
+                      <span className="text-base font-semibold tabular-nums text-[#103948]">
                         ${formatCurrency(reservation.price)} MXN
                       </span>
                     </div>
-                  );
-                }
-
-                // Reagendado sin pago adicional ni pendiente anterior: no mostrar bloque de pago
-                return null;
-              })()}
-            </div>
-            {(() => {
-              // Reagendado con pago adicional (de este movimiento): mostrar ID de pago adicional si existe
-              if (
-                rescheduled === "true" &&
-                additionalAmountThisReschedule > 0 &&
-                additionalPaymentId
-              ) {
-                return (
-                  <div className="border-t border-zinc-200 pt-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-500">
-                        ID de Pago Adicional:
-                      </span>
-                      <span className="font-mono text-zinc-600">
+                  )}
+                  {showAdditionalPaymentId && (
+                    <div className="mt-2 flex justify-between gap-3 text-sm">
+                      <span className="text-zinc-500">ID de pago:</span>
+                      <span className="max-w-[58%] shrink-0 break-all text-right font-mono text-zinc-500">
                         {additionalPaymentId}
                       </span>
                     </div>
-                  </div>
-                );
-              }
-
-              // Reserva normal: mostrar ID de pago original si existe
-              if (rescheduled !== "true" && reservation.payment_id) {
-                return (
-                  <div className="border-t border-zinc-200 pt-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-500">ID de Pago:</span>
-                      <span className="font-mono text-zinc-600">
+                  )}
+                  {showPaymentId && (
+                    <div className="mt-2 flex justify-between gap-3 text-sm">
+                      <span className="text-zinc-500">ID de pago:</span>
+                      <span className="max-w-[58%] shrink-0 break-all text-right font-mono text-zinc-500">
                         {reservation.payment_id}
                       </span>
                     </div>
-                  </div>
-                );
-              }
-
-              // Reagendado sin pago adicional: no mostrar ID de pago
-              return null;
-            })()}
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

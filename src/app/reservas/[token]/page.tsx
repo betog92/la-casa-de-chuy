@@ -43,7 +43,6 @@ import {
   formatRescheduleAttribution,
   shouldShowRescheduleActor,
 } from "@/utils/reschedule-display";
-import { sessionTypeLabel } from "@/utils/session-type";
 import { durationMinutesBetween } from "@/utils/reservation-helpers";
 
 export default function GuestReservationPage() {
@@ -460,24 +459,6 @@ export default function GuestReservationPage() {
                   {reservation.phone || "No proporcionado"}
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-zinc-600 mb-1">Tipo de sesión</p>
-                <p className="text-lg font-medium text-[#103948]">
-                  {reservation.session_type
-                    ? sessionTypeLabel(reservation.session_type)
-                    : "—"}
-                </p>
-              </div>
-              {reservation.photographer_studio ? (
-                <div>
-                  <p className="text-sm text-zinc-600 mb-1">
-                    Fotógrafo / estudio
-                  </p>
-                  <p className="text-lg font-medium text-[#103948] whitespace-pre-line">
-                    {reservation.photographer_studio}
-                  </p>
-                </div>
-              ) : null}
             </div>
           </div>
 

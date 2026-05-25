@@ -34,8 +34,8 @@ export function AccountReservationNextStep({
 
   return (
     <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-      <h3 className="mb-2 text-lg font-semibold text-zinc-900">{copy.title}</h3>
-      <p className="mb-5 text-sm text-zinc-600">
+      <h3 className="mb-2 text-lg font-semibold text-[#103948]">{copy.title}</h3>
+      <p className="mb-5 text-sm leading-snug text-zinc-700">
         {requiresLogin
           ? "Tu correo ya tiene cuenta. Inicia sesión para ver y gestionar esta reserva."
           : copy.body}

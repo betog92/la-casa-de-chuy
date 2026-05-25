@@ -38,10 +38,10 @@ export function GuestReservationNextStep({
 
   return (
     <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-      <h3 className="mb-2 text-lg font-semibold text-zinc-900">
+      <h3 className="mb-2 text-lg font-semibold text-[#103948]">
         Gestionar tu reserva
       </h3>
-      <p className="mb-4 text-sm text-zinc-600">
+      <p className="mb-4 text-sm leading-snug text-zinc-700">
         Desde ahí puedes reagendar o cancelar cuando lo necesites.
       </p>
 
@@ -63,9 +63,9 @@ export function GuestReservationNextStep({
       </button>
 
       {guestEmail?.trim() && (
-        <p className="mt-4 text-sm text-zinc-500">
+        <p className="mt-4 text-sm text-zinc-600">
           También te enviamos este enlace a{" "}
-          <span className="font-medium text-zinc-700">{guestEmail.trim()}</span>.
+          <span className="font-medium text-zinc-800">{guestEmail.trim()}</span>.
         </p>
       )}
     </div>
