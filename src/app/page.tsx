@@ -8,12 +8,15 @@ export default function Home() {
       {/* Hero carrusel */}
       <HeroCarousel />
 
-      {/* Información del Estudio */}
+      {/* Información de la locación */}
       <section className="container mx-auto px-4 py-16 sm:py-24">
         <div className="mx-auto max-w-4xl">
-          <h2 className="mb-12 text-center text-4xl font-bold text-zinc-900">
-            Sobre Nuestro Estudio
+          <h2 className="mb-3 text-center text-4xl font-bold text-zinc-900">
+            Sobre Nuestra Locación
           </h2>
+          <p className="mb-12 text-center text-lg text-zinc-600">
+            Renta de espacio por hora para tus proyectos. El fotógrafo no está incluido.
+          </p>
           
           <div className="grid gap-8 md:grid-cols-2">
             {/* Horarios */}
@@ -31,7 +34,7 @@ export default function Home() {
                   <p className="text-zinc-600">11:00 AM - 4:00 PM</p>
                 </div>
                 <p className="mt-4 text-sm text-zinc-500">
-                  Sesiones de 1 hora (45 min interior + 15 min jardín)
+                  Reservas de 1 hora (45 min interior + 15 min jardín)
                 </p>
               </div>
             </div>
@@ -74,12 +77,12 @@ export default function Home() {
             
             <div className="grid gap-6 md:grid-cols-3">
               <div className="text-center">
-                <div className="mb-4 text-4xl">📸</div>
+                <div className="mb-4 text-4xl">🏡</div>
                 <h3 className="mb-2 text-xl font-semibold text-zinc-900">
                   Espacios Únicos
                 </h3>
                 <p className="text-zinc-600">
-                  Ambientes interiores y jardín diseñados para tus proyectos
+                  Ambientes interiores y jardín que rentas para tu sesión o evento
                 </p>
               </div>
               
@@ -111,7 +114,7 @@ export default function Home() {
       <section className="container mx-auto px-4 py-16 sm:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="mb-6 text-4xl font-bold text-zinc-900">
-            ¿Listo para tu sesión?
+            ¿Listo para reservar tu espacio?
           </h2>
           <p className="mb-8 text-lg text-zinc-600">
             Reserva tu espacio ahora y asegura tu fecha preferida
