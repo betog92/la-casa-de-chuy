@@ -18,8 +18,8 @@ export default function PrivacyContent() {
         </h3>
         <p className="text-zinc-700 leading-relaxed">
           El responsable del tratamiento de tus datos personales es{" "}
-          <strong>La Casa de Chuy el Rico</strong>, operador del estudio de
-          locación fotográfica y del sistema de reservas en línea disponible en{" "}
+          <strong>La Casa de Chuy el Rico</strong>, operador de la locación
+          fotográfica en renta y del sistema de reservas en línea disponible en{" "}
           <strong>lacasadechuyelrico.com</strong> (y sus subdominios asociados).
         </p>
         <p className="mt-2 text-zinc-700 leading-relaxed">

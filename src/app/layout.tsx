@@ -24,7 +24,7 @@ const cormorant = Cormorant({
 
 export const metadata: Metadata = {
   title: "La Casa de Chuy el Rico - Reservas",
-  description: "Sistema de reservas para estudio de locación fotográfica",
+  description: "Reserva en línea la locación fotográfica de La Casa de Chuy el Rico",
   icons: {
     icon: [
       { url: "/favicon.ico" },

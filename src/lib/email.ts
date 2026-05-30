@@ -104,7 +104,7 @@ export async function sendReservationConfirmation(
 
       <p style="margin:0; font-size:0.8125rem; color:#71717a; line-height:1.5;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
     </div>
-    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Locación fotográfica en renta</p>
   </div>
 </body>
 </html>
@@ -185,7 +185,7 @@ export async function sendCancellationConfirmation(
 
       <p style="margin:0; font-size:0.8125rem; color:#71717a;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
     </div>
-    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Locación fotográfica en renta</p>
   </div>
 </body>
 </html>
@@ -267,7 +267,7 @@ export async function sendRescheduleConfirmation(
 
       <p style="margin:0; font-size:0.8125rem; color:#71717a;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
     </div>
-    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Locación fotográfica en renta</p>
   </div>
 </body>
 </html>
@@ -357,7 +357,7 @@ export async function sendTransferReceived(
 
       <p style="margin:0; font-size:0.8125rem; color:#71717a;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
     </div>
-    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Locación fotográfica en renta</p>
   </div>
 </body>
 </html>
@@ -439,7 +439,7 @@ export async function sendTransferClaim(
 
       <p style="margin:0; font-size:0.8125rem; color:#71717a;">Si tienes dudas, contáctanos por Facebook Messenger.</p>
     </div>
-    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Estudio de locación fotográfica</p>
+    <p style="margin:24px 0 0; padding-top:16px; border-top:1px solid #e4e4e7; font-size:0.75rem; color:#a1a1aa; text-align:center;">La Casa de Chuy el Rico – Locación fotográfica en renta</p>
   </div>
 </body>
 </html>

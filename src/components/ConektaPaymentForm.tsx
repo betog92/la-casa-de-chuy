@@ -33,11 +33,13 @@ const ConektaPaymentForm = forwardRef<
   ConektaPaymentFormRef,
   ConektaPaymentFormProps
 >(({ onError, disabled = false }, ref) => {
-  // Valores pre-llenados para testing (Conekta test card)
-  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
-  const [cardName, setCardName] = useState("Julio Andres");
-  const [cardExpiry, setCardExpiry] = useState("06/26");
-  const [cardCvc, setCardCvc] = useState("123");
+  const isDev = process.env.NODE_ENV === "development";
+  const [cardNumber, setCardNumber] = useState(
+    isDev ? "4242 4242 4242 4242" : "",
+  );
+  const [cardName, setCardName] = useState(isDev ? "Julio Andres" : "");
+  const [cardExpiry, setCardExpiry] = useState(isDev ? "06/26" : "");
+  const [cardCvc, setCardCvc] = useState(isDev ? "123" : "");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const scriptLoaded = useRef(false);
@@ -318,7 +320,8 @@ const ConektaPaymentForm = forwardRef<
             }
           }}
           disabled={disabled || isLoading}
-          placeholder="Juan Pérez"
+          placeholder="Como aparece en la tarjeta"
+          autoComplete="cc-name"
           className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
         />
         {errors.cardName && (
@@ -339,10 +342,12 @@ const ConektaPaymentForm = forwardRef<
         <input
           id="cardNumber"
           type="text"
+          inputMode="numeric"
           value={cardNumber}
           onChange={handleCardNumberChange}
           disabled={disabled || isLoading}
-          placeholder="4242 4242 4242 4242"
+          placeholder="0000 0000 0000 0000"
+          autoComplete="cc-number"
           maxLength={19}
           className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
         />
@@ -369,10 +374,12 @@ const ConektaPaymentForm = forwardRef<
           <input
             id="cardExpiry"
             type="text"
+            inputMode="numeric"
             value={cardExpiry}
             onChange={handleExpiryChange}
             disabled={disabled || isLoading}
-            placeholder="12/25"
+            placeholder="MM/AA"
+            autoComplete="cc-exp"
             maxLength={5}
             className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
           />
@@ -393,10 +400,12 @@ const ConektaPaymentForm = forwardRef<
           <input
             id="cardCvc"
             type="text"
+            inputMode="numeric"
             value={cardCvc}
             onChange={handleCvcChange}
             disabled={disabled || isLoading}
-            placeholder="123"
+            placeholder="000"
+            autoComplete="cc-csc"
             maxLength={4}
             className="w-full rounded border border-zinc-300 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948] disabled:bg-zinc-100 disabled:cursor-not-allowed"
           />

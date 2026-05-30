@@ -82,7 +82,7 @@ export default function Home() {
                   Espacios Únicos
                 </h3>
                 <p className="text-zinc-600">
-                  Ambientes interiores y jardín que rentas para tu sesión o evento
+                  Ambientes interiores y jardín que rentas para tu proyecto o evento
                 </p>
               </div>
               

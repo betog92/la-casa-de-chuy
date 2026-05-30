@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Ubicación — La Casa de Chuy el Rico",
   description:
-    "Dirección y mapa del estudio en Monterrey, Nuevo León. Cómo llegar a La Casa de Chuy el Rico.",
+    "Dirección y mapa de la locación en Monterrey, Nuevo León. Cómo llegar a La Casa de Chuy el Rico.",
 };
 
 export default async function UbicacionPage() {
@@ -73,7 +73,7 @@ export default async function UbicacionPage() {
           Ubicación
         </h1>
         <p className="mx-auto mb-10 max-w-xl text-center text-zinc-600">
-          Dirección del estudio en Monterrey. Usa el mapa o abre la ruta en tu
+          Dirección de la locación en Monterrey. Usa el mapa o abre la ruta en tu
           celular con Google Maps o Waze.
         </p>
 
@@ -116,7 +116,7 @@ export default async function UbicacionPage() {
                 {mapsEmbedSafe ? (
                   <div className="aspect-[16/10] min-h-[220px] w-full bg-zinc-100 sm:min-h-0">
                     <iframe
-                      title="Mapa del estudio"
+                      title="Mapa de la locación"
                       src={mapsEmbedSafe}
                       className="h-full min-h-[220px] w-full border-0 sm:min-h-0"
                       loading="lazy"
@@ -129,7 +129,7 @@ export default async function UbicacionPage() {
                     El mapa no está disponible por un problema de configuración.
                     {loc.address.trim()
                       ? " Usa la dirección y los enlaces a Google Maps o Waze en esta misma página."
-                      : " Busca la ubicación en Google Maps o contacta al estudio."}
+                      : " Busca la ubicación en Google Maps o contáctanos."}
                   </p>
                 )}
               </section>
