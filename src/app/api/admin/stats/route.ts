@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth/admin";
+import { filterNativeReservations } from "@/lib/admin/reservation-filters";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   successResponse,
@@ -11,6 +12,20 @@ import { formatInTimeZone } from "date-fns-tz";
 import { getMonterreyToday } from "@/utils/business-days";
 
 const MX_TZ = "America/Monterrey";
+
+type TodayRow = { status: string; price: number };
+
+function aggregateTodayStats(rows: TodayRow[]) {
+  return {
+    total_reservations: rows.length,
+    confirmed_reservations: rows.filter((r) => r.status === "confirmed").length,
+    cancelled_reservations: rows.filter((r) => r.status === "cancelled").length,
+    completed_reservations: rows.filter((r) => r.status === "completed").length,
+    confirmed_revenue: rows
+      .filter((r) => r.status === "confirmed")
+      .reduce((sum, r) => sum + Number(r.price), 0),
+  };
+}
 
 /**
  * Obtiene estadísticas para el dashboard de admin.
@@ -31,77 +46,8 @@ export async function GET() {
     const weekAgo = subDays(today, 7);
     const weekAgoStr = format(weekAgo, "yyyy-MM-dd");
 
-    // Stats del día (usando función SQL)
-    const { data: todayStats, error: rpcStatsErr } = await supabase.rpc(
-      "get_reservations_stats",
-      {
-        p_date: todayStr,
-      } as never,
-    );
-
-    if (rpcStatsErr) {
-      console.error("[admin stats get_reservations_stats]", rpcStatsErr);
-      return errorResponse("No se pudieron cargar las estadísticas del día", 500);
-    }
-
-    type StatsRow = {
-      total_reservations: number;
-      confirmed_reservations: number;
-      cancelled_reservations: number;
-      completed_reservations: number;
-      total_revenue: number;
-      confirmed_revenue: number;
-    };
-    const statsArray = (todayStats ?? []) as StatsRow[];
-    const stats = statsArray[0];
-
-    // Reservas recientes: por created_at; excluye null (en PG irían primero en DESC);
-    // id DESC desempata misma marca de tiempo.
-    // Nota: la columna "Pago" del dashboard se eliminó porque para Conekta
-    // (mayoría) era ruido redundante con "Estado". El flujo de gestión de
-    // pagos manuales vive en /admin/pagos-manuales con su propio endpoint.
-    const { data: recentReservations, error: recentErr } = await supabase
-      .from("reservations")
-      .select(
-        "id, date, start_time, name, email, price, status, created_at",
-      )
-      .not("created_at", "is", null)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(25);
-
-    if (recentErr) {
-      console.error("[admin stats recentReservations]", recentErr);
-      return errorResponse("No se pudo cargar las reservas recientes", 500);
-    }
-
-    // Ingresos de la última semana (reservas confirmadas, por fecha de cita)
-    const { data: weekRevenue, error: weekErr } = await supabase
-      .from("reservations")
-      .select("price")
-      .gte("date", weekAgoStr)
-      .lte("date", todayStr)
-      .eq("status", "confirmed");
-
-    if (weekErr) {
-      console.error("[admin stats weekRevenue]", weekErr);
-      return errorResponse("No se pudieron cargar los ingresos de la semana", 500);
-    }
-
-    const weekTotal =
-      (weekRevenue as { price: number }[] | null)?.reduce(
-        (sum, r) => sum + Number(r.price),
-        0
-      ) ?? 0;
-
-    // "Canceladas hoy" como ACCIÓN del día (cuándo se canceló), no como
-    // "citas de hoy en status cancelled". Usamos `cancelled_at` filtrado
-    // en zona horaria de Monterrey: [hoy 00:00 MX, mañana 00:00 MX).
-    // `formatInTimeZone` con `XXX` produce ISO con offset, robusto ante
-    // futuros cambios de zona (Monterrey hoy no observa DST, pero no
-    // hardcodeamos `-06:00`).
     const now = new Date();
-    const tomorrowMs = now.getTime() + 26 * 60 * 60 * 1000; // margen anti-DST
+    const tomorrowMs = now.getTime() + 26 * 60 * 60 * 1000;
     const startOfTodayMx = formatInTimeZone(
       now,
       MX_TZ,
@@ -113,40 +59,80 @@ export async function GET() {
       "yyyy-MM-dd'T'00:00:00XXX",
     );
 
-    const { count: cancelledTodayCount, error: cancelledTodayErr } =
-      await supabase
-        .from("reservations")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "cancelled")
-        .not("cancelled_at", "is", null)
-        .gte("cancelled_at", startOfTodayMx)
-        .lt("cancelled_at", startOfTomorrowMx);
-
-    if (cancelledTodayErr) {
-      console.error("[admin stats cancelledToday]", cancelledTodayErr);
-      // No bloqueamos el dashboard por este contador: caemos al valor
-      // del RPC (citas de hoy canceladas) para no romper la página.
-    }
-
-    const cancelledReservationsToday =
-      typeof cancelledTodayCount === "number"
-        ? cancelledTodayCount
-        : (stats?.cancelled_reservations ?? 0);
-
-    // Pagos manuales pendientes (global). Mismas reglas que el filtro base de
-    // GET /api/admin/manual-payments (source / import_type / status).
-    // Solo reservas creadas desde el panel,
-    // no importadas y no canceladas (validar pagos de citas canceladas
-    // no aplica). Sirve para la tarjeta-atajo del dashboard y no
-    // condiciona el resto de la respuesta si falla.
-    const { count: pendingManualPaymentsCount, error: pendingManualErr } =
-      await supabase
+    const [
+      { data: todayRows, error: todayErr },
+      { data: recentReservations, error: recentErr },
+      { data: weekRevenue, error: weekErr },
+      { count: cancelledTodayCount, error: cancelledTodayErr },
+      { count: pendingManualPaymentsCount, error: pendingManualErr },
+    ] = await Promise.all([
+      filterNativeReservations(
+        supabase.from("reservations").select("status, price").eq("date", todayStr),
+      ),
+      filterNativeReservations(
+        supabase
+          .from("reservations")
+          .select("id, date, start_time, name, email, price, status, created_at")
+          .not("created_at", "is", null)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(25),
+      ),
+      filterNativeReservations(
+        supabase
+          .from("reservations")
+          .select("price")
+          .gte("date", weekAgoStr)
+          .lte("date", todayStr)
+          .eq("status", "confirmed"),
+      ),
+      filterNativeReservations(
+        supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "cancelled")
+          .not("cancelled_at", "is", null)
+          .gte("cancelled_at", startOfTodayMx)
+          .lt("cancelled_at", startOfTomorrowMx),
+      ),
+      supabase
         .from("reservations")
         .select("id", { count: "exact", head: true })
         .eq("source", "admin")
         .is("import_type", null)
         .neq("status", "cancelled")
-        .eq("payment_status", "pending");
+        .eq("payment_status", "pending"),
+    ]);
+
+    if (todayErr) {
+      console.error("[admin stats todayRows]", todayErr);
+      return errorResponse("No se pudieron cargar las estadísticas del día", 500);
+    }
+    if (recentErr) {
+      console.error("[admin stats recentReservations]", recentErr);
+      return errorResponse("No se pudo cargar las reservas recientes", 500);
+    }
+    if (weekErr) {
+      console.error("[admin stats weekRevenue]", weekErr);
+      return errorResponse("No se pudieron cargar los ingresos de la semana", 500);
+    }
+
+    const stats = aggregateTodayStats((todayRows ?? []) as TodayRow[]);
+
+    const weekTotal =
+      (weekRevenue as { price: number }[] | null)?.reduce(
+        (sum, r) => sum + Number(r.price),
+        0,
+      ) ?? 0;
+
+    if (cancelledTodayErr) {
+      console.error("[admin stats cancelledToday]", cancelledTodayErr);
+    }
+
+    const cancelledReservationsToday =
+      typeof cancelledTodayCount === "number"
+        ? cancelledTodayCount
+        : stats.cancelled_reservations;
 
     if (pendingManualErr) {
       console.error("[admin stats pendingManualPayments]", pendingManualErr);
@@ -159,11 +145,11 @@ export async function GET() {
 
     return successResponse({
       today: {
-        totalReservations: stats?.total_reservations ?? 0,
-        confirmedReservations: stats?.confirmed_reservations ?? 0,
+        totalReservations: stats.total_reservations,
+        confirmedReservations: stats.confirmed_reservations,
         cancelledReservations: cancelledReservationsToday,
-        completedReservations: stats?.completed_reservations ?? 0,
-        revenue: Number(stats?.confirmed_revenue ?? 0),
+        completedReservations: stats.completed_reservations,
+        revenue: Number(stats.confirmed_revenue),
       },
       weekRevenue: weekTotal,
       pendingManualPayments,
@@ -173,7 +159,7 @@ export async function GET() {
     console.error("Error fetching admin stats:", error);
     return errorResponse(
       error instanceof Error ? error.message : "Error al cargar estadísticas",
-      500
+      500,
     );
   }
 }

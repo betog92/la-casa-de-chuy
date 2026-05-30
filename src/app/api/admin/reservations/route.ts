@@ -23,6 +23,11 @@ import {
   generateGuestReservationUrl,
 } from "@/lib/auth/guest-tokens";
 import { sendReservationConfirmation } from "@/lib/email";
+import {
+  applyOriginFilter,
+  excludeManualAvailableSlots,
+  isOriginFilter,
+} from "@/lib/admin/reservation-filters";
 
 /**
  * Lista reservas con filtros opcionales (fecha, estado).
@@ -40,6 +45,8 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get("dateTo");
     const status = searchParams.get("status");
     const paymentStatusFilter = searchParams.get("paymentStatus");
+    const originParam = searchParams.get("origin");
+    const originFilter = isOriginFilter(originParam) ? originParam : null;
     const search = searchParams.get("search")?.trim() || "";
     const limit = Math.min(
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50),
@@ -59,7 +66,7 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1);
 
     // Excluir slots de Nancy / "Reservado para Alvero" (manual_available)
-    query = query.or("import_type.is.null,import_type.neq.manual_available");
+    query = excludeManualAvailableSlots(query);
 
     if (search) {
       // Búsqueda "contiene": nombre, email, teléfono, orden #, google_event_id y (si es número) id
@@ -99,6 +106,7 @@ export async function GET(request: NextRequest) {
     if (paymentStatusFilter === "pending") {
       query = query.eq("payment_status", "pending");
     }
+    query = applyOriginFilter(query, originFilter);
 
     const { data, error, count } = await query;
 

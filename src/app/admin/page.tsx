@@ -133,13 +133,14 @@ export default function AdminDashboardPage() {
           Panel de administración
         </h1>
         <p className="mt-1 text-zinc-600">
-          Resumen de ventas y últimas reservas registradas (orden cronológico).
+          Resumen de ventas y últimas reservas nativas (web o panel), sin citas importadas.
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">Confirmadas hoy</p>
+          <p className="text-sm font-medium text-zinc-500">Citas confirmadas hoy</p>
+          <p className="mt-0.5 text-xs text-zinc-400">Sesiones del día (sin importadas)</p>
           <p className="mt-1 text-2xl font-bold text-[#103948]">
             {s.today.confirmedReservations}
           </p>
@@ -220,21 +221,25 @@ export default function AdminDashboardPage() {
               Reservas recientes
             </h2>
             <p className="text-sm text-zinc-500">
-              Las últimas altas en el sistema, como un listado de pedidos.
+              Últimas altas desde la web o el panel (sin importaciones).
             </p>
           </div>
           <Link
-            href="/admin/reservaciones"
+            href="/admin/reservaciones?origin=native"
             className="shrink-0 text-sm font-medium text-[#103948] hover:underline"
           >
-            Ver todas
+            Ver nativas
           </Link>
         </div>
 
         <div className="overflow-x-auto">
           {s.recentReservations.length === 0 ? (
             <div className="px-5 py-10 text-center text-zinc-500">
-              No hay reservas recientes para mostrar (con fecha de registro).
+              No hay reservas nativas recientes. Las citas importadas están en{" "}
+              <Link href="/admin/reservaciones?origin=imported" className="font-medium text-[#103948] hover:underline">
+                Reservaciones → Importadas
+              </Link>
+              .
             </div>
           ) : (
             <table className="w-full min-w-[720px] text-left text-sm">

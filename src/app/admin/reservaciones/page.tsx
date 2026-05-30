@@ -27,6 +27,7 @@ import {
   getReservationStatusColor,
   getReservationStatusLabel,
 } from "@/utils/reservation-status-display";
+import { isOriginFilter } from "@/lib/admin/reservation-filters";
 import {
   ALVERO_DURATION_MIN,
   DEFAULT_DURATION_MIN,
@@ -111,13 +112,14 @@ export default function AdminReservacionesPage() {
 
 function AdminReservacionesPageInner() {
   const router = useRouter();
-  // Lee filtros iniciales del URL (?search=, ?email=, ?status=, ?dateFrom=, ?dateTo=)
+  // Lee filtros iniciales del URL (?search=, ?email=, ?status=, ?dateFrom=, ?dateTo=, ?origin=)
   // para que enlaces como /admin/reservaciones?search=foo@bar.com filtren al cargar.
   const sp = useSearchParams();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const originParam = sp.get("origin");
   const [filters, setFilters] = useState(() => ({
     dateFrom: sp.get("dateFrom") || "",
     dateTo: sp.get("dateTo") || "",
@@ -125,7 +127,12 @@ function AdminReservacionesPageInner() {
     // Aceptamos ?search= o ?email= (alias para enlaces desde /admin/clientes)
     search: sp.get("search") || sp.get("email") || "",
     paymentStatus: sp.get("paymentStatus") || "",
+    origin: isOriginFilter(originParam) ? originParam : "",
   }));
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    () => sp.get("search") || sp.get("email") || "",
+  );
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero" | "renta_vestido";
@@ -194,6 +201,16 @@ function AdminReservacionesPageInner() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearch(filters.search.trim());
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [filters.search]);
+
   const fetchReservations = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -203,7 +220,8 @@ function AdminReservacionesPageInner() {
       if (filters.dateTo) params.set("dateTo", filters.dateTo);
       if (filters.status) params.set("status", filters.status);
       if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
-      if (filters.search) params.set("search", filters.search);
+      if (filters.origin) params.set("origin", filters.origin);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       const res = await axios.get(`/api/admin/reservations?${params}`);
       if (res.data.success) {
         setReservations(res.data.reservations ?? []);
@@ -216,7 +234,7 @@ function AdminReservacionesPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.status, filters.paymentStatus, filters.search]);
+  }, [filters.dateFrom, filters.dateTo, filters.status, filters.paymentStatus, filters.origin, debouncedSearch]);
 
   useEffect(() => {
     fetchReservations();
@@ -696,6 +714,14 @@ function AdminReservacionesPageInner() {
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Hasta</label>
           <input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-500">Origen</label>
+          <select value={filters.origin} onChange={(e) => setFilters((f) => ({ ...f, origin: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
+            <option value="">Todas</option>
+            <option value="native">Nativas (web / admin)</option>
+            <option value="imported">Importadas</option>
+          </select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Estado</label>

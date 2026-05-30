@@ -51,7 +51,12 @@ los eventos: `order.paid`, `charge.created`, `charge.paid`, `charge.refunded`,
 #### Variable de alertas a admin:
 ```
 ADMIN_ALERT_EMAIL=email_destino_alertas_de_pago
+RESEND_API_KEY=re_xxxxxxxx
 ```
+
+**`RESEND_API_KEY`:** API key de [Resend](https://resend.com) para correos
+transaccionales (confirmación, invitado, transferencias Monedas, alertas admin).
+Sin ella, los envíos fallan con "RESEND_API_KEY no configurada".
 
 **`ADMIN_ALERT_EMAIL`:** dirección a la que llegan alertas de pagos huérfanos
 auto-reembolsados, refunds hechos desde el dashboard de Conekta y
@@ -85,6 +90,40 @@ NEXT_PUBLIC_APP_URL=https://temporal.lacasadechuyelrico.com
 ```bash
 openssl rand -base64 32
 ```
+
+### 3.bis Vercel: badge "Needs Attention" en variables de entorno
+
+Si ves **Needs Attention** (naranja) en variables como `RESEND_API_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `CONEKTA_PRIVATE_KEY` o `GUEST_TOKEN_SECRET`,
+Vercel te pide **rotar el secreto** y guardarlo como **Sensitive** (cifrado;
+no se puede volver a leer en el dashboard).
+
+**Orden recomendado (Production):**
+
+| Variable | Dónde generar el valor nuevo | Notas |
+|----------|------------------------------|--------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → *service_role* (regenerar) | Actualiza Vercel antes de revocar la key vieja si Supabase lo permite |
+| `CONEKTA_PRIVATE_KEY` | Conekta → **Production** (no sandbox) | Usa keys de producción en prod |
+| `RESEND_API_KEY` | Resend → API Keys → Create | Revoca la key antigua después del deploy |
+| `GUEST_TOKEN_SECRET` | `openssl rand -base64 32` | **Invalida enlaces de invitado ya enviados**; los clientes necesitarán un enlace nuevo |
+
+**En Vercel (cada variable):**
+
+1. Genera el **nuevo** valor en el proveedor (tabla arriba).
+2. Settings → Environment Variables → **Edit** (o Add).
+3. Pega el valor nuevo.
+4. Marca **Sensitive**.
+5. Entornos: al menos **Production** (Preview opcional con los mismos valores de prueba).
+6. Save.
+7. **Redeploy** (Deployments → último deploy → Redeploy) para que runtime use los valores nuevos.
+8. Revoca/elimina la credencial **antigua** en el proveedor.
+
+Variables que ya están bien (sin badge) conviene revisarlas igual: cualquier
+secreto futuro debe crearse con **Sensitive** activado.
+
+**Producción Conekta:** confirma `NEXT_PUBLIC_CONEKTA_PUBLIC_KEY`,
+`CONEKTA_PRIVATE_KEY` y `CONEKTA_WEBHOOK_PUBLIC_KEY` del entorno **live**,
+no del sandbox.
 
 ### 4. Configuración del Proyecto
 
