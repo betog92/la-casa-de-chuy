@@ -43,16 +43,26 @@ const ConektaPaymentForm = forwardRef<
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const scriptLoaded = useRef(false);
+  const initFatalErrorReported = useRef(false);
+  /** Callback estable: evita re-ejecutar init de Conekta si el padre pasa onError inline. */
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
-  // Cargar script de Conekta
+  const reportInitError = useCallback((message: string) => {
+    if (initFatalErrorReported.current) return;
+    initFatalErrorReported.current = true;
+    onErrorRef.current?.(message);
+  }, []);
+
+  // Inicializar Conekta una sola vez al montar (no depender de onError).
   useEffect(() => {
     if (scriptLoaded.current || typeof window === "undefined") return;
 
     const publicKey = process.env.NEXT_PUBLIC_CONEKTA_PUBLIC_KEY;
     if (!publicKey) {
-      const errorMsg =
-        "Conekta Public Key no configurada. Revisa tus variables de entorno.";
-      if (onError) onError(errorMsg);
+      reportInitError(
+        "Conekta Public Key no configurada. Revisa tus variables de entorno.",
+      );
       return;
     }
 
@@ -78,11 +88,9 @@ const ConektaPaymentForm = forwardRef<
     const timeoutId = setTimeout(() => {
       clearInterval(checkConektaLoaded);
       if (!window.Conekta) {
-        if (onError) {
-          onError(
-            "Error: No se pudo cargar el script de Conekta. Por favor recarga la página."
-          );
-        }
+        reportInitError(
+          "Error: No se pudo cargar el script de Conekta. Por favor recarga la página.",
+        );
       }
     }, 5000);
 
@@ -90,7 +98,7 @@ const ConektaPaymentForm = forwardRef<
       clearInterval(checkConektaLoaded);
       clearTimeout(timeoutId);
     };
-  }, [onError]);
+  }, [reportInitError]);
 
   // Validar formato de tarjeta
   const validateCardNumber = (value: string): boolean => {
@@ -262,8 +270,8 @@ const ConektaPaymentForm = forwardRef<
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       const errorMsg = "Por favor corrige los errores en el formulario de pago";
-      if (onError) {
-        onError(errorMsg);
+      if (onErrorRef.current) {
+        onErrorRef.current(errorMsg);
       } else {
         setErrors((prev) => ({ ...prev, general: errorMsg }));
       }
@@ -279,8 +287,8 @@ const ConektaPaymentForm = forwardRef<
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Error al procesar la tarjeta";
-      if (onError) {
-        onError(errorMessage);
+      if (onErrorRef.current) {
+        onErrorRef.current(errorMessage);
       } else {
         setErrors({ general: errorMessage });
       }
@@ -288,7 +296,7 @@ const ConektaPaymentForm = forwardRef<
     } finally {
       setIsLoading(false);
     }
-  }, [cardNumber, cardName, cardExpiry, cardCvc, onError, createToken]);
+  }, [cardNumber, cardName, cardExpiry, cardCvc, createToken]);
 
   // Exponer función a través de ref
   useImperativeHandle(
