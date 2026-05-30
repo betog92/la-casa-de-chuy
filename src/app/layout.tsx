@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Cormorant } from "next/font/google";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/react";
 import Header from "@/components/Header";
 import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
@@ -71,6 +72,7 @@ export default function RootLayout({
           <Header />
           {children}
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
