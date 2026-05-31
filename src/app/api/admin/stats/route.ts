@@ -1,5 +1,8 @@
 import { requireAdmin } from "@/lib/auth/admin";
-import { filterNativeReservations } from "@/lib/admin/reservation-filters";
+import {
+  excludeManualAvailableSlots,
+  filterNativeReservations,
+} from "@/lib/admin/reservation-filters";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   successResponse,
@@ -7,24 +10,25 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
 } from "@/utils/api-response";
-import { format, subDays } from "date-fns";
+import { format, addDays, subDays } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { getMonterreyToday } from "@/utils/business-days";
 
 const MX_TZ = "America/Monterrey";
 
-type TodayRow = { status: string; price: number };
+type SessionRow = { status: string };
 
-function aggregateTodayStats(rows: TodayRow[]) {
-  return {
-    total_reservations: rows.length,
-    confirmed_reservations: rows.filter((r) => r.status === "confirmed").length,
-    cancelled_reservations: rows.filter((r) => r.status === "cancelled").length,
-    completed_reservations: rows.filter((r) => r.status === "completed").length,
-    confirmed_revenue: rows
-      .filter((r) => r.status === "confirmed")
-      .reduce((sum, r) => sum + Number(r.price), 0),
-  };
+function countConfirmedSessions(rows: SessionRow[]) {
+  return rows.filter((r) => r.status === "confirmed").length;
+}
+
+function sumConfirmedRevenue(rows: { price: number }[]) {
+  return rows.reduce((sum, r) => sum + Number(r.price), 0);
+}
+
+/** Inicio del día en Monterrey como ISO con offset (para filtros created_at / cancelled_at). */
+function startOfDayMx(d: Date): string {
+  return formatInTimeZone(d, MX_TZ, "yyyy-MM-dd'T'00:00:00XXX");
 }
 
 /**
@@ -41,33 +45,33 @@ export async function GET() {
 
   try {
     const supabase = createServiceRoleClient();
-    const today = getMonterreyToday();
-    const todayStr = format(today, "yyyy-MM-dd");
-    const weekAgo = subDays(today, 7);
-    const weekAgoStr = format(weekAgo, "yyyy-MM-dd");
-
-    const now = new Date();
-    const tomorrowMs = now.getTime() + 26 * 60 * 60 * 1000;
-    const startOfTodayMx = formatInTimeZone(
-      now,
-      MX_TZ,
-      "yyyy-MM-dd'T'00:00:00XXX",
-    );
-    const startOfTomorrowMx = formatInTimeZone(
-      new Date(tomorrowMs),
-      MX_TZ,
-      "yyyy-MM-dd'T'00:00:00XXX",
-    );
+    const todayMx = getMonterreyToday();
+    const todayStr = format(todayMx, "yyyy-MM-dd");
+    const startOfTodayMx = startOfDayMx(todayMx);
+    const startOfTomorrowMx = startOfDayMx(addDays(todayMx, 1));
+    const startOfWeekAgoMx = startOfDayMx(subDays(todayMx, 7));
 
     const [
-      { data: todayRows, error: todayErr },
+      { data: sessionsTodayRows, error: sessionsTodayErr },
+      { data: revenueTodayRows, error: revenueTodayErr },
       { data: recentReservations, error: recentErr },
-      { data: weekRevenue, error: weekErr },
+      { data: weekRevenueRows, error: weekErr },
       { count: cancelledTodayCount, error: cancelledTodayErr },
       { count: pendingManualPaymentsCount, error: pendingManualErr },
     ] = await Promise.all([
+      // Citas con sesión hoy (incluye importadas; excluye slots Nancy)
+      excludeManualAvailableSlots(
+        supabase.from("reservations").select("status").eq("date", todayStr),
+      ),
+      // Ingresos: ventas nativas confirmadas registradas hoy (created_at, zona MX)
       filterNativeReservations(
-        supabase.from("reservations").select("status, price").eq("date", todayStr),
+        supabase
+          .from("reservations")
+          .select("price")
+          .eq("status", "confirmed")
+          .not("created_at", "is", null)
+          .gte("created_at", startOfTodayMx)
+          .lt("created_at", startOfTomorrowMx),
       ),
       filterNativeReservations(
         supabase
@@ -82,11 +86,12 @@ export async function GET() {
         supabase
           .from("reservations")
           .select("price")
-          .gte("date", weekAgoStr)
-          .lte("date", todayStr)
-          .eq("status", "confirmed"),
+          .eq("status", "confirmed")
+          .not("created_at", "is", null)
+          .gte("created_at", startOfWeekAgoMx)
+          .lt("created_at", startOfTomorrowMx),
       ),
-      filterNativeReservations(
+      excludeManualAvailableSlots(
         supabase
           .from("reservations")
           .select("id", { count: "exact", head: true })
@@ -104,9 +109,13 @@ export async function GET() {
         .eq("payment_status", "pending"),
     ]);
 
-    if (todayErr) {
-      console.error("[admin stats todayRows]", todayErr);
+    if (sessionsTodayErr) {
+      console.error("[admin stats sessionsToday]", sessionsTodayErr);
       return errorResponse("No se pudieron cargar las estadísticas del día", 500);
+    }
+    if (revenueTodayErr) {
+      console.error("[admin stats revenueToday]", revenueTodayErr);
+      return errorResponse("No se pudieron cargar los ingresos del día", 500);
     }
     if (recentErr) {
       console.error("[admin stats recentReservations]", recentErr);
@@ -117,22 +126,22 @@ export async function GET() {
       return errorResponse("No se pudieron cargar los ingresos de la semana", 500);
     }
 
-    const stats = aggregateTodayStats((todayRows ?? []) as TodayRow[]);
-
-    const weekTotal =
-      (weekRevenue as { price: number }[] | null)?.reduce(
-        (sum, r) => sum + Number(r.price),
-        0,
-      ) ?? 0;
+    const confirmedSessionsToday = countConfirmedSessions(
+      (sessionsTodayRows ?? []) as SessionRow[],
+    );
+    const revenueToday = sumConfirmedRevenue(
+      (revenueTodayRows ?? []) as { price: number }[],
+    );
+    const weekTotal = sumConfirmedRevenue(
+      (weekRevenueRows ?? []) as { price: number }[],
+    );
 
     if (cancelledTodayErr) {
       console.error("[admin stats cancelledToday]", cancelledTodayErr);
     }
 
     const cancelledReservationsToday =
-      typeof cancelledTodayCount === "number"
-        ? cancelledTodayCount
-        : stats.cancelled_reservations;
+      typeof cancelledTodayCount === "number" ? cancelledTodayCount : 0;
 
     if (pendingManualErr) {
       console.error("[admin stats pendingManualPayments]", pendingManualErr);
@@ -145,11 +154,11 @@ export async function GET() {
 
     return successResponse({
       today: {
-        totalReservations: stats.total_reservations,
-        confirmedReservations: stats.confirmed_reservations,
+        totalReservations: (sessionsTodayRows ?? []).length,
+        confirmedReservations: confirmedSessionsToday,
         cancelledReservations: cancelledReservationsToday,
-        completedReservations: stats.completed_reservations,
-        revenue: Number(stats.confirmed_revenue),
+        completedReservations: 0,
+        revenue: revenueToday,
       },
       weekRevenue: weekTotal,
       pendingManualPayments,

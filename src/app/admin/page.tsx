@@ -133,20 +133,21 @@ export default function AdminDashboardPage() {
           Panel de administración
         </h1>
         <p className="mt-1 text-zinc-600">
-          Resumen de ventas y últimas reservas nativas (web o panel), sin citas importadas.
+          Resumen del día y últimas reservas nativas (web o panel).
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">Citas confirmadas hoy</p>
-          <p className="mt-0.5 text-xs text-zinc-400">Sesiones del día (sin importadas)</p>
+          <p className="mt-0.5 text-xs text-zinc-400">Sesiones programadas para hoy</p>
           <p className="mt-1 text-2xl font-bold text-[#103948]">
             {s.today.confirmedReservations}
           </p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">Ingresos hoy</p>
+          <p className="mt-0.5 text-xs text-zinc-400">Ventas confirmadas registradas hoy</p>
           <p className="mt-1 text-2xl font-bold text-green-700">
             {formatCurrency(s.today.revenue)}
           </p>
@@ -155,6 +156,7 @@ export default function AdminDashboardPage() {
           <p className="text-sm font-medium text-zinc-500">
             Ingresos última semana
           </p>
+          <p className="mt-0.5 text-xs text-zinc-400">Ventas confirmadas (7 días)</p>
           <p className="mt-1 text-2xl font-bold text-green-700">
             {formatCurrency(s.weekRevenue)}
           </p>
