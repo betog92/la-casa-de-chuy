@@ -1,12 +1,19 @@
 import Link from "next/link";
 import HeroCarousel from "@/components/HeroCarousel";
 import { PRICES, formatPricePerHour } from "@/utils/pricing";
+import {
+  getPublicBookingsHref,
+  isPublicBookingsPaused,
+} from "@/lib/public-bookings-paused";
 
 export default function Home() {
+  const reservarHref = getPublicBookingsHref();
+  const bookingsPaused = isPublicBookingsPaused();
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white">
       {/* Hero carrusel */}
-      <HeroCarousel />
+      <HeroCarousel reservarHref={reservarHref} />
 
       {/* Información de la locación */}
       <section className="container mx-auto px-4 py-16 sm:py-24">
@@ -117,13 +124,15 @@ export default function Home() {
             ¿Listo para reservar tu espacio?
           </h2>
           <p className="mb-8 text-lg text-zinc-600">
-            Reserva tu espacio ahora y asegura tu fecha preferida
+            {bookingsPaused
+              ? "Las reservas en línea están pausadas temporalmente mientras actualizamos el calendario."
+              : "Reserva tu espacio ahora y asegura tu fecha preferida"}
           </p>
           <Link
-            href="/reservar"
+            href={reservarHref}
             className="inline-block rounded-lg bg-zinc-900 px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-zinc-800 hover:shadow-lg"
           >
-            Iniciar Reserva
+            {bookingsPaused ? "Más información" : "Iniciar Reserva"}
           </Link>
         </div>
       </section>

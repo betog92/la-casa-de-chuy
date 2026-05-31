@@ -38,6 +38,10 @@ import { getMonterreyToday } from "@/utils/business-days";
 import { validateDateFormat, validateTimeFormat } from "@/utils/validation";
 import { isSessionType } from "@/utils/session-type";
 import type { Database } from "@/types/database.types";
+import {
+  isPublicBookingsPaused,
+  publicBookingsPausedResponse,
+} from "@/lib/public-bookings-paused";
 
 const PHOTOGRAPHER_STUDIO_MAX = 500;
 
@@ -124,6 +128,10 @@ export async function POST(request: NextRequest) {
 // =====================================================
 
 async function handleReservationIntent(body: ReservationIntentBody) {
+  if (isPublicBookingsPaused()) {
+    return publicBookingsPausedResponse();
+  }
+
   const { reservation } = body;
   if (!reservation) {
     return validationErrorResponse("Faltan datos de la reserva");

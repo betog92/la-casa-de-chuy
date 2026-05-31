@@ -1,7 +1,17 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import {
+  isPublicBookingsPaused,
+  isBookingFlowPausedPath,
+} from "@/lib/public-bookings-paused";
 
 export async function middleware(request: NextRequest) {
+  if (isPublicBookingsPaused() && isBookingFlowPausedPath(request.nextUrl.pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/reservar/pausado";
+    return NextResponse.redirect(url);
+  }
+
   return await updateSession(request);
 }
 

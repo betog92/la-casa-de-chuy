@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ADMIN_NAV_ITEMS } from "@/constants/admin-nav";
 import { navigation } from "@/constants/navigation";
+import { getPublicBookingsHref } from "@/lib/public-bookings-paused";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 
@@ -40,6 +41,8 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const reservarHref = getPublicBookingsHref();
 
   return (
     <>
@@ -87,10 +90,12 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             <ul className="space-y-1 px-4">
               {navigation.map((item) => {
                 const isActive = pathname === item.href;
+                const href =
+                  item.href === "/reservar" ? reservarHref : item.href;
                 return (
                   <li key={item.name}>
                     <Link
-                      href={item.href}
+                      href={href}
                       onClick={onClose}
                       className={`block px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                         isActive

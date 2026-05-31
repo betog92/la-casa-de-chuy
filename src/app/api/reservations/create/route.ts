@@ -13,6 +13,10 @@ import {
 } from "@/lib/payments/finalize-reservation";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
+import {
+  isPublicBookingsPaused,
+  publicBookingsPausedResponse,
+} from "@/lib/public-bookings-paused";
 
 /**
  * Endpoint server-side para confirmar una reserva pagada con Conekta.
@@ -47,6 +51,10 @@ interface CreateReservationBody {
 }
 
 export async function POST(request: NextRequest) {
+  if (isPublicBookingsPaused()) {
+    return publicBookingsPausedResponse();
+  }
+
   let paymentId: string | null = null;
   const supabase = createServiceRoleClient();
   try {

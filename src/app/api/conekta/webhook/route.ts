@@ -16,6 +16,7 @@ import {
 import { sendAdminPaymentAlert } from "@/lib/email";
 import { runRefundCronStaleCheck } from "@/lib/cron/refund-orphan-heartbeat";
 import { runRetryFailedRefundsCronStaleCheck } from "@/lib/cron/retry-failed-refunds-heartbeat";
+import { isPublicBookingsPaused } from "@/lib/public-bookings-paused";
 
 type ServiceSupabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -343,6 +344,12 @@ async function handleOrderPaid(
     .maybeSingle();
 
   if (!pendingRow) {
+    if (isPublicBookingsPaused()) {
+      return {
+        status: "ignored",
+        reason: "reservas web pausadas; pago sin pending ignorado",
+      };
+    }
     // Pago sin snapshot ni reserva: orden creada por un flujo desconocido
     // o snapshot perdido. Notificamos al admin para revisión manual.
     await sendAdminPaymentAlert({
@@ -389,6 +396,13 @@ async function handleOrderPaid(
     return {
       status: "ignored",
       reason: `intent ${pending.intent} no se recupera vía webhook`,
+    };
+  }
+
+  if (isPublicBookingsPaused()) {
+    return {
+      status: "ignored",
+      reason: "reservas web pausadas; pending no consumido vía webhook",
     };
   }
 

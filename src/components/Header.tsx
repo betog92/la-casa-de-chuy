@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import MobileMenu from "./MobileMenu";
 import { navigation } from "@/constants/navigation";
+import { getPublicBookingsHref } from "@/lib/public-bookings-paused";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { UserMenuLinks } from "@/components/UserMenuLinks";
@@ -39,6 +40,8 @@ export default function Header() {
     };
   }, [userMenuOpen]);
 
+  const reservarHref = getPublicBookingsHref();
+
   return (
     <>
       <header
@@ -68,10 +71,12 @@ export default function Header() {
             <div className="hidden lg:flex lg:gap-x-10 lg:items-center">
               {navigation.map((item) => {
                 const isActive = pathname === item.href;
+                const href =
+                  item.href === "/reservar" ? reservarHref : item.href;
                 return (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    href={href}
                     className={`font-medium leading-6 transition-colors relative ${
                       isActive
                         ? "text-[#103948] font-semibold"

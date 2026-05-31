@@ -14,7 +14,13 @@ const HERO_IMAGES = Array.from({ length: 7 }, (_, i) =>
   `/hero/hero-${String(i + 1).padStart(2, "0")}.jpg`
 );
 
-export default function HeroCarousel() {
+type HeroCarouselProps = {
+  reservarHref?: string;
+};
+
+export default function HeroCarousel({
+  reservarHref = "/reservar",
+}: HeroCarouselProps) {
   const swiperRef = useRef<SwiperType | null>(null);
   const [autoplayRunning, setAutoplayRunning] = useState(true);
 
@@ -85,7 +91,7 @@ export default function HeroCarousel() {
           Agenda una cita en la Casa de Chuy el Rico
         </p>
         <Link
-          href="/reservar"
+          href={reservarHref}
           className="rounded-lg bg-white px-8 py-4 text-lg font-semibold text-[#103948] shadow-lg transition hover:bg-white hover:shadow-xl"
         >
           Agendar
