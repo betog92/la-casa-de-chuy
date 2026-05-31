@@ -90,6 +90,44 @@ Si ves por ejemplo `10745`, el próximo ID sería 10746. Después de ejecutar el
 
 ## Paso 3 — Importar citas de Appointly (Fase 1)
 
+### Opción A — Desde Google Calendar (recomendado después del lanzamiento)
+
+Usa el calendario como fuente de verdad. No depende de que `bookings.csv` esté completo.
+Solo inserta **huecos libres** (no borra citas existentes ni reservas web).
+
+Requisitos: `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_CREDENTIALS`, y opcionalmente
+`bookings.csv` + `orders_export_1.csv` en la raíz (para teléfono/email).
+
+```bash
+node scripts/import-appointly-from-calendar.mjs
+```
+
+Revisa el preview (insertarías, omitidas, conflictos). Si todo se ve bien:
+
+```bash
+node scripts/import-appointly-from-calendar.mjs --commit
+```
+
+Opciones útiles:
+
+```bash
+# Rango personalizado
+node scripts/import-appointly-from-calendar.mjs --from=2026-05-30 --to=2026-12-31 --commit
+
+# Borrar appointly previo e reimportar (cuidado: solo google_import + appointly)
+node scripts/import-appointly-from-calendar.mjs --replace-appointly --commit
+```
+
+Por defecto solo importa citas desde **2026-05-30** (fecha de lanzamiento).
+
+**Auditoría CSV vs Calendar** (diagnóstico si el CSV está incompleto):
+
+```bash
+node scripts/compare-csv-vs-calendar.mjs
+```
+
+### Opción B — Desde CSV de Appointly (legacy)
+
 ```bash
 node scripts/import-appointly-csv.mjs
 ```
