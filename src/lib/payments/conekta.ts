@@ -605,6 +605,49 @@ export function extractWebhookIds(event: ConektaWebhookEvent): {
 }
 
 /**
+ * True sólo si el webhook refleja un cobro ya confirmado (`paid`).
+ * `charge.created` con `pending_payment` o cargos declinados no cuentan —
+ * Conekta puede avisar antes de que falle el intento (p. ej. tarjeta
+ * vencida) y no debe disparar recuperación de reserva ni alertas de huérfano.
+ */
+export function isConfirmedPaymentWebhookEvent(event: ConektaWebhookEvent): {
+  confirmed: boolean;
+  chargeStatus: string | null;
+  paymentStatus: string | null;
+} {
+  const obj = event?.data?.object ?? {};
+  const objectType = String(obj.object ?? "").toLowerCase();
+
+  if (objectType === "charge") {
+    const chargeStatus = String(obj.status ?? "").toLowerCase() || null;
+    return {
+      confirmed: chargeStatus === "paid",
+      chargeStatus,
+      paymentStatus: null,
+    };
+  }
+
+  if (objectType === "order") {
+    const paymentStatus =
+      String(obj.payment_status ?? "").toLowerCase() || null;
+    if (paymentStatus === "paid") {
+      return { confirmed: true, chargeStatus: null, paymentStatus };
+    }
+    const charges = obj.charges?.data ?? [];
+    const paidCharge = charges.find(
+      (c) => String(c.status ?? "").toLowerCase() === "paid",
+    );
+    return {
+      confirmed: Boolean(paidCharge),
+      chargeStatus: paidCharge?.status ?? null,
+      paymentStatus,
+    };
+  }
+
+  return { confirmed: false, chargeStatus: null, paymentStatus: null };
+}
+
+/**
  * En `charge.refunded`, `data.object` es el **cargo**: `id` es `chg_...`.
  * El recurso de reembolso en la API tiene otro id (`ref_...`) y suele
  * listarse en `refunds.data` (el último suele corresponder al reembolso

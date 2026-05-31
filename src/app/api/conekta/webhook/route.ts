@@ -5,6 +5,7 @@ import {
   verifyConektaWebhookSignature,
   extractWebhookIds,
   extractRefundIdFromChargeRefundedPayload,
+  isConfirmedPaymentWebhookEvent,
   type ConektaWebhookEvent,
 } from "@/lib/payments/conekta";
 import { finalizeReservationFromPayload } from "@/lib/payments/finalize-reservation";
@@ -39,9 +40,11 @@ export const maxDuration = 120;
  *    hace poco, 200 in_progress; si quedó `received` demasiado tiempo,
  *    re-despachamos porque la primera invocación probablemente murió).
  * 3. Despachar por `type`:
- *    - `order.paid` / `charge.created` / `charge.paid`: si la reserva no
- *      existe aún (cliente cerró pestaña), recuperar el snapshot de
- *      `pending_reservations` y crear la reserva vía helper compartido.
+ *    - `order.paid` / `charge.paid` (y `charge.created` sólo si el cargo ya
+ *      está `paid`): si la reserva no existe aún (cliente cerró pestaña),
+ *      recuperar el snapshot de `pending_reservations` y crear la reserva vía
+ *      helper compartido. Eventos con cargo `pending_payment` o declinado se
+ *      ignoran (Conekta los manda antes del fallo final).
  *    - `charge.refunded`: reconciliar `reservation_refunds` (cancelaciones) y
  *      `recomputeReservationRefundStatus`; si no hay filas en esa tabla,
  *      actualizar `reservations` como antes (legacy). Notificar al admin si el
@@ -297,6 +300,16 @@ async function handleOrderPaid(
     return { status: "ignored", reason: "evento sin paymentId/orderId" };
   }
 
+  const paymentCheck = isConfirmedPaymentWebhookEvent(event);
+  if (!paymentCheck.confirmed) {
+    const statusLabel =
+      paymentCheck.chargeStatus ?? paymentCheck.paymentStatus ?? "desconocido";
+    return {
+      status: "ignored",
+      reason: `${event.type} sin cobro confirmado (status=${statusLabel})`,
+    };
+  }
+
   // Si ya hay reserva con ese paymentId (como cargo principal o como cargo
   // adicional de reagendamiento), sólo nos aseguramos de marcar el pending
   // como consumed. Buscar ambas columnas evita falsos positivos de
@@ -335,8 +348,8 @@ async function handleOrderPaid(
     await sendAdminPaymentAlert({
       type: "orphan_payment_no_snapshot",
       paymentId,
-      notes:
-        "order.paid sin reserva ni pending_reservations: revisar en Conekta si la orden es legítima.",
+      webhookEventType: event.type,
+      notes: `${event.type}: cobro confirmado sin reserva ni pending_reservations. Revisar en Conekta si la orden es legítima.`,
     });
     return {
       status: "processed",

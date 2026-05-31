@@ -481,6 +481,8 @@ export type AdminPaymentAlertType =
 export interface AdminPaymentAlertParams {
   type: AdminPaymentAlertType;
   paymentId: string;
+  /** Tipo del evento Conekta (`order.paid`, `charge.created`, …). */
+  webhookEventType?: string | null;
   chargeId?: string | null;
   customerEmail?: string | null;
   amountMxn?: number | null;
@@ -550,6 +552,9 @@ export async function sendAdminPaymentAlert(
   } else {
     rows.push(["Order ID (Conekta)", params.paymentId]);
   }
+  if (params.webhookEventType) {
+    rows.push(["Evento Conekta", params.webhookEventType]);
+  }
   if (params.chargeId) rows.push(["Charge ID", params.chargeId]);
   if (params.customerEmail) rows.push(["Cliente (email)", params.customerEmail]);
   if (typeof params.amountMxn === "number") {
@@ -577,7 +582,7 @@ export async function sendAdminPaymentAlert(
       : params.type === "retry_refunds_cron_stale_heartbeat"
         ? "Monitor automático del cron de reintentos de reembolsos por cancelación."
         : params.type === "orphan_payment_no_snapshot"
-        ? "Conekta notificó order.paid pero no hay fila en pending_reservations ni reserva con ese order_id."
+        ? "Cobro confirmado en Conekta pero no hay fila en pending_reservations ni reserva con ese order_id."
         : params.type === "cancellation_refund_failed"
           ? "Una fila de reservation_refunds no pudo reembolsarse tras varios reintentos automáticos."
           : "Evento detectado en el sistema de pagos de Conekta.";
