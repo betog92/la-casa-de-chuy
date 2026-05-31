@@ -1,5 +1,4 @@
-import { format } from "date-fns";
-import { getMonterreyToday } from "@/utils/business-days";
+import { getMonterreyDayBounds } from "@/utils/business-days";
 
 /** Estados de reserva que cuentan para nivel de fidelización (sesión válida, no cancelada). */
 export const TIER_ELIGIBLE_RESERVATION_STATUSES = [
@@ -40,5 +39,5 @@ export function getEffectiveReservationStatus(
 
 /** Fecha (yyyy-MM-dd) en Monterrey para comparar en cron. */
 export function getMonterreyTodayDateString(): string {
-  return format(getMonterreyToday(), "yyyy-MM-dd");
+  return getMonterreyDayBounds().dateStr;
 }

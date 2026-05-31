@@ -10,11 +10,8 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
 } from "@/utils/api-response";
-import { format, addDays, subDays } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
-import { getMonterreyToday } from "@/utils/business-days";
-
-const MX_TZ = "America/Monterrey";
+import { subDays } from "date-fns";
+import { getMonterreyDayBounds } from "@/utils/business-days";
 
 type SessionRow = { status: string };
 
@@ -24,11 +21,6 @@ function countConfirmedSessions(rows: SessionRow[]) {
 
 function sumConfirmedRevenue(rows: { price: number }[]) {
   return rows.reduce((sum, r) => sum + Number(r.price), 0);
-}
-
-/** Inicio del día en Monterrey como ISO con offset (para filtros created_at / cancelled_at). */
-function startOfDayMx(d: Date): string {
-  return formatInTimeZone(d, MX_TZ, "yyyy-MM-dd'T'00:00:00XXX");
 }
 
 /**
@@ -45,11 +37,9 @@ export async function GET() {
 
   try {
     const supabase = createServiceRoleClient();
-    const todayMx = getMonterreyToday();
-    const todayStr = format(todayMx, "yyyy-MM-dd");
-    const startOfTodayMx = startOfDayMx(todayMx);
-    const startOfTomorrowMx = startOfDayMx(addDays(todayMx, 1));
-    const startOfWeekAgoMx = startOfDayMx(subDays(todayMx, 7));
+    const { dateStr: todayStr, startIso: startOfTodayMx, endIso: startOfTomorrowMx } =
+      getMonterreyDayBounds();
+    const { startIso: startOfWeekAgoMx } = getMonterreyDayBounds(subDays(new Date(), 7));
 
     const [
       { data: sessionsTodayRows, error: sessionsTodayErr },

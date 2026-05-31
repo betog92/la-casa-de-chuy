@@ -1,5 +1,7 @@
 import { isSameDay, getDay, addDays, startOfDay } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { toZonedTime, formatInTimeZone, fromZonedTime } from "date-fns-tz";
+
+const MONTERREY_TZ = "America/Monterrey";
 
 // =====================================================
 // DÍAS FESTIVOS EN MÉXICO (2026)
@@ -67,6 +69,30 @@ export function getMonterreyToday(): Date {
   const now = new Date();
   const monterreyTime = toZonedTime(now, "America/Monterrey");
   return startOfDay(monterreyTime);
+}
+
+/**
+ * Límites del día calendario en Monterrey como ISO UTC (para filtros timestamptz).
+ * `startIso` inclusive, `endIso` exclusive.
+ */
+export function getMonterreyDayBounds(at: Date = new Date()): {
+  dateStr: string;
+  startIso: string;
+  endIso: string;
+} {
+  const dateStr = formatInTimeZone(at, MONTERREY_TZ, "yyyy-MM-dd");
+  const start = fromZonedTime(`${dateStr}T00:00:00`, MONTERREY_TZ);
+  const nextDateStr = formatInTimeZone(
+    addDays(start, 1),
+    MONTERREY_TZ,
+    "yyyy-MM-dd",
+  );
+  const end = fromZonedTime(`${nextDateStr}T00:00:00`, MONTERREY_TZ);
+  return {
+    dateStr,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  };
 }
 
 /**
