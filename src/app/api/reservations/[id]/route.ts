@@ -3,7 +3,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { lookupAdminRolesForUserId, requireAdmin } from "@/lib/auth/admin";
-import { canSuperAdminEditReservationContact } from "@/lib/admin/reservation-contact-edit";
+import {
+  canSuperAdminEditReservationContact,
+  canAdminEditImportNotes,
+} from "@/lib/admin/reservation-contact-edit";
 import {
   successResponse,
   errorResponse,
@@ -182,26 +185,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { isAdmin, isSuperAdmin } = await requireAdmin();
+  const { user: adminUser, isAdmin, isSuperAdmin } = await requireAdmin();
   if (!isAdmin) {
     return unauthorizedResponse("Solo un administrador puede editar la reserva");
   }
-
-  // Obtener usuario actual para "editado por" al guardar detalles de la cita
-  const cookieStore = await cookies();
-  const authClient = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll() {},
-      },
-    }
-  );
-  const { data: { user } } = await authClient.auth.getUser();
 
   try {
     const { id: rawId } = await params;
@@ -221,7 +208,9 @@ export async function PATCH(
     const supabase = createServiceRoleClient();
     const { data: existingRow, error: fetchError } = await supabase
       .from("reservations")
-      .select("id, source, import_type")
+      .select(
+        "id, source, import_type, import_notes, name, email, phone, order_number, session_type, photographer_studio",
+      )
       .eq("id", reservationId)
       .maybeSingle();
 
@@ -236,6 +225,13 @@ export async function PATCH(
     const existing = existingRow as {
       source: string;
       import_type: string | null;
+      import_notes: string | null;
+      name: string;
+      email: string;
+      phone: string | null;
+      order_number: string | null;
+      session_type: string | null;
+      photographer_studio: string | null;
     };
 
     const touchesPersonalContact =
@@ -264,40 +260,81 @@ export async function PATCH(
       if (!name) {
         return validationErrorResponse("El nombre no puede estar vacío");
       }
-      updatePayload.name = name;
+      if (name !== existing.name) {
+        updatePayload.name = name;
+      }
     }
     if (typeof body.email === "string") {
       const email = body.email.trim().toLowerCase();
       if (!email) {
         return validationErrorResponse("El email no puede estar vacío");
       }
-      updatePayload.email = email;
+      if (!email.includes("@")) {
+        return validationErrorResponse("El email no es válido");
+      }
+      if (email !== existing.email.trim().toLowerCase()) {
+        updatePayload.email = email;
+      }
     }
     if (typeof body.phone === "string") {
-      updatePayload.phone = body.phone.trim();
+      const phone = body.phone.trim();
+      if (phone !== (existing.phone ?? "").trim()) {
+        updatePayload.phone = phone;
+      }
     }
     if (body.order_number !== undefined) {
-      updatePayload.order_number = body.order_number === "" || body.order_number == null ? null : String(body.order_number).trim();
+      const order =
+        body.order_number === "" || body.order_number == null
+          ? null
+          : String(body.order_number).trim();
+      const prevOrder = existing.order_number ?? null;
+      if (order !== prevOrder) {
+        updatePayload.order_number = order;
+      }
     }
     if (body.import_notes !== undefined) {
-      const raw = body.import_notes === "" || body.import_notes == null ? null : String(body.import_notes).trim();
+      if (!canAdminEditImportNotes(existing)) {
+        return validationErrorResponse(
+          "Los detalles de la cita solo se editan en reservas manuales o importadas",
+        );
+      }
+      const raw =
+        body.import_notes === "" || body.import_notes == null
+          ? null
+          : String(body.import_notes).trim();
       const maxNotesLength = 10000;
-      updatePayload.import_notes = raw === null ? null : raw.slice(0, maxNotesLength);
-      updatePayload.import_notes_edited_at = new Date().toISOString();
-      updatePayload.import_notes_edited_by_user_id = user?.id ?? null;
+      const newNotes = raw === null ? null : raw.slice(0, maxNotesLength);
+      const prevNotes = existing.import_notes ?? null;
+      if (newNotes !== prevNotes) {
+        updatePayload.import_notes = newNotes;
+      }
     }
 
     if (body.session_type !== undefined && body.session_type !== null) {
+      if (!isSuperAdmin) {
+        return forbiddenResponse(
+          "Solo la familia (super admin) puede cambiar el tipo de sesión",
+        );
+      }
       const st = String(body.session_type).trim();
       if (!isSessionType(st)) {
         return validationErrorResponse(
           "session_type inválido (use xv_anos, boda o casual)"
         );
       }
-      updatePayload.session_type = st;
+      if (st !== (existing.session_type ?? null)) {
+        updatePayload.session_type = st;
+      }
     }
     if (body.session_type === null) {
-      updatePayload.session_type = null;
+      if (!isSuperAdmin) {
+        return forbiddenResponse(
+          "Solo la familia (super admin) puede cambiar el tipo de sesión",
+        );
+      }
+      if (existing.session_type !== null) {
+        updatePayload.session_type = null;
+      }
     }
 
     if (body.photographer_studio !== undefined) {
@@ -305,18 +342,35 @@ export async function PATCH(
         body.photographer_studio === "" || body.photographer_studio == null
           ? null
           : String(body.photographer_studio).trim().slice(0, 500);
-      updatePayload.photographer_studio = raw === "" ? null : raw;
+      const nextPhotographer = raw === "" ? null : raw;
+      const prevPhotographer = existing.photographer_studio ?? null;
+      if (nextPhotographer !== prevPhotographer) {
+        updatePayload.photographer_studio = nextPhotographer;
+      }
     }
 
     if (Object.keys(updatePayload).length === 0) {
       return validationErrorResponse("No hay campos válidos para actualizar");
     }
 
+    updatePayload.import_notes_edited_at = new Date().toISOString();
+    updatePayload.import_notes_edited_by_user_id = adminUser?.id ?? null;
+
+    // Si cambia el email, re-vincular user_id (igual que al crear reserva manual).
+    if (typeof updatePayload.email === "string") {
+      const { data: linkedUser } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("email", updatePayload.email)
+        .maybeSingle();
+      updatePayload.user_id = (linkedUser as { id: string } | null)?.id ?? null;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tipos generados de Supabase no incluyen todos los campos en Update
     const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)
       .eq("id", reservationId)
-      .select("id, name, email, phone, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio")
+      .select("id, name, email, phone, order_number, user_id, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio")
       .single();
 
     if (error) {
@@ -327,23 +381,21 @@ export async function PATCH(
       return notFoundResponse("Reserva");
     }
 
-    // Resolver nombre del editor solo cuando se actualizaron los detalles de la cita
+    // Resolver quién editó (cualquier campo guardado vía PATCH admin).
     let import_notes_edited_by: { id: string; name: string | null; email: string } | null = null;
-    if (body.import_notes !== undefined) {
-      const editedByUserId = data.import_notes_edited_by_user_id;
-      if (editedByUserId) {
-        const { data: userRow } = await supabase
-          .from("users")
-          .select("id, name, email")
-          .eq("id", editedByUserId)
-          .maybeSingle();
-        if (userRow) {
-          import_notes_edited_by = {
-            id: (userRow as { id: string }).id,
-            name: (userRow as { name: string | null }).name ?? null,
-            email: (userRow as { email: string }).email,
-          };
-        }
+    const editedByUserId = data.import_notes_edited_by_user_id;
+    if (editedByUserId) {
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id, name, email")
+        .eq("id", editedByUserId)
+        .maybeSingle();
+      if (userRow) {
+        import_notes_edited_by = {
+          id: (userRow as { id: string }).id,
+          name: (userRow as { name: string | null }).name ?? null,
+          email: (userRow as { email: string }).email,
+        };
       }
     }
 

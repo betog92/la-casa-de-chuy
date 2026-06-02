@@ -20,3 +20,12 @@ export function canSuperAdminEditReservationContact(reservation: {
   }
   return false;
 }
+
+/** Notas de import / detalles de cita (no aplica a reservas web). */
+export function canAdminEditImportNotes(reservation: {
+  source?: string | null;
+}): boolean {
+  return (
+    reservation.source === "admin" || reservation.source === "google_import"
+  );
+}

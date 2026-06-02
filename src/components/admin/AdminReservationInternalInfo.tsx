@@ -90,6 +90,10 @@ export function AdminReservationInternalInfo({
               ...prev,
               photographer_studio:
                 updated.photographer_studio ?? prev.photographer_studio ?? null,
+              import_notes_edited_at:
+                updated.import_notes_edited_at ?? prev.import_notes_edited_at ?? null,
+              import_notes_edited_by:
+                updated.import_notes_edited_by ?? prev.import_notes_edited_by ?? null,
             }
           : null,
       );

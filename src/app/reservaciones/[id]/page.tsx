@@ -187,6 +187,26 @@ function ReservationContactFields({
   );
 }
 
+function ReservationDetailLastEdited({
+  reservation,
+}: {
+  reservation: Reservation;
+}) {
+  if (!reservation.import_notes_edited_at) return null;
+  const editedAt = new Date(reservation.import_notes_edited_at);
+  if (Number.isNaN(editedAt.getTime())) return null;
+  const editor =
+    reservation.import_notes_edited_by?.name?.trim() ||
+    reservation.import_notes_edited_by?.email ||
+    "—";
+  return (
+    <p className="text-xs text-zinc-500 mt-2">
+      Editado por última vez por {editor} el{" "}
+      {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
+    </p>
+  );
+}
+
 export default function ReservationDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -615,6 +635,7 @@ export default function ReservationDetailsPage() {
 
   const canEditContact =
     reservation != null &&
+    !isAdminLoading &&
     isSuperAdmin &&
     canSuperAdminEditReservationContact(reservation);
 
@@ -650,6 +671,7 @@ export default function ReservationDetailsPage() {
               email: updated.email ?? prev.email,
               phone: updated.phone ?? prev.phone,
               order_number: updated.order_number ?? prev.order_number ?? null,
+              user_id: updated.user_id ?? prev.user_id ?? null,
               import_notes: updated.import_notes ?? prev.import_notes ?? null,
               import_notes_edited_at:
                 updated.import_notes_edited_at ??
@@ -974,17 +996,6 @@ export default function ReservationDetailsPage() {
                           ? "Guardar datos y detalles"
                           : "Guardar detalles de la cita"}
                     </button>
-                    {reservation.import_notes_edited_at && (() => {
-                      const editedAt = new Date(reservation.import_notes_edited_at);
-                      const editedAtValid = !Number.isNaN(editedAt.getTime());
-                      return editedAtValid ? (
-                        <p className="text-xs text-zinc-500 mt-2">
-                          Editado por última vez por{" "}
-                          {reservation.import_notes_edited_by?.name ?? "—"}{" "}
-                          el {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
-                        </p>
-                      ) : null;
-                    })()}
                   </>
                 ) : (
                   <>
@@ -1050,6 +1061,7 @@ export default function ReservationDetailsPage() {
                     )}
                   </>
                 )}
+                <ReservationDetailLastEdited reservation={reservation} />
               </div>
             )}
           </div>
