@@ -6,6 +6,7 @@ import { lookupAdminRolesForUserId, requireAdmin } from "@/lib/auth/admin";
 import {
   canSuperAdminEditReservationContact,
   canAdminEditImportNotes,
+  isAlveroClientReservation,
 } from "@/lib/admin/reservation-contact-edit";
 import {
   successResponse,
@@ -59,7 +60,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, municipio, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio"
       )
       .eq("id", reservationId)
       .single();
@@ -184,6 +185,9 @@ export async function GET(
       delete reservation.import_notes;
       delete reservation.import_notes_edited_at;
       delete reservation.import_notes_edited_by_user_id;
+      delete reservation.order_number;
+      delete reservation.municipio;
+      delete reservation.google_event_id;
     }
 
     return successResponse({
@@ -227,7 +231,7 @@ export async function PATCH(
     const { data: existingRow, error: fetchError } = await supabase
       .from("reservations")
       .select(
-        "id, source, import_type, import_notes, name, email, phone, order_number, session_type, photographer_studio",
+        "id, source, import_type, import_notes, name, email, phone, order_number, municipio, session_type, photographer_studio",
       )
       .eq("id", reservationId)
       .maybeSingle();
@@ -248,6 +252,7 @@ export async function PATCH(
       email: string;
       phone: string | null;
       order_number: string | null;
+      municipio: string | null;
       session_type: string | null;
       photographer_studio: string | null;
     };
@@ -308,6 +313,22 @@ export async function PATCH(
       const prevOrder = existing.order_number ?? null;
       if (order !== prevOrder) {
         updatePayload.order_number = order;
+      }
+    }
+    if (body.municipio !== undefined) {
+      if (!isAlveroClientReservation(existing)) {
+        return validationErrorResponse(
+          "El municipio solo aplica en citas Alvero",
+        );
+      }
+      const municipio =
+        body.municipio === "" || body.municipio == null
+          ? null
+          : String(body.municipio).trim().slice(0, 200);
+      const prevMunicipio = existing.municipio?.trim() || null;
+      const nextMunicipio = municipio === "" ? null : municipio;
+      if (nextMunicipio !== prevMunicipio) {
+        updatePayload.municipio = nextMunicipio;
       }
     }
     if (body.import_notes !== undefined) {
@@ -388,7 +409,7 @@ export async function PATCH(
     const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)
       .eq("id", reservationId)
-      .select("id, name, email, phone, order_number, user_id, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio")
+      .select("id, name, email, phone, order_number, municipio, user_id, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio")
       .single();
 
     if (error) {

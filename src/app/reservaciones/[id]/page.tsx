@@ -52,16 +52,11 @@ import { RescheduleAdditionalRow } from "@/components/RescheduleAdditionalRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import { AdminReservationInternalInfo } from "@/components/admin/AdminReservationInternalInfo";
-import {
-  AdminInternalNotesField,
-  defaultDetailInputClass,
-} from "@/components/admin/AdminInternalNotesField";
 import type { Reservation } from "@/types/reservation";
 import { durationMinutesBetween } from "@/utils/reservation-helpers";
 import {
   buildReservationDetailPatch,
   canSuperAdminEditReservationContact,
-  showAdminNotesInContactSection,
 } from "@/lib/admin/reservation-contact-edit";
 
 const contactInputClass =
@@ -79,7 +74,6 @@ function ReservationContactFields({
   editForm,
   setEditForm,
   editable,
-  orderLabel,
 }: {
   reservation: Reservation;
   editForm: ContactEditForm;
@@ -89,12 +83,12 @@ function ReservationContactFields({
       email: string;
       phone: string;
       order_number: string;
+      municipio: string;
       import_notes: string;
       photographer_studio: string;
     }>
   >;
   editable: boolean;
-  orderLabel: string;
 }) {
   if (editable) {
     return (
@@ -143,24 +137,6 @@ function ReservationContactFields({
             className={contactInputClass}
           />
         </div>
-        <div>
-          <label
-            htmlFor="edit-order-number"
-            className="text-sm text-zinc-600 mb-1 block"
-          >
-            {orderLabel}
-          </label>
-          <input
-            id="edit-order-number"
-            type="text"
-            value={editForm.order_number}
-            onChange={(e) =>
-              setEditForm((f) => ({ ...f, order_number: e.target.value }))
-            }
-            className={contactInputClass}
-            placeholder="Opcional"
-          />
-        </div>
       </>
     );
   }
@@ -181,37 +157,7 @@ function ReservationContactFields({
           {reservation.phone || "No proporcionado"}
         </p>
       </div>
-      {(reservation.order_number || reservation.google_event_id) && (
-        <div>
-          <p className="text-sm text-zinc-600 mb-1">{orderLabel}</p>
-          <p className="text-lg font-medium text-[#103948]">
-            {reservation.order_number
-              ? `#${reservation.order_number}`
-              : reservation.google_event_id}
-          </p>
-        </div>
-      )}
     </>
-  );
-}
-
-function ReservationDetailLastEdited({
-  reservation,
-}: {
-  reservation: Reservation;
-}) {
-  if (!reservation.import_notes_edited_at) return null;
-  const editedAt = new Date(reservation.import_notes_edited_at);
-  if (Number.isNaN(editedAt.getTime())) return null;
-  const editor =
-    reservation.import_notes_edited_by?.name?.trim() ||
-    reservation.import_notes_edited_by?.email ||
-    "—";
-  return (
-    <p className="text-xs text-zinc-500 mt-2">
-      Editado por última vez por {editor} el{" "}
-      {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
-    </p>
   );
 }
 
@@ -243,11 +189,13 @@ export default function ReservationDetailsPage() {
     email: "",
     phone: "",
     order_number: "",
+    municipio: "",
     import_notes: "",
     photographer_studio: "",
   });
   const [savingDetail, setSavingDetail] = useState(false);
-  const [editDetailError, setEditDetailError] = useState<string | null>(null);
+  const [contactEditError, setContactEditError] = useState<string | null>(null);
+  const [internalEditError, setInternalEditError] = useState<string | null>(null);
   const [saveDetailSuccess, setSaveDetailSuccess] = useState(false);
   const [pendingAdminPayment, setPendingAdminPayment] = useState<{
     date: string;
@@ -270,6 +218,7 @@ export default function ReservationDetailsPage() {
       email: reservation.email ?? "",
       phone: reservation.phone ?? "",
       order_number: reservation.order_number ?? "",
+      municipio: reservation.municipio ?? "",
       import_notes: reservation.import_notes ?? "",
       photographer_studio: reservation.photographer_studio ?? "",
     });
@@ -279,13 +228,15 @@ export default function ReservationDetailsPage() {
     reservation?.email,
     reservation?.phone,
     reservation?.order_number,
+    reservation?.municipio,
     reservation?.import_notes,
     reservation?.photographer_studio,
   ]);
 
   useEffect(() => {
     setSaveDetailSuccess(false);
-    setEditDetailError(null);
+    setContactEditError(null);
+    setInternalEditError(null);
     setRetryRefundMessage(null);
     setRetryRefundError(null);
   }, [reservation?.id]);
@@ -632,14 +583,6 @@ export default function ReservationDetailsPage() {
       reservation.source === "admin") &&
     reservation.import_type === "manual_available";
   const showAdminInternalBlock = isAdmin && !isManualAvailableBlock;
-  const showAdminPhotographerEditor =
-    showAdminInternalBlock &&
-    reservation != null &&
-    !(
-      (reservation.source === "google_import" ||
-        reservation.source === "admin") &&
-      reservation.import_type === "manual_client"
-    );
 
   const canEditContact =
     reservation != null &&
@@ -647,68 +590,42 @@ export default function ReservationDetailsPage() {
     isSuperAdmin &&
     canSuperAdminEditReservationContact(reservation);
 
-  const contactOrderLabel =
-    reservation?.source === "admin"
-      ? "Número de orden"
-      : "Orden (web anterior)";
-
-  const showAdminNotesEditor =
-    reservation != null && showAdminNotesInContactSection(reservation);
-
-  const alveroDetailPatch = useMemo(() => {
-    if (!reservation) return {};
+  const contactDetailPatch = useMemo(() => {
+    if (!reservation || !canEditContact) return {};
     return buildReservationDetailPatch(reservation, editForm, {
-      includeContact: canEditContact,
-      includeNotes: true,
-      includePhotographer: true,
+      includeContact: true,
     });
   }, [
     reservation,
     editForm.name,
     editForm.email,
     editForm.phone,
-    editForm.order_number,
-    editForm.import_notes,
-    editForm.photographer_studio,
     canEditContact,
   ]);
 
-  const chuyDetailPatch = useMemo(() => {
-    if (!reservation) return {};
-    return buildReservationDetailPatch(reservation, editForm, {
-      includeContact: canEditContact,
-      includeNotes: showAdminNotesEditor,
-    });
-  }, [
-    reservation,
-    editForm.name,
-    editForm.email,
-    editForm.phone,
-    editForm.order_number,
-    editForm.import_notes,
-    canEditContact,
-    showAdminNotesEditor,
-  ]);
-
-  const canSaveAlveroDetail = Object.keys(alveroDetailPatch).length > 0;
-  const canSaveChuyDetail = Object.keys(chuyDetailPatch).length > 0;
+  const canSaveContactDetail = Object.keys(contactDetailPatch).length > 0;
 
   useEffect(() => {
-    if (canSaveAlveroDetail || canSaveChuyDetail) {
-      setEditDetailError(null);
+    if (canSaveContactDetail) {
+      setContactEditError(null);
     }
-  }, [canSaveAlveroDetail, canSaveChuyDetail]);
+  }, [canSaveContactDetail]);
 
   const patchReservationDetails = async (
     fields: Record<string, string | null | undefined>,
-  ) => {
-    if (!reservation) return;
+    options?: { errorTarget?: "contact" | "internal" },
+  ): Promise<boolean> => {
+    if (!reservation) return false;
+    const errorTarget = options?.errorTarget ?? "internal";
+    const setError =
+      errorTarget === "contact" ? setContactEditError : setInternalEditError;
+
     if (Object.keys(fields).length === 0) {
-      setEditDetailError("No hay cambios para guardar");
+      setError("No hay cambios para guardar");
       setSaveDetailSuccess(false);
-      return;
+      return false;
     }
-    setEditDetailError(null);
+    setError(null);
     setSaveDetailSuccess(false);
     setSavingDetail(true);
     try {
@@ -719,8 +636,8 @@ export default function ReservationDetailsPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setEditDetailError(data.error || "Error al guardar");
-        return;
+        setError(data.error || "Error al guardar");
+        return false;
       }
       const updated = data.reservation;
       setReservation((prev) =>
@@ -731,6 +648,7 @@ export default function ReservationDetailsPage() {
               email: updated.email ?? prev.email,
               phone: updated.phone ?? prev.phone,
               order_number: updated.order_number ?? prev.order_number ?? null,
+              municipio: updated.municipio ?? prev.municipio ?? null,
               user_id: updated.user_id ?? prev.user_id ?? null,
               import_notes: updated.import_notes ?? prev.import_notes ?? null,
               import_notes_edited_at:
@@ -746,9 +664,15 @@ export default function ReservationDetailsPage() {
             }
           : null,
       );
-      setSaveDetailSuccess(true);
+      const touchesContact =
+        "name" in fields || "email" in fields || "phone" in fields;
+      if (touchesContact) {
+        setSaveDetailSuccess(true);
+      }
+      return true;
     } catch {
-      setEditDetailError("Error de conexión");
+      setError("Error de conexión");
+      return false;
     } finally {
       setSavingDetail(false);
     }
@@ -984,67 +908,38 @@ export default function ReservationDetailsPage() {
                       editForm={editForm}
                       setEditForm={setEditForm}
                       editable={canEditContact}
-                      orderLabel={contactOrderLabel}
                     />
                     {canEditContact && (
                       <p className="text-xs text-zinc-500">
                         Puedes corregir nombre, email o teléfono si hubo un error al capturar la cita.
                       </p>
                     )}
-                    <div>
-                      <label
-                        htmlFor="admin-photographer-studio-import"
-                        className="text-sm text-zinc-600 mb-1 block"
-                      >
-                        Fotógrafo / estudio
-                      </label>
-                      <input
-                        id="admin-photographer-studio-import"
-                        type="text"
-                        maxLength={500}
-                        value={editForm.photographer_studio}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            photographer_studio: e.target.value,
-                          }))
-                        }
-                        className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-                        placeholder="Ej. Estudio Luz o nombre del fotógrafo"
-                      />
-                    </div>
-                    <AdminInternalNotesField
-                      id="edit-notes-alvero"
-                      value={editForm.import_notes}
-                      onChange={(import_notes) =>
-                        setEditForm((f) => ({ ...f, import_notes }))
-                      }
-                      label="Notas internas"
-                      rows={4}
-                      labelClassName="text-sm text-zinc-600 mb-1 block"
-                      inputClassName={defaultDetailInputClass}
-                      showAdminOnlyHint
-                    />
-                    {editDetailError && (
-                      <p className="text-sm text-red-600">{editDetailError}</p>
+                    {canEditContact && (
+                      <>
+                        {contactEditError && (
+                          <p className="text-sm text-red-600">{contactEditError}</p>
+                        )}
+                        {saveDetailSuccess && (
+                          <p className="text-sm text-green-600 font-medium">
+                            Datos del cliente guardados correctamente.
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void patchReservationDetails(contactDetailPatch, {
+                              errorTarget: "contact",
+                            })
+                          }
+                          disabled={savingDetail || !canSaveContactDetail}
+                          className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
+                        >
+                          {savingDetail
+                            ? "Guardando…"
+                            : "Guardar datos del cliente"}
+                        </button>
+                      </>
                     )}
-                    {saveDetailSuccess && (
-                      <p className="text-sm text-green-600 font-medium">Detalles guardados correctamente.</p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void patchReservationDetails(alveroDetailPatch)
-                      }
-                      disabled={savingDetail || !canSaveAlveroDetail}
-                      className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
-                    >
-                      {savingDetail
-                        ? "Guardando…"
-                        : canEditContact
-                          ? "Guardar datos y notas"
-                          : "Guardar notas"}
-                    </button>
                   </>
                 ) : (
                   <>
@@ -1053,7 +948,6 @@ export default function ReservationDetailsPage() {
                       editForm={editForm}
                       setEditForm={setEditForm}
                       editable={canEditContact}
-                      orderLabel={contactOrderLabel}
                     />
                     {reservation.source === "web" && (
                       <p className="text-xs text-zinc-500">
@@ -1065,49 +959,29 @@ export default function ReservationDetailsPage() {
                         Puedes corregir los datos del cliente si hubo un error al registrar la cita manual.
                       </p>
                     )}
-                    {showAdminNotesEditor && (
-                      <AdminInternalNotesField
-                        id="edit-notes-chuy"
-                        value={editForm.import_notes}
-                        onChange={(import_notes) =>
-                          setEditForm((f) => ({ ...f, import_notes }))
-                        }
-                        label="Notas internas"
-                        rows={4}
-                        labelClassName="text-sm text-zinc-600 mb-1 block"
-                        inputClassName={defaultDetailInputClass}
-                        showAdminOnlyHint
-                      />
-                    )}
-                    {(canEditContact || showAdminNotesEditor) && (
+                    {canEditContact && (
                       <>
-                        {editDetailError && (
-                          <p className="text-sm text-red-600">{editDetailError}</p>
+                        {contactEditError && (
+                          <p className="text-sm text-red-600">{contactEditError}</p>
                         )}
                         {saveDetailSuccess && (
                           <p className="text-sm text-green-600 font-medium">
-                            {canEditContact && showAdminNotesEditor
-                              ? "Datos y notas guardados correctamente."
-                              : showAdminNotesEditor
-                                ? "Notas guardadas correctamente."
-                                : "Datos guardados correctamente."}
+                            Datos del cliente guardados correctamente.
                           </p>
                         )}
                         <button
                           type="button"
                           onClick={() =>
-                            void patchReservationDetails(chuyDetailPatch)
+                            void patchReservationDetails(contactDetailPatch, {
+                              errorTarget: "contact",
+                            })
                           }
-                          disabled={savingDetail || !canSaveChuyDetail}
+                          disabled={savingDetail || !canSaveContactDetail}
                           className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
                         >
                           {savingDetail
                             ? "Guardando…"
-                            : canEditContact && showAdminNotesEditor
-                              ? "Guardar datos y notas"
-                              : showAdminNotesEditor
-                                ? "Guardar notas"
-                                : "Guardar datos del cliente"}
+                            : "Guardar datos del cliente"}
                         </button>
                       </>
                     )}
@@ -1121,7 +995,6 @@ export default function ReservationDetailsPage() {
                     )}
                   </>
                 )}
-                <ReservationDetailLastEdited reservation={reservation} />
               </div>
             )}
           </div>
@@ -1274,13 +1147,13 @@ export default function ReservationDetailsPage() {
                 editForm={editForm}
                 setEditForm={setEditForm}
                 savingDetail={savingDetail}
-                setSavingDetail={setSavingDetail}
-                editDetailError={editDetailError}
-                setEditDetailError={setEditDetailError}
+                canEditOrderNumber={canEditContact}
+                internalEditError={internalEditError}
+                setInternalEditError={setInternalEditError}
                 setReservation={setReservation}
                 validatingPayment={validatingPayment}
                 setValidatingPayment={setValidatingPayment}
-                showPhotographerEditor={showAdminPhotographerEditor}
+                patchReservationDetails={patchReservationDetails}
               />
             </div>
           )}

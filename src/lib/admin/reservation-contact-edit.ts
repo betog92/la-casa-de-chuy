@@ -3,6 +3,18 @@ export function isWebReservation(source: string | null | undefined): boolean {
   return source === "web";
 }
 
+/** Cita Alvero con cliente (panel admin o import Alberto). */
+export function isAlveroClientReservation(reservation: {
+  source?: string | null;
+  import_type?: string | null;
+}): boolean {
+  return (
+    (reservation.source === "admin" ||
+      reservation.source === "google_import") &&
+    reservation.import_type === "manual_client"
+  );
+}
+
 /**
  * Reservas manuales del panel o import (Alvero, cliente efectivo/transferencia).
  * Excluye bloqueos `manual_available` y reservas web.
@@ -34,17 +46,6 @@ export function canAdminEditImportNotes(reservation: {
   return source === "web" || source === "admin" || source === "google_import";
 }
 
-/** UI de notas en detalle: Alvero ya las muestra en su rama; el resto usa el bloque Casa de Chuy/web. */
-export function showAdminNotesInContactSection(reservation: {
-  source?: string | null;
-  import_type?: string | null;
-}): boolean {
-  return (
-    canAdminEditImportNotes(reservation) &&
-    reservation.import_type !== "manual_client"
-  );
-}
-
 function normalizeTrimmed(value: string | null | undefined): string | null {
   if (value == null || value === "") return null;
   const t = String(value).trim();
@@ -63,6 +64,7 @@ type ReservationDetailEditForm = {
   email: string;
   phone: string;
   order_number: string;
+  municipio: string;
   import_notes: string;
   photographer_studio: string;
 };
@@ -74,12 +76,15 @@ export function buildReservationDetailPatch(
     email: string;
     phone: string | null;
     order_number?: string | null;
+    municipio?: string | null;
     import_notes?: string | null;
     photographer_studio?: string | null;
   },
   form: ReservationDetailEditForm,
   options: {
     includeContact?: boolean;
+    includeOrderNumber?: boolean;
+    includeMunicipio?: boolean;
     includeNotes?: boolean;
     includePhotographer?: boolean;
   },
@@ -95,10 +100,18 @@ export function buildReservationDetailPatch(
 
     const phone = form.phone.trim();
     if (phone !== (reservation.phone ?? "").trim()) patch.phone = phone;
+  }
 
+  if (options.includeOrderNumber) {
     const order = form.order_number.trim() || null;
     const prevOrder = reservation.order_number ?? null;
     if (order !== prevOrder) patch.order_number = order;
+  }
+
+  if (options.includeMunicipio) {
+    const municipio = form.municipio.trim() || null;
+    const prevMunicipio = normalizeTrimmed(reservation.municipio);
+    if (municipio !== prevMunicipio) patch.municipio = municipio;
   }
 
   if (options.includeNotes) {

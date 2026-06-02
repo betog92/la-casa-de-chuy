@@ -4,56 +4,154 @@ import { useEffect, useMemo, useState } from "react";
 import { format, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { AdminOnlyInfoBlock } from "@/components/admin/AdminOnlyInfoBlock";
+import {
+  AdminInternalNotesField,
+  defaultDetailInputClass,
+} from "@/components/admin/AdminInternalNotesField";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
-import { buildReservationDetailPatch } from "@/lib/admin/reservation-contact-edit";
+import {
+  buildReservationDetailPatch,
+  canAdminEditImportNotes,
+  isAlveroClientReservation,
+} from "@/lib/admin/reservation-contact-edit";
 
 type EditForm = {
   name: string;
   email: string;
   phone: string;
   order_number: string;
+  municipio: string;
   import_notes: string;
   photographer_studio: string;
 };
 
+function orderNumberLabel(reservation: Reservation): string {
+  return reservation.source === "admin"
+    ? "Número de orden"
+    : "Orden (web anterior)";
+}
+
 type AdminReservationInternalInfoProps = {
   reservation: Reservation;
   isSuperAdmin: boolean;
+  canEditOrderNumber: boolean;
   editForm: EditForm;
   setEditForm: React.Dispatch<React.SetStateAction<EditForm>>;
   savingDetail: boolean;
-  setSavingDetail: (v: boolean) => void;
-  editDetailError: string | null;
-  setEditDetailError: (v: string | null) => void;
+  internalEditError: string | null;
+  setInternalEditError: (v: string | null) => void;
   setReservation: React.Dispatch<React.SetStateAction<Reservation | null>>;
   validatingPayment: boolean;
   setValidatingPayment: (v: boolean) => void;
-  /** Muestra editor de fotógrafo con guardado propio (reservas web). */
-  showPhotographerEditor: boolean;
+  patchReservationDetails: (
+    fields: Record<string, string | null | undefined>,
+    options?: { errorTarget?: "contact" | "internal" },
+  ) => Promise<boolean>;
 };
+
+function ReservationDetailLastEdited({
+  reservation,
+}: {
+  reservation: Reservation;
+}) {
+  if (!reservation.import_notes_edited_at) return null;
+  const editedAt = new Date(reservation.import_notes_edited_at);
+  if (Number.isNaN(editedAt.getTime())) return null;
+  const editor =
+    reservation.import_notes_edited_by?.name?.trim() ||
+    reservation.import_notes_edited_by?.email ||
+    "—";
+  return (
+    <p className="text-xs text-zinc-500 pt-1">
+      Editado por última vez por {editor} el{" "}
+      {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
+    </p>
+  );
+}
 
 export function AdminReservationInternalInfo({
   reservation,
   isSuperAdmin,
+  canEditOrderNumber,
   editForm,
   setEditForm,
   savingDetail,
-  setSavingDetail,
-  editDetailError,
-  setEditDetailError,
+  internalEditError,
+  setInternalEditError,
   setReservation,
   validatingPayment,
   setValidatingPayment,
-  showPhotographerEditor,
+  patchReservationDetails,
 }: AdminReservationInternalInfoProps) {
-  const [photographerSaveSuccess, setPhotographerSaveSuccess] = useState(false);
+  const [internalSaveSuccess, setInternalSaveSuccess] = useState(false);
 
   useEffect(() => {
-    if (!photographerSaveSuccess) return;
-    const t = setTimeout(() => setPhotographerSaveSuccess(false), 4000);
+    if (!internalSaveSuccess) return;
+    const t = setTimeout(() => setInternalSaveSuccess(false), 4000);
     return () => clearTimeout(t);
-  }, [photographerSaveSuccess]);
+  }, [internalSaveSuccess]);
+
+  const showNotesEditor = canAdminEditImportNotes(reservation);
+  const showMunicipioField = isAlveroClientReservation(reservation);
+  const orderLabel = orderNumberLabel(reservation);
+  const showOrderField =
+    canEditOrderNumber ||
+    !!reservation.order_number?.trim() ||
+    !!reservation.google_event_id;
+
+  const internalDetailPatch = useMemo(
+    () =>
+      buildReservationDetailPatch(reservation, editForm, {
+        includeOrderNumber: canEditOrderNumber,
+        includeMunicipio: showMunicipioField,
+        includeNotes: showNotesEditor,
+        includePhotographer: true,
+      }),
+    [
+      reservation.id,
+      reservation.import_notes,
+      reservation.photographer_studio,
+      reservation.order_number,
+      reservation.municipio,
+      editForm.import_notes,
+      editForm.photographer_studio,
+      editForm.order_number,
+      editForm.municipio,
+      showNotesEditor,
+      showMunicipioField,
+      canEditOrderNumber,
+    ],
+  );
+
+  const canSaveInternalDetail =
+    Object.keys(internalDetailPatch).length > 0;
+
+  useEffect(() => {
+    if (canSaveInternalDetail) {
+      setInternalEditError(null);
+    }
+  }, [canSaveInternalDetail, setInternalEditError]);
+
+  const changedInternalFields = Object.keys(internalDetailPatch);
+  const saveInternalLabel =
+    changedInternalFields.length === 0
+      ? "Guardar cambios"
+      : changedInternalFields.length === 1
+        ? "Guardar cambio"
+        : "Guardar cambios de administración";
+
+  const saveInternalDetails = async () => {
+    if (!canSaveInternalDetail) return;
+    setInternalEditError(null);
+    setInternalSaveSuccess(false);
+    const ok = await patchReservationDetails(internalDetailPatch, {
+      errorTarget: "internal",
+    });
+    if (ok) {
+      setInternalSaveSuccess(true);
+    }
+  };
 
   const showPaymentStatus =
     (reservation.source === "admin" &&
@@ -61,58 +159,6 @@ export function AdminReservationInternalInfo({
       reservation.payment_method) ||
     (reservation.source === "web" &&
       (reservation.payment_method === "conekta" || reservation.payment_id));
-
-  const isManualClientImport =
-    (reservation.source === "google_import" ||
-      reservation.source === "admin") &&
-    reservation.import_type === "manual_client";
-
-  const photographerPatch = useMemo(
-    () =>
-      buildReservationDetailPatch(reservation, editForm, {
-        includePhotographer: true,
-      }),
-    [reservation, editForm.photographer_studio],
-  );
-  const canSavePhotographer = Object.keys(photographerPatch).length > 0;
-
-  const savePhotographerWeb = async () => {
-    if (!canSavePhotographer) return;
-    setEditDetailError(null);
-    setPhotographerSaveSuccess(false);
-    setSavingDetail(true);
-    try {
-      const res = await fetch(`/api/reservations/${reservation.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(photographerPatch),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setEditDetailError(data.error || "Error al guardar");
-        return;
-      }
-      const updated = data.reservation;
-      setReservation((prev) =>
-        prev
-          ? {
-              ...prev,
-              photographer_studio:
-                updated.photographer_studio ?? prev.photographer_studio ?? null,
-              import_notes_edited_at:
-                updated.import_notes_edited_at ?? prev.import_notes_edited_at ?? null,
-              import_notes_edited_by:
-                updated.import_notes_edited_by ?? prev.import_notes_edited_by ?? null,
-            }
-          : null,
-      );
-      setPhotographerSaveSuccess(true);
-    } catch {
-      setEditDetailError("Error de conexión");
-    } finally {
-      setSavingDetail(false);
-    }
-  };
 
   return (
     <AdminOnlyInfoBlock>
@@ -125,43 +171,113 @@ export function AdminReservationInternalInfo({
         </p>
       </div>
 
-      {showPhotographerEditor ? (
+      {showOrderField ? (
         <div className="grid gap-1.5">
           <label
-            htmlFor="admin-photographer-studio"
+            htmlFor="admin-order-number"
             className="text-sm text-zinc-600 block"
           >
-            Fotógrafo / estudio
+            {orderLabel}
           </label>
-          <input
-            id="admin-photographer-studio"
-            type="text"
-            maxLength={500}
-            value={editForm.photographer_studio}
-            onChange={(e) =>
-              setEditForm((f) => ({
-                ...f,
-                photographer_studio: e.target.value,
-              }))
-            }
-            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-            placeholder="Ej. Estudio Luz o nombre del fotógrafo"
-          />
-          <button
-            type="button"
-            onClick={() => void savePhotographerWeb()}
-            disabled={savingDetail || !canSavePhotographer}
-            className="mt-0.5 rounded bg-[#103948] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
-          >
-            {savingDetail ? "Guardando…" : "Guardar fotógrafo / estudio"}
-          </button>
-          {photographerSaveSuccess ? (
-            <p className="text-sm font-medium text-green-600">
-              Fotógrafo / estudio guardado correctamente.
+          {canEditOrderNumber ? (
+            <input
+              id="admin-order-number"
+              type="text"
+              value={editForm.order_number}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, order_number: e.target.value }))
+              }
+              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+              placeholder="Ej. 6521"
+            />
+          ) : (
+            <p className="text-base font-medium leading-snug text-[#103948]">
+              {reservation.order_number
+                ? `#${reservation.order_number}`
+                : reservation.google_event_id ?? "—"}
             </p>
-          ) : null}
+          )}
         </div>
       ) : null}
+
+      {showMunicipioField ? (
+        <div className="grid gap-1.5">
+          <label
+            htmlFor="admin-municipio"
+            className="text-sm text-zinc-600 block"
+          >
+            Municipio
+          </label>
+          <input
+            id="admin-municipio"
+            type="text"
+            maxLength={200}
+            value={editForm.municipio}
+            onChange={(e) =>
+              setEditForm((f) => ({ ...f, municipio: e.target.value }))
+            }
+            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+            placeholder="Ej. Monterrey, San Pedro Garza García"
+          />
+        </div>
+      ) : null}
+
+      <div className="grid gap-1.5">
+        <label
+          htmlFor="admin-photographer-studio"
+          className="text-sm text-zinc-600 block"
+        >
+          Fotógrafo / estudio
+        </label>
+        <input
+          id="admin-photographer-studio"
+          type="text"
+          maxLength={500}
+          value={editForm.photographer_studio}
+          onChange={(e) =>
+            setEditForm((f) => ({
+              ...f,
+              photographer_studio: e.target.value,
+            }))
+          }
+          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
+          placeholder="Ej. Estudio Luz o nombre del fotógrafo"
+        />
+      </div>
+
+      {showNotesEditor ? (
+        <AdminInternalNotesField
+          id="edit-notes-admin-block"
+          value={editForm.import_notes}
+          onChange={(import_notes) =>
+            setEditForm((f) => ({ ...f, import_notes }))
+          }
+          label="Notas internas"
+          rows={4}
+          labelClassName="text-sm text-zinc-600 mb-1 block"
+          inputClassName={defaultDetailInputClass}
+          showAdminOnlyHint
+        />
+      ) : null}
+
+      {internalEditError ? (
+        <p className="text-sm text-red-600">{internalEditError}</p>
+      ) : null}
+      {internalSaveSuccess && !internalEditError ? (
+        <p className="text-sm font-medium text-green-600">
+          Detalles de administración guardados correctamente.
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => void saveInternalDetails()}
+        disabled={savingDetail || !canSaveInternalDetail}
+        className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
+      >
+        {savingDetail ? "Guardando…" : saveInternalLabel}
+      </button>
+
+      <ReservationDetailLastEdited reservation={reservation} />
 
       {reservation.created_at ? (
         <div className="grid gap-0.5">
@@ -197,7 +313,7 @@ export function AdminReservationInternalInfo({
                     type="button"
                     onClick={async () => {
                       setValidatingPayment(true);
-                      setEditDetailError(null);
+                      setInternalEditError(null);
                       try {
                         const res = await fetch(
                           `/api/admin/reservations/${reservation.id}/payment-status`,
@@ -205,7 +321,7 @@ export function AdminReservationInternalInfo({
                         );
                         const data = await res.json();
                         if (!data.success) {
-                          setEditDetailError(
+                          setInternalEditError(
                             data.error || "Error al validar pago",
                           );
                           return;
@@ -234,7 +350,7 @@ export function AdminReservationInternalInfo({
                           );
                         }
                       } catch {
-                        setEditDetailError("Error de conexión");
+                        setInternalEditError("Error de conexión");
                       } finally {
                         setValidatingPayment(false);
                       }
@@ -281,10 +397,6 @@ export function AdminReservationInternalInfo({
               <p className="text-zinc-500 text-sm">—</p>
             )}
         </div>
-      ) : null}
-
-      {editDetailError && !isManualClientImport ? (
-        <p className="text-sm text-red-600">{editDetailError}</p>
       ) : null}
     </AdminOnlyInfoBlock>
   );

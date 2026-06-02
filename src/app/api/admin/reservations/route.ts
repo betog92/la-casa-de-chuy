@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
       payment_status: bodyPaymentStatus,
       sendEmail,
       order_number,
+      municipio,
       replaces_reservation_id: bodyReplacesId,
       import_notes: bodyImportNotes,
     } = body;
@@ -203,6 +204,7 @@ export async function POST(request: NextRequest) {
     let finalPaymentMethod: "efectivo" | "transferencia" | null = null;
     let importType: string | null = null;
     let finalOrderNumber: string | null = null;
+    let finalMunicipio: string | null = null;
     let shouldSendEmail = false;
     let paymentStatus: "pending" | "paid" | "not_applicable" = "not_applicable";
 
@@ -250,6 +252,10 @@ export async function POST(request: NextRequest) {
       finalPrice = Number(price);
       finalPrice = Number.isFinite(finalPrice) && finalPrice >= 0 ? finalPrice : 0;
       finalOrderNumber = String(order_number).trim();
+      const municipioTrim = municipio?.toString()?.trim();
+      if (municipioTrim) {
+        finalMunicipio = municipioTrim.slice(0, 200);
+      }
       importType = "manual_client";
     }
 
@@ -359,6 +365,7 @@ export async function POST(request: NextRequest) {
       source: "admin" as const,
       import_type: importType,
       order_number: finalOrderNumber,
+      ...(finalMunicipio !== null && { municipio: finalMunicipio }),
       email: finalEmail,
       name: finalName,
       phone: finalPhone,

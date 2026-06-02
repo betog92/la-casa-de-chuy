@@ -164,6 +164,7 @@ function AdminReservacionesPageInner() {
     payment_method: "efectivo" as "efectivo" | "transferencia",
     sendEmail: true,
     order_number: "",
+    municipio: "",
     payment_state: "pending" as "pending" | "already_paid",
     /** Solo variant renta_vestido: cuadro azul en calendario (todo el día) */
     vestido_title: "",
@@ -539,6 +540,7 @@ function AdminReservacionesPageInner() {
       payment_method: "efectivo",
       sendEmail: true,
       order_number: "",
+      municipio: "",
       payment_state: "pending",
       vestido_title: "",
       vestido_notes: "",
@@ -594,7 +596,7 @@ function AdminReservacionesPageInner() {
   const submitNewReservation = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError("");
-    const { variant, date, startTime, name, email, phone, price, payment_method, sendEmail, order_number } = newForm;
+    const { variant, date, startTime, name, email, phone, price, payment_method, sendEmail, order_number, municipio } = newForm;
     if (variant === "renta_vestido") {
       if (!date) {
         setCreateError("Selecciona una fecha.");
@@ -670,6 +672,8 @@ function AdminReservacionesPageInner() {
       } else {
         payload.name = name!.trim();
         payload.order_number = order_number!.trim();
+        const municipioTrim = municipio?.trim();
+        if (municipioTrim) payload.municipio = municipioTrim;
         if (email?.trim()) payload.email = email.trim();
         if (phone?.trim()) payload.phone = phone.trim();
         if (price > 0) payload.price = price;
@@ -1145,6 +1149,10 @@ function AdminReservacionesPageInner() {
                   <div>
                     <label className="mb-1 block text-xs font-medium text-zinc-600">Número de orden *</label>
                     <input type="text" value={newForm.order_number} onChange={(e) => setNewForm((f) => ({ ...f, order_number: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 6521" required />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Municipio (opcional)</label>
+                    <input type="text" value={newForm.municipio} onChange={(e) => setNewForm((f) => ({ ...f, municipio: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. Monterrey" />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium text-zinc-600">Email (opcional)</label>
