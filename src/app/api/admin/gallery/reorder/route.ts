@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import {
   successResponse,
   unauthorizedResponse,
@@ -13,9 +13,11 @@ import { isUuidString } from "@/utils/uuid";
  * PATCH /api/admin/gallery/reorder — body: { orderedIds: string[] }
  */
 export async function PATCH(request: Request) {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) return unauthorizedResponse("Debes iniciar sesión");
-  if (!isAdmin) return forbiddenResponse("Sin permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden gestionar la galería");
+  }
 
   const body = (await request.json().catch(() => null)) as {
     orderedIds?: unknown;

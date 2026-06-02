@@ -1,6 +1,11 @@
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import { syncAppointlyEvents } from "@/lib/google-calendar-sync";
-import { successResponse, errorResponse, unauthorizedResponse } from "@/utils/api-response";
+import {
+  successResponse,
+  errorResponse,
+  unauthorizedResponse,
+  forbiddenResponse,
+} from "@/utils/api-response";
 import { isCronSecretAuthorized } from "@/utils/cron-auth";
 
 /**
@@ -13,9 +18,14 @@ import { isCronSecretAuthorized } from "@/utils/cron-auth";
  */
 export async function POST(request: Request) {
   if (!isCronSecretAuthorized(request)) {
-    const { isAdmin } = await requireAdmin();
-    if (!isAdmin) {
-      return unauthorizedResponse("No tienes permisos de administrador");
+    const { user, isSuperAdmin } = await requireSuperAdmin();
+    if (!user) {
+      return unauthorizedResponse("Debes iniciar sesión");
+    }
+    if (!isSuperAdmin) {
+      return forbiddenResponse(
+        "Solo super administradores (familia) pueden sincronizar el calendario",
+      );
     }
   }
 

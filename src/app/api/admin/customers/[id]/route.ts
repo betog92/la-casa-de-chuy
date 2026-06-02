@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   successResponse,
   errorResponse,
   notFoundResponse,
   unauthorizedResponse,
+  forbiddenResponse,
   validationErrorResponse,
 } from "@/utils/api-response";
 import { calculateLoyaltyLevel, type LoyaltyLevel } from "@/utils/loyalty";
@@ -138,9 +139,12 @@ export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { isAdmin } = await requireAdmin();
-  if (!isAdmin) {
-    return unauthorizedResponse("No tienes permisos de administrador");
+  const { user, isSuperAdmin } = await requireSuperAdmin();
+  if (!user) {
+    return unauthorizedResponse("Debes iniciar sesión");
+  }
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden ver clientes");
   }
 
   const { id } = await context.params;

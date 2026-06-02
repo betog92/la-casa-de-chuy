@@ -28,15 +28,20 @@ import {
  *    transitorio) y el admin quiere feedback inmediato.
  *
  * En ambos casos el resultado real lo decide `processRefundRow`; si vuelve a
- * fallar, el cron retoma el reintento según `next_retry_at`. Solo admin.
+ * fallar, el cron retoma el reintento según `next_retry_at`. Admin del panel
+ * (familia o empleada) desde el detalle de la reserva; el listado global
+ * /admin/reembolsos sigue solo familia.
  */
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { isAdmin } = await requireAdmin();
+  const { user, isAdmin } = await requireAdmin();
+  if (!user) {
+    return unauthorizedResponse("Debes iniciar sesión");
+  }
   if (!isAdmin) {
-    return unauthorizedResponse("Solo administradores");
+    return unauthorizedResponse("Solo administradores pueden reintentar reembolsos");
   }
 
   const { id } = await params;

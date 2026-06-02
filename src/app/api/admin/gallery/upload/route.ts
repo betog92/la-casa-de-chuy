@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import {
   successResponse,
   unauthorizedResponse,
@@ -30,9 +30,11 @@ function extFromMime(mime: string): string {
  * POST /api/admin/gallery/upload — multipart field "file".
  */
 export async function POST(request: Request) {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) return unauthorizedResponse("Debes iniciar sesión");
-  if (!isAdmin) return forbiddenResponse("Sin permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden gestionar la galería");
+  }
 
   let formData: FormData;
   try {

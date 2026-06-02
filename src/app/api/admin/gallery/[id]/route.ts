@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import {
   successResponse,
   unauthorizedResponse,
@@ -19,9 +19,11 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) return unauthorizedResponse("Debes iniciar sesión");
-  if (!isAdmin) return forbiddenResponse("Sin permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden gestionar la galería");
+  }
 
   const { id } = await params;
   if (!id || typeof id !== "string" || !isUuidString(id)) {
@@ -87,9 +89,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) return unauthorizedResponse("Debes iniciar sesión");
-  if (!isAdmin) return forbiddenResponse("Sin permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden gestionar la galería");
+  }
 
   const { id } = await params;
   if (!id || typeof id !== "string" || !isUuidString(id)) {

@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import {
   successResponse,
   unauthorizedResponse,
@@ -19,9 +19,11 @@ import { isAllowedMapsEmbedUrl } from "@/utils/maps-embed";
  * GET /api/admin/location — contenido actual (o valores por defecto).
  */
 export async function GET() {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) return unauthorizedResponse("Debes iniciar sesión");
-  if (!isAdmin) return forbiddenResponse("Sin permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden editar la ubicación");
+  }
 
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
@@ -43,9 +45,11 @@ export async function GET() {
  * PUT /api/admin/location — guarda JSON de ubicación.
  */
 export async function PUT(request: Request) {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) return unauthorizedResponse("Debes iniciar sesión");
-  if (!isAdmin) return forbiddenResponse("Sin permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden editar la ubicación");
+  }
 
   const body = (await request.json().catch(() => null)) as
     | Partial<LocationContent>

@@ -18,6 +18,8 @@ export type CancelledReservationDetailsProps = {
   reservationEmail?: string | null;
   /** Solo en detalle con sesión admin (reintentar reembolso, etc.) */
   adminSection?: ReactNode;
+  /** Ocultar montos e IDs de reembolso (empleadas admin). */
+  hideRefundFinancials?: boolean;
   className?: string;
 };
 
@@ -49,9 +51,13 @@ export function CancelledReservationDetails({
   reservationUserId,
   reservationEmail,
   adminSection,
+  hideRefundFinancials = false,
   className = "",
 }: CancelledReservationDetailsProps) {
-  const hasRefund = (refundAmount ?? 0) > 0;
+  const hasRefundAmount = (refundAmount ?? 0) > 0;
+  const showRefundAmount = !hideRefundFinancials && hasRefundAmount;
+  const showRefundMeta =
+    showRefundAmount || Boolean(refundStatus) || Boolean(refundId);
   const cancellationFooter =
     cancelledAt != null && cancelledAt !== ""
       ? formatCancellationAttribution(
@@ -71,14 +77,16 @@ export function CancelledReservationDetails({
       </h3>
 
       <div className="space-y-3 text-sm">
-        {hasRefund && (
+        {showRefundMeta && (
           <>
-            <div>
-              <p className="text-red-700 font-medium mb-1">Monto del reembolso</p>
-              <p className="text-red-900 font-semibold tabular-nums">
-                ${formatCurrency(refundAmount!)} MXN
-              </p>
-            </div>
+            {showRefundAmount && (
+              <div>
+                <p className="text-red-700 font-medium mb-1">Monto del reembolso</p>
+                <p className="text-red-900 font-semibold tabular-nums">
+                  ${formatCurrency(refundAmount!)} MXN
+                </p>
+              </div>
+            )}
 
             {refundStatus && (
               <div className="flex flex-wrap items-center gap-2">
@@ -93,7 +101,7 @@ export function CancelledReservationDetails({
               </div>
             )}
 
-            {refundId && (
+            {refundId && !hideRefundFinancials && (
               <p className="text-red-900 font-mono text-xs mt-1 break-all">
                 ID de reembolso: {refundId}
               </p>

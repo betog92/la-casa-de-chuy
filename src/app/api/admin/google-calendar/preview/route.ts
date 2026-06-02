@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import { fetchGoogleCalendarEvents } from "@/lib/google-calendar-sync";
 import { successResponse, errorResponse, unauthorizedResponse } from "@/utils/api-response";
 
@@ -10,9 +10,9 @@ import { successResponse, errorResponse, unauthorizedResponse } from "@/utils/ap
  * Usar para validar que los datos se ven correctos antes de importar.
  */
 export async function GET() {
-  const { isAdmin } = await requireAdmin();
-  if (!isAdmin) {
-    return unauthorizedResponse("No tienes permisos de administrador");
+  const { isSuperAdmin } = await requireSuperAdmin();
+  if (!isSuperAdmin) {
+    return unauthorizedResponse("No tienes permisos de super administrador");
   }
 
   try {

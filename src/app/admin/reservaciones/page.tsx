@@ -28,6 +28,7 @@ import {
   getReservationStatusLabel,
 } from "@/utils/reservation-status-display";
 import { isOriginFilter } from "@/lib/admin/reservation-filters";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import {
   ALVERO_DURATION_MIN,
   DEFAULT_DURATION_MIN,
@@ -112,6 +113,7 @@ export default function AdminReservacionesPage() {
 
 function AdminReservacionesPageInner() {
   const router = useRouter();
+  const { isSuperAdmin } = useIsAdmin();
   // Lee filtros iniciales del URL (?search=, ?email=, ?status=, ?dateFrom=, ?dateTo=, ?origin=)
   // para que enlaces como /admin/reservaciones?search=foo@bar.com filtren al cargar.
   const sp = useSearchParams();
@@ -133,7 +135,6 @@ function AdminReservacionesPageInner() {
     () => sp.get("search") || sp.get("email") || "",
   );
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero" | "renta_vestido";
   const [showNewModal, setShowNewModal] = useState(false);
@@ -193,12 +194,6 @@ function AdminReservacionesPageInner() {
     const d = addMonths(getMonterreyDate(), 6);
     d.setHours(23, 59, 59, 999);
     return d;
-  }, []);
-
-  useEffect(() => {
-    axios.get("/api/admin/me").then((res) => {
-      if (res.data?.success && res.data?.isSuperAdmin) setIsSuperAdmin(true);
-    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -732,15 +727,13 @@ function AdminReservacionesPageInner() {
             <option value="completed">Completadas</option>
           </select>
         </div>
-        {isSuperAdmin && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500">Pago</label>
-            <select value={filters.paymentStatus} onChange={(e) => setFilters((f) => ({ ...f, paymentStatus: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
-              <option value="">Todos</option>
-              <option value="pending">Pago pendiente</option>
-            </select>
-          </div>
-        )}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-500">Pago</label>
+          <select value={filters.paymentStatus} onChange={(e) => setFilters((f) => ({ ...f, paymentStatus: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
+            <option value="">Todos</option>
+            <option value="pending">Pago pendiente</option>
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -1093,17 +1086,27 @@ function AdminReservacionesPageInner() {
                   </div>
                   <div>
                     <p className="mb-2 text-xs font-medium text-zinc-600">Estado del pago</p>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input type="radio" name="payment_state" checked={newForm.payment_state === "pending"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "pending" }))} className="rounded-full border-zinc-300" />
-                        <span className="text-sm">Cliente aún no ha pagado</span>
-                      </label>
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input type="radio" name="payment_state" checked={newForm.payment_state === "already_paid"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "already_paid" }))} className="rounded-full border-zinc-300" />
-                        <span className="text-sm">Cliente ya pagó (efectivo/transferencia)</span>
-                      </label>
-                    </div>
-                    <p className="mt-1 text-xs text-zinc-500">Nancy podrá validar el pago después.</p>
+                    {isSuperAdmin ? (
+                      <>
+                        <div className="flex flex-wrap gap-4">
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <input type="radio" name="payment_state" checked={newForm.payment_state === "pending"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "pending" }))} className="rounded-full border-zinc-300" />
+                            <span className="text-sm">Cliente aún no ha pagado</span>
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <input type="radio" name="payment_state" checked={newForm.payment_state === "already_paid"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "already_paid" }))} className="rounded-full border-zinc-300" />
+                            <span className="text-sm">Cliente ya pagó (efectivo/transferencia)</span>
+                          </label>
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Si aún no pagó, aparecerá en Pagos manuales para validar después.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        El pago quedará pendiente y la familia lo validará en Pagos manuales, aunque el cliente ya haya pagado en el momento.
+                      </p>
+                    )}
                   </div>
                   <label className="flex cursor-pointer items-center gap-2">
                     <input type="checkbox" checked={newForm.sendEmail} onChange={(e) => setNewForm((f) => ({ ...f, sendEmail: e.target.checked }))} className="rounded border-zinc-300" />

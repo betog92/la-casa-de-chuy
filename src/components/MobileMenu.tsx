@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ADMIN_NAV_ITEMS } from "@/constants/admin-nav";
+import { filterAdminNavItems } from "@/lib/auth/admin-access";
 import { navigation } from "@/constants/navigation";
 import { getPublicBookingsHref } from "@/lib/public-bookings-paused";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,7 +18,8 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const { isAdmin, isSuperAdmin, loading: adminLoading } = useIsAdmin();
+  const adminNavItems = filterAdminNavItems(isSuperAdmin);
 
   // Cerrar menú al presionar Escape
   useEffect(() => {
@@ -146,7 +147,7 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                     {isAdmin ? (
                       <>
                         <div className="border-t border-zinc-200 mt-2 pt-2" aria-hidden="true" />
-                        {ADMIN_NAV_ITEMS.map((item) => {
+                        {adminNavItems.map((item) => {
                           const isActive =
                             pathname === item.href ||
                             (item.href !== "/admin" && pathname.startsWith(item.href));

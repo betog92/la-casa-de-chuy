@@ -139,7 +139,7 @@ type Variant = "cliente" | "reservado_alvero" | "cita_alvero";
  * variant: cliente (efectivo/transferencia) | reservado_alvero (bloqueo) | cita_alvero (sesión Alvero + orden)
  */
 export async function POST(request: NextRequest) {
-  const { user: adminUser, isAdmin } = await requireAdmin();
+  const { user: adminUser, isAdmin, isSuperAdmin } = await requireAdmin();
   if (!isAdmin) {
     return unauthorizedResponse("No tienes permisos de administrador");
   }
@@ -227,8 +227,10 @@ export async function POST(request: NextRequest) {
       finalPrice = priceNum;
       finalPaymentMethod = payment_method as "efectivo" | "transferencia";
       shouldSendEmail = Boolean(sendEmail);
+      // Empleadas: siempre pending → cola de pagos manuales para que familia valide.
+      // Familia puede marcar pagado al crear si ya recibieron el cobro.
       paymentStatus =
-        bodyPaymentStatus === "paid" ? "paid" : "pending";
+        isSuperAdmin && bodyPaymentStatus === "paid" ? "paid" : "pending";
     } else if (variant === "reservado_alvero") {
       finalName = "Espacio reservado para Alvero";
       finalEmail = PLACEHOLDER_EMAIL;
@@ -339,6 +341,8 @@ export async function POST(request: NextRequest) {
     }
 
     const endTime = calculateEndTime(startTime, durationMin);
+    const paidAtCreation =
+      variant === "cliente" && paymentStatus === "paid" && isSuperAdmin;
     const reservationData = {
       source: "admin" as const,
       import_type: importType,
@@ -354,6 +358,10 @@ export async function POST(request: NextRequest) {
       payment_id: null,
       payment_method: finalPaymentMethod,
       payment_status: paymentStatus,
+      ...(paidAtCreation && {
+        payment_validated_at: new Date().toISOString(),
+        payment_validated_by_user_id: adminUser?.id ?? null,
+      }),
       status: "confirmed" as const,
       user_id: userId,
       created_by_user_id: originalCreatedByUserId,

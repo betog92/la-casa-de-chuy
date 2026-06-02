@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/auth/admin";
+import { lookupAdminRolesForUserId, requireAdmin } from "@/lib/auth/admin";
 import {
   successResponse,
   errorResponse,
@@ -67,8 +67,10 @@ export async function GET(
     // Type assertion para ayudar a TypeScript
     const reservationData = data as ReservationRow;
 
-    // Admins pueden ver cualquier reserva (solo consultar si hay sesión para evitar llamada innecesaria)
-    const isAdmin = user ? (await requireAdmin()).isAdmin : false;
+    // Admins pueden ver cualquier reserva (una sola consulta de roles tras getUser)
+    const isAdmin = user?.id
+      ? (await lookupAdminRolesForUserId(user.id)).isAdmin
+      : false;
 
     // Si hay usuario autenticado, verificar pertenencia (o ser admin); si no, permitir (flujo invitado/confirmación)
     if (

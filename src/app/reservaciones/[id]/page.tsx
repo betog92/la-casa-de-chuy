@@ -59,7 +59,13 @@ export default function ReservationDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const reservationId = params.id as string;
-  const { user, loading: authLoading } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    isAdmin,
+    isSuperAdmin,
+    isAdminLoading,
+  } = useAuth();
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null); // Solo para errores de carga inicial
@@ -69,10 +75,8 @@ export default function ReservationDetailsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   /** Evita mostrar el panel de Monedas como "cliente" antes de saber si es admin. */
-  const [adminMeResolved, setAdminMeResolved] = useState(false);
+  const adminMeResolved = !user?.id || !isAdminLoading;
   const [validatingPayment, setValidatingPayment] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
@@ -97,37 +101,6 @@ export default function ReservationDetailsPage() {
   const [retryRefundError, setRetryRefundError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const previousReservationIdRef = useRef<string | null>(null);
-
-  // Verificar si el usuario es admin y super admin (para mostrar datos y validar pago)
-  useEffect(() => {
-    if (!user?.id) {
-      setIsAdmin(false);
-      setIsSuperAdmin(false);
-      setAdminMeResolved(true);
-      return;
-    }
-    setAdminMeResolved(false);
-    let cancelled = false;
-    fetch("/api/admin/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        setIsAdmin(data.success === true && data.isAdmin === true);
-        setIsSuperAdmin(data.success === true && data.isSuperAdmin === true);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setIsAdmin(false);
-          setIsSuperAdmin(false);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setAdminMeResolved(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   // Sincronizar formulario de edición con la reserva cargada
   useEffect(() => {

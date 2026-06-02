@@ -7,6 +7,7 @@ const linkClass =
 
 type UserMenuLinksProps = {
   isAdmin: boolean;
+  isSuperAdmin?: boolean;
   onNavigate?: () => void;
 };
 
@@ -14,11 +15,16 @@ type UserMenuLinksProps = {
  * Enlaces del menú de usuario (Header desktop).
  * Admin: Panel admin + Vista cliente. Cliente: Mi cuenta.
  */
-export function UserMenuLinks({ isAdmin, onNavigate }: UserMenuLinksProps) {
+export function UserMenuLinks({
+  isAdmin,
+  isSuperAdmin = false,
+  onNavigate,
+}: UserMenuLinksProps) {
   if (isAdmin) {
+    const adminHome = isSuperAdmin ? "/admin" : "/admin/calendario";
     return (
       <>
-        <Link href="/admin" className={linkClass} onClick={onNavigate}>
+        <Link href={adminHome} className={linkClass} onClick={onNavigate}>
           Panel admin
         </Link>
         <Link href="/account" className={linkClass} onClick={onNavigate}>

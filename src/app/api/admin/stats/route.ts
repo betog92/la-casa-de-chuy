@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import {
   excludeManualAvailableSlots,
   filterNativeReservations,
@@ -27,12 +27,12 @@ function sumConfirmedRevenue(rows: { price: number }[]) {
  * Obtiene estadísticas para el dashboard de admin.
  */
 export async function GET() {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) {
     return unauthorizedResponse("Debes iniciar sesión");
   }
-  if (!isAdmin) {
-    return forbiddenResponse("No tienes permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden ver el dashboard");
   }
 
   try {

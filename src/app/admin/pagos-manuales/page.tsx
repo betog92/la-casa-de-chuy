@@ -11,6 +11,7 @@ import {
   formatDisplayDateShort,
   formatTimeRange,
 } from "@/utils/formatters";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 type PaymentStatus = "pending" | "paid";
 
@@ -93,6 +94,8 @@ function isStale(iso: string | null, days = 3): boolean {
 }
 
 export default function AdminManualPaymentsPage() {
+  const { isSuperAdmin, loading: roleLoading } = useIsAdmin();
+  const roleKnown = !roleLoading;
   const [rows, setRows] = useState<ManualPaymentRow[]>([]);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [paidInWindow, setPaidInWindow] = useState(0);
@@ -102,9 +105,6 @@ export default function AdminManualPaymentsPage() {
   const [activeStatuses, setActiveStatuses] = useState<PaymentStatus[]>([
     "pending",
   ]);
-  // `null` = aún no sabemos el rol (evita flicker de "Solo super admin"
-  // durante los ~ms iniciales que tarda /api/admin/me en responder).
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
   const [busyRowId, setBusyRowId] = useState<number | null>(null);
   const [rowFeedback, setRowFeedback] = useState<
     Record<number, { type: "ok" | "error"; message: string }>
@@ -143,20 +143,6 @@ export default function AdminManualPaymentsPage() {
     },
     [],
   );
-
-  useEffect(() => {
-    axios
-      .get("/api/admin/me")
-      .then((res) => {
-        if (!mountedRef.current) return;
-        const allowed =
-          res.data?.success === true && res.data?.isSuperAdmin === true;
-        setIsSuperAdmin(allowed);
-      })
-      .catch(() => {
-        if (mountedRef.current) setIsSuperAdmin(false);
-      });
-  }, []);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -235,7 +221,7 @@ export default function AdminManualPaymentsPage() {
   };
 
   const handleValidate = async (row: ManualPaymentRow) => {
-    if (isSuperAdmin !== true) return;
+    if (!isSuperAdmin) return;
     if (busyRowId !== null) return;
     setBusyRowId(row.id);
     setRowFeedback((prev) => {
@@ -322,7 +308,7 @@ export default function AdminManualPaymentsPage() {
         <p className="mt-1 text-zinc-600">
           Reservas creadas desde el panel (efectivo / transferencia / otro)
           que requieren validación de pago.{" "}
-          {isSuperAdmin === false && (
+          {roleKnown && !isSuperAdmin && (
             <span className="text-zinc-500">
               Solo la super administradora puede marcar como pagado.
             </span>
@@ -612,7 +598,7 @@ export default function AdminManualPaymentsPage() {
                       </td>
                       <td className="px-4 py-3 sm:px-5">
                         {row.payment_status === "pending" ? (
-                          isSuperAdmin === true ? (
+                          isSuperAdmin ? (
                             <button
                               type="button"
                               onClick={() => void handleValidate(row)}
@@ -623,7 +609,7 @@ export default function AdminManualPaymentsPage() {
                                 ? "Validando…"
                                 : "Marcar pagado"}
                             </button>
-                          ) : isSuperAdmin === false ? (
+                          ) : roleKnown ? (
                             <span className="text-xs text-zinc-400">
                               Solo super admin
                             </span>

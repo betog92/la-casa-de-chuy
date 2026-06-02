@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   successResponse,
@@ -41,17 +41,17 @@ import {
  *     limit: number,
  *   }
  *
- * Auth: cualquier admin puede leer. Validar (marcar pagado) requiere super admin
+ * Auth: solo super admin (familia). Validar (marcar pagado) usa el mismo rol
  *       y se hace contra el endpoint existente
  *       `PATCH /api/admin/reservations/[id]/payment-status`.
  */
 export async function GET(request: NextRequest) {
-  const { user, isAdmin } = await requireAdmin();
+  const { user, isSuperAdmin } = await requireSuperAdmin();
   if (!user) {
     return unauthorizedResponse("Debes iniciar sesión");
   }
-  if (!isAdmin) {
-    return forbiddenResponse("No tienes permisos de administrador");
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden ver pagos manuales");
   }
 
   const url = new URL(request.url);

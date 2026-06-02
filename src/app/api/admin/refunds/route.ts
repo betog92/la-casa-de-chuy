@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
 
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireSuperAdmin } from "@/lib/auth/admin";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   errorResponse,
   successResponse,
   unauthorizedResponse,
+  forbiddenResponse,
   validationErrorResponse,
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
@@ -43,9 +44,12 @@ export const dynamic = "force-dynamic";
  * Solo admin.
  */
 export async function GET(request: NextRequest) {
-  const { isAdmin } = await requireAdmin();
-  if (!isAdmin) {
-    return unauthorizedResponse("Solo administradores");
+  const { user, isSuperAdmin } = await requireSuperAdmin();
+  if (!user) {
+    return unauthorizedResponse("Debes iniciar sesión");
+  }
+  if (!isSuperAdmin) {
+    return forbiddenResponse("Solo super administradores (familia) pueden ver reembolsos");
   }
 
   const { searchParams } = new URL(request.url);

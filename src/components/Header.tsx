@@ -17,7 +17,7 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const { isAdmin, isSuperAdmin, loading: adminLoading } = useIsAdmin();
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Cerrar menú de usuario al hacer clic fuera
@@ -133,6 +133,7 @@ export default function Header() {
                     </div>
                     <UserMenuLinks
                       isAdmin={isAdmin}
+                      isSuperAdmin={isSuperAdmin}
                       onNavigate={() => setUserMenuOpen(false)}
                     />
                     <button
