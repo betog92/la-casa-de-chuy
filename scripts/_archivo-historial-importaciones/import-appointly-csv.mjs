@@ -16,7 +16,7 @@ import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(__dirname, "../..");
 
 // ── Cargar .env.local ────────────────────────────────────────────────────────
 const envPath = resolve(ROOT, ".env.local");

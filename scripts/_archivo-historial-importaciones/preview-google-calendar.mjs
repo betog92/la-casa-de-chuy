@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 import { google } from "googleapis";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, "../.env.local");
+const envPath = resolve(__dirname, "../../.env.local");
 const envLines = readFileSync(envPath, "utf-8").split("\n");
 for (const line of envLines) {
   const trimmed = line.trim();

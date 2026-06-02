@@ -9,7 +9,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { google } from "googleapis";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 for (const line of readFileSync(resolve(ROOT, ".env.local"), "utf-8").split("\n")) {
   const t = line.trim();
