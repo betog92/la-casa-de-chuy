@@ -126,7 +126,17 @@ export async function GET(
     const importNotesEditedByUserId = (reservationData as { import_notes_edited_by_user_id?: string | null }).import_notes_edited_by_user_id;
     const paymentValidatedByUserId = (reservationData as { payment_validated_by_user_id?: string | null }).payment_validated_by_user_id;
     const historyUserIds = historyList.map((h) => h.rescheduled_by_user_id).filter(Boolean) as string[];
-    const allUserIds = [...new Set([createdByUserId, rescheduledByUserId, cancelledByUserId, importNotesEditedByUserId, paymentValidatedByUserId, ...historyUserIds].filter(Boolean))] as string[];
+    const allUserIds = [
+      ...new Set(
+        [
+          createdByUserId,
+          rescheduledByUserId,
+          cancelledByUserId,
+          ...(isAdmin ? [importNotesEditedByUserId, paymentValidatedByUserId] : []),
+          ...historyUserIds,
+        ].filter(Boolean),
+      ),
+    ] as string[];
     let usersMap: Record<string, { id: string; name: string | null; email: string }> = {};
     if (allUserIds.length > 0) {
       const { data: usersData } = await supabase
@@ -154,7 +164,7 @@ export async function GET(
       additional_payment_method: h.additional_payment_method,
     }));
 
-    const reservation = {
+    const reservation: Record<string, unknown> = {
       ...reservationData,
       status: getEffectiveReservationStatus(
         reservationData.status,
@@ -163,10 +173,18 @@ export async function GET(
       created_by,
       rescheduled_by,
       cancelled_by,
-      import_notes_edited_by,
-      payment_validated_by,
       reschedule_history,
+      ...(isAdmin && {
+        import_notes_edited_by,
+        payment_validated_by,
+      }),
     };
+
+    if (!isAdmin) {
+      delete reservation.import_notes;
+      delete reservation.import_notes_edited_at;
+      delete reservation.import_notes_edited_by_user_id;
+    }
 
     return successResponse({
       reservation,
@@ -295,7 +313,7 @@ export async function PATCH(
     if (body.import_notes !== undefined) {
       if (!canAdminEditImportNotes(existing)) {
         return validationErrorResponse(
-          "Los detalles de la cita solo se editan en reservas manuales o importadas",
+          "Las notas internas no se pueden editar en este tipo de reserva",
         );
       }
       const raw =

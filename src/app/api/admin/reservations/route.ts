@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
       sendEmail,
       order_number,
       replaces_reservation_id: bodyReplacesId,
+      import_notes: bodyImportNotes,
     } = body;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -343,6 +344,17 @@ export async function POST(request: NextRequest) {
     const endTime = calculateEndTime(startTime, durationMin);
     const paidAtCreation =
       variant === "cliente" && paymentStatus === "paid" && isSuperAdmin;
+
+    let importNotes: string | null = null;
+    if (
+      (variant === "cliente" || variant === "cita_alvero") &&
+      bodyImportNotes != null &&
+      bodyImportNotes !== ""
+    ) {
+      const raw = String(bodyImportNotes).trim();
+      importNotes = raw ? raw.slice(0, 10000) : null;
+    }
+
     const reservationData = {
       source: "admin" as const,
       import_type: importType,
@@ -373,6 +385,7 @@ export async function POST(request: NextRequest) {
       referral_discount: 0,
       discount_code: null,
       discount_code_discount: 0,
+      ...(importNotes !== null && { import_notes: importNotes }),
     };
 
     let reservationId: number;

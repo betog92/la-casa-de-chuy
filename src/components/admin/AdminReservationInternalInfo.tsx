@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { AdminOnlyInfoBlock } from "@/components/admin/AdminOnlyInfoBlock";
 import type { Reservation } from "@/types/reservation";
 import { sessionTypeLabel } from "@/utils/session-type";
+import { buildReservationDetailPatch } from "@/lib/admin/reservation-contact-edit";
 
 type EditForm = {
   name: string;
@@ -66,7 +67,17 @@ export function AdminReservationInternalInfo({
       reservation.source === "admin") &&
     reservation.import_type === "manual_client";
 
+  const photographerPatch = useMemo(
+    () =>
+      buildReservationDetailPatch(reservation, editForm, {
+        includePhotographer: true,
+      }),
+    [reservation, editForm.photographer_studio],
+  );
+  const canSavePhotographer = Object.keys(photographerPatch).length > 0;
+
   const savePhotographerWeb = async () => {
+    if (!canSavePhotographer) return;
     setEditDetailError(null);
     setPhotographerSaveSuccess(false);
     setSavingDetail(true);
@@ -74,9 +85,7 @@ export function AdminReservationInternalInfo({
       const res = await fetch(`/api/reservations/${reservation.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photographer_studio: editForm.photographer_studio.trim() || null,
-        }),
+        body: JSON.stringify(photographerPatch),
       });
       const data = await res.json();
       if (!data.success) {
@@ -141,7 +150,7 @@ export function AdminReservationInternalInfo({
           <button
             type="button"
             onClick={() => void savePhotographerWeb()}
-            disabled={savingDetail}
+            disabled={savingDetail || !canSavePhotographer}
             className="mt-0.5 rounded bg-[#103948] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
           >
             {savingDetail ? "Guardando…" : "Guardar fotógrafo / estudio"}

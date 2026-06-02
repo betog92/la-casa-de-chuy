@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format, parse, addDays, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
@@ -52,9 +52,17 @@ import { RescheduleAdditionalRow } from "@/components/RescheduleAdditionalRow";
 import RescheduleModal from "@/components/RescheduleModal";
 import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import { AdminReservationInternalInfo } from "@/components/admin/AdminReservationInternalInfo";
+import {
+  AdminInternalNotesField,
+  defaultDetailInputClass,
+} from "@/components/admin/AdminInternalNotesField";
 import type { Reservation } from "@/types/reservation";
 import { durationMinutesBetween } from "@/utils/reservation-helpers";
-import { canSuperAdminEditReservationContact } from "@/lib/admin/reservation-contact-edit";
+import {
+  buildReservationDetailPatch,
+  canSuperAdminEditReservationContact,
+  showAdminNotesInContactSection,
+} from "@/lib/admin/reservation-contact-edit";
 
 const contactInputClass =
   "w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]";
@@ -644,10 +652,62 @@ export default function ReservationDetailsPage() {
       ? "Número de orden"
       : "Orden (web anterior)";
 
+  const showAdminNotesEditor =
+    reservation != null && showAdminNotesInContactSection(reservation);
+
+  const alveroDetailPatch = useMemo(() => {
+    if (!reservation) return {};
+    return buildReservationDetailPatch(reservation, editForm, {
+      includeContact: canEditContact,
+      includeNotes: true,
+      includePhotographer: true,
+    });
+  }, [
+    reservation,
+    editForm.name,
+    editForm.email,
+    editForm.phone,
+    editForm.order_number,
+    editForm.import_notes,
+    editForm.photographer_studio,
+    canEditContact,
+  ]);
+
+  const chuyDetailPatch = useMemo(() => {
+    if (!reservation) return {};
+    return buildReservationDetailPatch(reservation, editForm, {
+      includeContact: canEditContact,
+      includeNotes: showAdminNotesEditor,
+    });
+  }, [
+    reservation,
+    editForm.name,
+    editForm.email,
+    editForm.phone,
+    editForm.order_number,
+    editForm.import_notes,
+    canEditContact,
+    showAdminNotesEditor,
+  ]);
+
+  const canSaveAlveroDetail = Object.keys(alveroDetailPatch).length > 0;
+  const canSaveChuyDetail = Object.keys(chuyDetailPatch).length > 0;
+
+  useEffect(() => {
+    if (canSaveAlveroDetail || canSaveChuyDetail) {
+      setEditDetailError(null);
+    }
+  }, [canSaveAlveroDetail, canSaveChuyDetail]);
+
   const patchReservationDetails = async (
     fields: Record<string, string | null | undefined>,
   ) => {
     if (!reservation) return;
+    if (Object.keys(fields).length === 0) {
+      setEditDetailError("No hay cambios para guardar");
+      setSaveDetailSuccess(false);
+      return;
+    }
     setEditDetailError(null);
     setSaveDetailSuccess(false);
     setSavingDetail(true);
@@ -953,17 +1013,18 @@ export default function ReservationDetailsPage() {
                         placeholder="Ej. Estudio Luz o nombre del fotógrafo"
                       />
                     </div>
-                    <div>
-                      <label htmlFor="edit-notes" className="text-sm text-zinc-600 mb-1 block">Detalles de la cita</label>
-                      <textarea
-                        id="edit-notes"
-                        value={editForm.import_notes}
-                        onChange={(e) => setEditForm((f) => ({ ...f, import_notes: e.target.value }))}
-                        rows={4}
-                        maxLength={10000}
-                        className="w-full rounded border border-zinc-300 px-3 py-2 text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-                      />
-                    </div>
+                    <AdminInternalNotesField
+                      id="edit-notes-alvero"
+                      value={editForm.import_notes}
+                      onChange={(import_notes) =>
+                        setEditForm((f) => ({ ...f, import_notes }))
+                      }
+                      label="Notas internas"
+                      rows={4}
+                      labelClassName="text-sm text-zinc-600 mb-1 block"
+                      inputClassName={defaultDetailInputClass}
+                      showAdminOnlyHint
+                    />
                     {editDetailError && (
                       <p className="text-sm text-red-600">{editDetailError}</p>
                     )}
@@ -973,28 +1034,16 @@ export default function ReservationDetailsPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        void patchReservationDetails({
-                          ...(canEditContact
-                            ? {
-                                name: editForm.name.trim(),
-                                email: editForm.email.trim(),
-                                phone: editForm.phone.trim(),
-                                order_number: editForm.order_number.trim() || null,
-                              }
-                            : {}),
-                          import_notes: editForm.import_notes || null,
-                          photographer_studio:
-                            editForm.photographer_studio.trim() || null,
-                        })
+                        void patchReservationDetails(alveroDetailPatch)
                       }
-                      disabled={savingDetail}
+                      disabled={savingDetail || !canSaveAlveroDetail}
                       className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
                     >
                       {savingDetail
                         ? "Guardando…"
                         : canEditContact
-                          ? "Guardar datos y detalles"
-                          : "Guardar detalles de la cita"}
+                          ? "Guardar datos y notas"
+                          : "Guardar notas"}
                     </button>
                   </>
                 ) : (
@@ -1006,7 +1055,7 @@ export default function ReservationDetailsPage() {
                       editable={canEditContact}
                       orderLabel={contactOrderLabel}
                     />
-                    {reservation.source === "web" && isSuperAdmin && (
+                    {reservation.source === "web" && (
                       <p className="text-xs text-zinc-500">
                         Los datos personales de reservas hechas en la página web no se pueden editar.
                       </p>
@@ -1016,38 +1065,49 @@ export default function ReservationDetailsPage() {
                         Puedes corregir los datos del cliente si hubo un error al registrar la cita manual.
                       </p>
                     )}
-                    {(reservation.source === "google_import" || reservation.source === "admin") && reservation.import_notes && !canEditContact && (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">Detalles de la cita</p>
-                        <p className="text-base font-medium text-[#103948] whitespace-pre-line">
-                          {reservation.import_notes}
-                        </p>
-                      </div>
+                    {showAdminNotesEditor && (
+                      <AdminInternalNotesField
+                        id="edit-notes-chuy"
+                        value={editForm.import_notes}
+                        onChange={(import_notes) =>
+                          setEditForm((f) => ({ ...f, import_notes }))
+                        }
+                        label="Notas internas"
+                        rows={4}
+                        labelClassName="text-sm text-zinc-600 mb-1 block"
+                        inputClassName={defaultDetailInputClass}
+                        showAdminOnlyHint
+                      />
                     )}
-                    {canEditContact && (
+                    {(canEditContact || showAdminNotesEditor) && (
                       <>
                         {editDetailError && (
                           <p className="text-sm text-red-600">{editDetailError}</p>
                         )}
                         {saveDetailSuccess && (
                           <p className="text-sm text-green-600 font-medium">
-                            Datos guardados correctamente.
+                            {canEditContact && showAdminNotesEditor
+                              ? "Datos y notas guardados correctamente."
+                              : showAdminNotesEditor
+                                ? "Notas guardadas correctamente."
+                                : "Datos guardados correctamente."}
                           </p>
                         )}
                         <button
                           type="button"
                           onClick={() =>
-                            void patchReservationDetails({
-                              name: editForm.name.trim(),
-                              email: editForm.email.trim(),
-                              phone: editForm.phone.trim(),
-                              order_number: editForm.order_number.trim() || null,
-                            })
+                            void patchReservationDetails(chuyDetailPatch)
                           }
-                          disabled={savingDetail}
+                          disabled={savingDetail || !canSaveChuyDetail}
                           className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
                         >
-                          {savingDetail ? "Guardando…" : "Guardar datos del cliente"}
+                          {savingDetail
+                            ? "Guardando…"
+                            : canEditContact && showAdminNotesEditor
+                              ? "Guardar datos y notas"
+                              : showAdminNotesEditor
+                                ? "Guardar notas"
+                                : "Guardar datos del cliente"}
                         </button>
                       </>
                     )}

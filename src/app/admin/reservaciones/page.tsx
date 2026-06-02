@@ -36,6 +36,7 @@ import {
   isAlveroVariant,
 } from "@/utils/reservation-variants";
 import { addMinutesToTime } from "@/utils/reservation-helpers";
+import { AdminInternalNotesField } from "@/components/admin/AdminInternalNotesField";
 import "react-calendar/dist/Calendar.css";
 
 const WEEKDAY_SLOTS = [
@@ -137,6 +138,20 @@ function AdminReservacionesPageInner() {
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   type NewReservationVariant = "cliente" | "reservado_alvero" | "cita_alvero" | "renta_vestido";
+
+  const setNewFormVariant = (variant: NewReservationVariant) => {
+    setNewForm((f) => {
+      const keepsNotes =
+        (variant === "cliente" || variant === "cita_alvero") &&
+        (f.variant === "cliente" || f.variant === "cita_alvero");
+      return {
+        ...f,
+        variant,
+        import_notes: keepsNotes ? f.import_notes : "",
+      };
+    });
+  };
+
   const [showNewModal, setShowNewModal] = useState(false);
   const [newForm, setNewForm] = useState({
     variant: "cliente" as NewReservationVariant,
@@ -153,6 +168,7 @@ function AdminReservacionesPageInner() {
     /** Solo variant renta_vestido: cuadro azul en calendario (todo el día) */
     vestido_title: "",
     vestido_notes: "",
+    import_notes: "",
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -526,6 +542,7 @@ function AdminReservacionesPageInner() {
       payment_state: "pending",
       vestido_title: "",
       vestido_notes: "",
+      import_notes: "",
     });
     setPickerDate(tomorrow);
     setPickerTime(null);
@@ -661,6 +678,10 @@ function AdminReservacionesPageInner() {
         if (selectedReplacesId !== null) {
           payload.replaces_reservation_id = selectedReplacesId;
         }
+      }
+      if (variant === "cliente" || variant === "cita_alvero") {
+        const notes = newForm.import_notes?.trim();
+        if (notes) payload.import_notes = notes;
       }
       const res = await axios.post("/api/admin/reservations", payload);
       if (res.data.success && res.data.reservationId) {
@@ -864,19 +885,19 @@ function AdminReservacionesPageInner() {
                 <p className="mb-2 text-xs font-medium text-zinc-600">Tipo de reserva</p>
                 <div className="flex flex-wrap gap-4">
                   <label className="flex cursor-pointer items-center gap-2">
-                    <input type="radio" name="variant" checked={newForm.variant === "cliente"} onChange={() => setNewForm((f) => ({ ...f, variant: "cliente" }))} className="rounded-full border-zinc-300" />
+                    <input type="radio" name="variant" checked={newForm.variant === "cliente"} onChange={() => setNewFormVariant("cliente")} className="rounded-full border-zinc-300" />
                     <span className="text-sm">La casa de chuy</span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
-                    <input type="radio" name="variant" checked={newForm.variant === "reservado_alvero"} onChange={() => setNewForm((f) => ({ ...f, variant: "reservado_alvero" }))} className="rounded-full border-zinc-300" />
+                    <input type="radio" name="variant" checked={newForm.variant === "reservado_alvero"} onChange={() => setNewFormVariant("reservado_alvero")} className="rounded-full border-zinc-300" />
                     <span className="text-sm">Espacio reservado para Alvero</span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
-                    <input type="radio" name="variant" checked={newForm.variant === "cita_alvero"} onChange={() => setNewForm((f) => ({ ...f, variant: "cita_alvero" }))} className="rounded-full border-zinc-300" />
+                    <input type="radio" name="variant" checked={newForm.variant === "cita_alvero"} onChange={() => setNewFormVariant("cita_alvero")} className="rounded-full border-zinc-300" />
                     <span className="text-sm">Cita Alvero</span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
-                    <input type="radio" name="variant" checked={newForm.variant === "renta_vestido"} onChange={() => { setPickerTime(null); setNewForm((f) => ({ ...f, variant: "renta_vestido", startTime: "" })); }} className="rounded-full border-zinc-300" />
+                    <input type="radio" name="variant" checked={newForm.variant === "renta_vestido"} onChange={() => { setPickerTime(null); setNewFormVariant("renta_vestido"); setNewForm((f) => ({ ...f, startTime: "" })); }} className="rounded-full border-zinc-300" />
                     <span className="text-sm">Renta de vestidos</span>
                   </label>
                 </div>
@@ -1134,6 +1155,16 @@ function AdminReservacionesPageInner() {
                     <input type="tel" value={newForm.phone} onChange={(e) => setNewForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 8123456789" />
                   </div>
                 </>
+              )}
+
+              {(newForm.variant === "cliente" || newForm.variant === "cita_alvero") && (
+                <AdminInternalNotesField
+                  id="new-reservation-internal-notes"
+                  value={newForm.import_notes}
+                  onChange={(import_notes) =>
+                    setNewForm((f) => ({ ...f, import_notes }))
+                  }
+                />
               )}
 
               <div className="flex gap-3 pt-2">
