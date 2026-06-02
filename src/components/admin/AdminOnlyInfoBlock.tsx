@@ -7,7 +7,7 @@ export function AdminOnlyInfoBlock({ children }: { children: ReactNode }) {
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         Solo administración
       </p>
-      <div className="flex flex-col gap-2">{children}</div>
+      <div className="flex flex-col gap-4">{children}</div>
     </div>
   );
 }

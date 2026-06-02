@@ -9,12 +9,20 @@ import {
   defaultDetailInputClass,
 } from "@/components/admin/AdminInternalNotesField";
 import type { Reservation } from "@/types/reservation";
-import { sessionTypeLabel } from "@/utils/session-type";
+import {
+  SESSION_TYPE_VALUES,
+  sessionTypeLabel,
+} from "@/utils/session-type";
 import {
   buildReservationDetailPatch,
   canAdminEditImportNotes,
   isAlveroClientReservation,
 } from "@/lib/admin/reservation-contact-edit";
+
+const fieldInputClass =
+  "w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]";
+
+const readOnlyValueClass = "text-sm font-medium text-[#103948]";
 
 type EditForm = {
   name: string;
@@ -24,6 +32,7 @@ type EditForm = {
   municipio: string;
   import_notes: string;
   photographer_studio: string;
+  session_type: string;
 };
 
 function orderNumberLabel(reservation: Reservation): string {
@@ -50,23 +59,52 @@ type AdminReservationInternalInfoProps = {
   ) => Promise<boolean>;
 };
 
-function ReservationDetailLastEdited({
-  reservation,
-}: {
-  reservation: Reservation;
-}) {
-  if (!reservation.import_notes_edited_at) return null;
-  const editedAt = new Date(reservation.import_notes_edited_at);
-  if (Number.isNaN(editedAt.getTime())) return null;
-  const editor =
-    reservation.import_notes_edited_by?.name?.trim() ||
-    reservation.import_notes_edited_by?.email ||
-    "—";
+function ReservationDetailAudit({ reservation }: { reservation: Reservation }) {
+  const lines: string[] = [];
+
+  if (reservation.created_at) {
+    const createdAt = new Date(reservation.created_at);
+    if (!Number.isNaN(createdAt.getTime())) {
+      const when = format(createdAt, "d 'de' MMMM 'de' yyyy, h:mm a", {
+        locale: es,
+      });
+      const creator =
+        reservation.created_by?.name?.trim() ||
+        reservation.created_by?.email ||
+        null;
+      if (creator) {
+        lines.push(`Creada por ${creator} el ${when}.`);
+      } else if (reservation.source === "google_import") {
+        lines.push(`Creada el ${when} (importación desde calendario).`);
+      } else {
+        lines.push(`Creada el ${when}.`);
+      }
+    }
+  }
+
+  if (reservation.import_notes_edited_at) {
+    const editedAt = new Date(reservation.import_notes_edited_at);
+    if (!Number.isNaN(editedAt.getTime())) {
+      const editor =
+        reservation.import_notes_edited_by?.name?.trim() ||
+        reservation.import_notes_edited_by?.email ||
+        "—";
+      lines.push(
+        `Último cambio guardado por ${editor} el ${format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.`,
+      );
+    }
+  }
+
+  if (lines.length === 0) return null;
+
   return (
-    <p className="text-xs text-zinc-500 pt-1">
-      Editado por última vez por {editor} el{" "}
-      {format(editedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}.
-    </p>
+    <div className="space-y-1 border-t border-zinc-200 pt-3">
+      {lines.map((line, i) => (
+        <p key={i} className="text-xs leading-relaxed text-zinc-500">
+          {line}
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -107,6 +145,7 @@ export function AdminReservationInternalInfo({
         includeMunicipio: showMunicipioField,
         includeNotes: showNotesEditor,
         includePhotographer: true,
+        includeSessionType: isSuperAdmin,
       }),
     [
       reservation.id,
@@ -114,13 +153,16 @@ export function AdminReservationInternalInfo({
       reservation.photographer_studio,
       reservation.order_number,
       reservation.municipio,
+      reservation.session_type,
       editForm.import_notes,
       editForm.photographer_studio,
       editForm.order_number,
       editForm.municipio,
+      editForm.session_type,
       showNotesEditor,
       showMunicipioField,
       canEditOrderNumber,
+      isSuperAdmin,
     ],
   );
 
@@ -133,13 +175,11 @@ export function AdminReservationInternalInfo({
     }
   }, [canSaveInternalDetail, setInternalEditError]);
 
-  const changedInternalFields = Object.keys(internalDetailPatch);
-  const saveInternalLabel =
-    changedInternalFields.length === 0
+  const saveInternalLabel = savingDetail
+    ? "Guardando…"
+    : canSaveInternalDetail
       ? "Guardar cambios"
-      : changedInternalFields.length === 1
-        ? "Guardar cambio"
-        : "Guardar cambios de administración";
+      : "Sin cambios";
 
   const saveInternalDetails = async () => {
     if (!canSaveInternalDetail) return;
@@ -162,150 +202,19 @@ export function AdminReservationInternalInfo({
 
   return (
     <AdminOnlyInfoBlock>
-      <div className="grid gap-0.5">
-        <p className="text-sm text-zinc-600">Tipo de sesión</p>
-        <p className="text-base font-medium leading-snug text-[#103948]">
-          {reservation.session_type
-            ? sessionTypeLabel(reservation.session_type)
-            : "—"}
-        </p>
-      </div>
-
-      {showOrderField ? (
-        <div className="grid gap-1.5">
-          <label
-            htmlFor="admin-order-number"
-            className="text-sm text-zinc-600 block"
-          >
-            {orderLabel}
-          </label>
-          {canEditOrderNumber ? (
-            <input
-              id="admin-order-number"
-              type="text"
-              value={editForm.order_number}
-              onChange={(e) =>
-                setEditForm((f) => ({ ...f, order_number: e.target.value }))
-              }
-              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-              placeholder="Ej. 6521"
-            />
-          ) : (
-            <p className="text-base font-medium leading-snug text-[#103948]">
-              {reservation.order_number
-                ? `#${reservation.order_number}`
-                : reservation.google_event_id ?? "—"}
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      {showMunicipioField ? (
-        <div className="grid gap-1.5">
-          <label
-            htmlFor="admin-municipio"
-            className="text-sm text-zinc-600 block"
-          >
-            Municipio
-          </label>
-          <input
-            id="admin-municipio"
-            type="text"
-            maxLength={200}
-            value={editForm.municipio}
-            onChange={(e) =>
-              setEditForm((f) => ({ ...f, municipio: e.target.value }))
-            }
-            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-            placeholder="Ej. Monterrey, San Pedro Garza García"
-          />
-        </div>
-      ) : null}
-
-      <div className="grid gap-1.5">
-        <label
-          htmlFor="admin-photographer-studio"
-          className="text-sm text-zinc-600 block"
-        >
-          Fotógrafo / estudio
-        </label>
-        <input
-          id="admin-photographer-studio"
-          type="text"
-          maxLength={500}
-          value={editForm.photographer_studio}
-          onChange={(e) =>
-            setEditForm((f) => ({
-              ...f,
-              photographer_studio: e.target.value,
-            }))
-          }
-          className="w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]"
-          placeholder="Ej. Estudio Luz o nombre del fotógrafo"
-        />
-      </div>
-
-      {showNotesEditor ? (
-        <AdminInternalNotesField
-          id="edit-notes-admin-block"
-          value={editForm.import_notes}
-          onChange={(import_notes) =>
-            setEditForm((f) => ({ ...f, import_notes }))
-          }
-          label="Notas internas"
-          rows={4}
-          labelClassName="text-sm text-zinc-600 mb-1 block"
-          inputClassName={defaultDetailInputClass}
-          showAdminOnlyHint
-        />
-      ) : null}
-
-      {internalEditError ? (
-        <p className="text-sm text-red-600">{internalEditError}</p>
-      ) : null}
-      {internalSaveSuccess && !internalEditError ? (
-        <p className="text-sm font-medium text-green-600">
-          Detalles de administración guardados correctamente.
-        </p>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => void saveInternalDetails()}
-        disabled={savingDetail || !canSaveInternalDetail}
-        className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
-      >
-        {savingDetail ? "Guardando…" : saveInternalLabel}
-      </button>
-
-      <ReservationDetailLastEdited reservation={reservation} />
-
-      {reservation.created_at ? (
-        <div className="grid gap-0.5">
-          <p className="text-sm text-zinc-600">Creada el</p>
-          <p className="text-base font-medium leading-snug text-[#103948]">
-            {format(
-              new Date(reservation.created_at),
-              "d 'de' MMMM yyyy, h:mm a",
-              { locale: es },
-            )}
-          </p>
-        </div>
-      ) : null}
-
       {showPaymentStatus ? (
-        <div className="grid gap-0.5">
-          <p className="text-sm text-zinc-600">Estado del pago</p>
+        <section className="flex flex-col gap-2">
           {reservation.source === "web" &&
             (reservation.payment_method === "conekta" ||
               reservation.payment_id) && (
-              <p className="text-base font-medium text-emerald-700">
+              <p className="text-sm font-medium text-emerald-700">
                 Pagado (en línea)
               </p>
             )}
           {reservation.source === "admin" &&
             reservation.payment_status === "pending" && (
               <>
-                <p className="text-base font-medium text-amber-700">
+                <p className="text-sm font-medium text-amber-700">
                   Pago pendiente
                 </p>
                 {isSuperAdmin ? (
@@ -356,7 +265,7 @@ export function AdminReservationInternalInfo({
                       }
                     }}
                     disabled={validatingPayment}
-                    className="mt-2 rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-50"
+                    className="w-fit rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39] disabled:opacity-50"
                   >
                     {validatingPayment
                       ? "Validando…"
@@ -368,7 +277,7 @@ export function AdminReservationInternalInfo({
           {reservation.source === "admin" &&
             reservation.payment_status === "paid" && (
               <>
-                <p className="text-base font-medium text-emerald-700">
+                <p className="text-sm font-medium text-emerald-700">
                   Pagado (validado)
                 </p>
                 {reservation.payment_validated_at &&
@@ -378,12 +287,12 @@ export function AdminReservationInternalInfo({
                       reservation.payment_validated_at,
                     );
                     return (
-                      <p className="text-sm text-zinc-500 mt-1">
+                      <p className="text-xs text-zinc-500">
                         Validado por{" "}
                         {reservation.payment_validated_by.name ||
                           reservation.payment_validated_by.email}
                         {isValid(validatedAt)
-                          ? ` el ${format(validatedAt, "d 'de' MMMM 'de' yyyy 'a las' h:mm a", { locale: es })}`
+                          ? ` el ${format(validatedAt, "d 'de' MMMM 'de' yyyy, h:mm a", { locale: es })}`
                           : ""}
                         .
                       </p>
@@ -391,13 +300,166 @@ export function AdminReservationInternalInfo({
                   })()}
               </>
             )}
-          {reservation.source === "admin" &&
-            (reservation.payment_status == null ||
-              reservation.payment_status === "not_applicable") && (
-              <p className="text-zinc-500 text-sm">—</p>
-            )}
-        </div>
+        </section>
       ) : null}
+
+      <section className="flex flex-col gap-3">
+        <div className="grid gap-1.5">
+          <label
+            htmlFor="admin-session-type"
+            className="text-sm text-zinc-600 block"
+          >
+            Tipo de sesión
+          </label>
+          {isSuperAdmin ? (
+            <select
+              id="admin-session-type"
+              value={editForm.session_type}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, session_type: e.target.value }))
+              }
+              className={fieldInputClass}
+            >
+              <option value="">— Sin asignar</option>
+              {SESSION_TYPE_VALUES.map((value) => (
+                <option key={value} value={value}>
+                  {sessionTypeLabel(value)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className={readOnlyValueClass}>
+              {reservation.session_type
+                ? sessionTypeLabel(reservation.session_type)
+                : "—"}
+            </p>
+          )}
+        </div>
+
+        {(showOrderField || showMunicipioField) && (
+          <div
+            className={`grid gap-3 ${showOrderField && showMunicipioField ? "sm:grid-cols-2" : ""}`}
+          >
+            {showOrderField ? (
+              <div className="grid gap-1.5">
+                <label
+                  htmlFor="admin-order-number"
+                  className="text-sm text-zinc-600 block"
+                >
+                  {orderLabel}
+                </label>
+                {canEditOrderNumber ? (
+                  <input
+                    id="admin-order-number"
+                    type="text"
+                    value={editForm.order_number}
+                    onChange={(e) =>
+                      setEditForm((f) => ({
+                        ...f,
+                        order_number: e.target.value,
+                      }))
+                    }
+                    className={fieldInputClass}
+                    placeholder="Ej. 6521"
+                  />
+                ) : (
+                  <p className={readOnlyValueClass}>
+                    {reservation.order_number
+                      ? `#${reservation.order_number}`
+                      : reservation.google_event_id ?? "—"}
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {showMunicipioField ? (
+              <div className="grid gap-1.5">
+                <label
+                  htmlFor="admin-municipio"
+                  className="text-sm text-zinc-600 block"
+                >
+                  Municipio
+                </label>
+                <input
+                  id="admin-municipio"
+                  type="text"
+                  maxLength={200}
+                  value={editForm.municipio}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, municipio: e.target.value }))
+                  }
+                  className={fieldInputClass}
+                  placeholder="Ej. Monterrey"
+                />
+              </div>
+            ) : null}
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="grid gap-1.5">
+          <label
+            htmlFor="admin-photographer-studio"
+            className="text-sm text-zinc-600 block"
+          >
+            Fotógrafo / estudio
+          </label>
+          <input
+            id="admin-photographer-studio"
+            type="text"
+            maxLength={500}
+            value={editForm.photographer_studio}
+            onChange={(e) =>
+              setEditForm((f) => ({
+                ...f,
+                photographer_studio: e.target.value,
+              }))
+            }
+            className={fieldInputClass}
+            placeholder="Ej. Estudio Luz o nombre del fotógrafo"
+          />
+        </div>
+
+        {showNotesEditor ? (
+          <AdminInternalNotesField
+            id="edit-notes-admin-block"
+            value={editForm.import_notes}
+            onChange={(import_notes) =>
+              setEditForm((f) => ({ ...f, import_notes }))
+            }
+            label="Notas internas"
+            rows={4}
+            labelClassName="text-sm text-zinc-600 mb-1 block"
+            inputClassName={defaultDetailInputClass}
+            showAdminOnlyHint={false}
+          />
+        ) : null}
+      </section>
+
+      <div className="flex flex-col gap-2">
+        {internalEditError ? (
+          <p className="text-sm text-red-600">{internalEditError}</p>
+        ) : null}
+        {internalSaveSuccess && !internalEditError ? (
+          <p className="text-sm font-medium text-green-600">
+            Cambios guardados correctamente.
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void saveInternalDetails()}
+          disabled={savingDetail || !canSaveInternalDetail}
+          className={
+            canSaveInternalDetail && !savingDetail
+              ? "rounded-lg bg-[#103948] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
+              : "rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-400 cursor-default"
+          }
+        >
+          {saveInternalLabel}
+        </button>
+        <ReservationDetailAudit reservation={reservation} />
+      </div>
     </AdminOnlyInfoBlock>
   );
 }

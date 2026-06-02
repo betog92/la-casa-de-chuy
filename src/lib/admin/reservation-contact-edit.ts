@@ -1,3 +1,5 @@
+import { isSessionType } from "@/utils/session-type";
+
 /** Reserva creada en la web (Conekta); contacto no editable por nadie. */
 export function isWebReservation(source: string | null | undefined): boolean {
   return source === "web";
@@ -67,6 +69,8 @@ type ReservationDetailEditForm = {
   municipio: string;
   import_notes: string;
   photographer_studio: string;
+  /** "" = sin tipo (null en BD) */
+  session_type: string;
 };
 
 /** Solo incluye campos que realmente cambiaron (evita error API "sin campos"). */
@@ -79,6 +83,7 @@ export function buildReservationDetailPatch(
     municipio?: string | null;
     import_notes?: string | null;
     photographer_studio?: string | null;
+    session_type?: string | null;
   },
   form: ReservationDetailEditForm,
   options: {
@@ -87,6 +92,7 @@ export function buildReservationDetailPatch(
     includeMunicipio?: boolean;
     includeNotes?: boolean;
     includePhotographer?: boolean;
+    includeSessionType?: boolean;
   },
 ): Record<string, string | null> {
   const patch: Record<string, string | null> = {};
@@ -124,6 +130,15 @@ export function buildReservationDetailPatch(
     const next = form.photographer_studio.trim() || null;
     const prev = reservation.photographer_studio?.trim() || null;
     if (next !== prev) patch.photographer_studio = next;
+  }
+
+  if (options.includeSessionType) {
+    const raw = form.session_type.trim();
+    const next = raw === "" ? null : raw;
+    const prev = reservation.session_type ?? null;
+    if (next !== prev && (next === null || isSessionType(next))) {
+      patch.session_type = next;
+    }
   }
 
   return patch;

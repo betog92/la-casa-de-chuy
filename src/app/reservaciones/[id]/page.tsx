@@ -86,6 +86,7 @@ function ReservationContactFields({
       municipio: string;
       import_notes: string;
       photographer_studio: string;
+      session_type: string;
     }>
   >;
   editable: boolean;
@@ -192,6 +193,7 @@ export default function ReservationDetailsPage() {
     municipio: "",
     import_notes: "",
     photographer_studio: "",
+    session_type: "",
   });
   const [savingDetail, setSavingDetail] = useState(false);
   const [contactEditError, setContactEditError] = useState<string | null>(null);
@@ -221,6 +223,7 @@ export default function ReservationDetailsPage() {
       municipio: reservation.municipio ?? "",
       import_notes: reservation.import_notes ?? "",
       photographer_studio: reservation.photographer_studio ?? "",
+      session_type: reservation.session_type ?? "",
     });
   }, [
     reservation?.id,
@@ -231,6 +234,7 @@ export default function ReservationDetailsPage() {
     reservation?.municipio,
     reservation?.import_notes,
     reservation?.photographer_studio,
+    reservation?.session_type,
   ]);
 
   useEffect(() => {
@@ -661,6 +665,10 @@ export default function ReservationDetailsPage() {
                 null,
               photographer_studio:
                 updated.photographer_studio ?? prev.photographer_studio ?? null,
+              session_type:
+                updated.session_type !== undefined
+                  ? updated.session_type
+                  : prev.session_type ?? null,
             }
           : null,
       );
@@ -984,14 +992,6 @@ export default function ReservationDetailsPage() {
                             : "Guardar datos del cliente"}
                         </button>
                       </>
-                    )}
-                    {reservation.created_by && (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">Creada por</p>
-                        <p className="text-lg font-medium text-[#103948]">
-                          {reservation.created_by.name?.trim() || reservation.created_by.email}
-                        </p>
-                      </div>
                     )}
                   </>
                 )}
