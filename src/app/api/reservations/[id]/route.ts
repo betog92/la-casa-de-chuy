@@ -3,12 +3,14 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { lookupAdminRolesForUserId, requireAdmin } from "@/lib/auth/admin";
+import { canSuperAdminEditReservationContact } from "@/lib/admin/reservation-contact-edit";
 import {
   successResponse,
   errorResponse,
   validationErrorResponse,
   notFoundResponse,
   unauthorizedResponse,
+  forbiddenResponse,
 } from "@/utils/api-response";
 import type { Database } from "@/types/database.types";
 import { isSessionType } from "@/utils/session-type";
@@ -175,12 +177,12 @@ export async function GET(
   }
 }
 
-/** PATCH: Actualizar detalle de la reserva (solo admin) */
+/** PATCH: Actualizar detalle de la reserva (admin; contacto solo super admin en manuales) */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { isAdmin } = await requireAdmin();
+  const { isAdmin, isSuperAdmin } = await requireAdmin();
   if (!isAdmin) {
     return unauthorizedResponse("Solo un administrador puede editar la reserva");
   }
@@ -215,13 +217,61 @@ export async function PATCH(
     } catch {
       return validationErrorResponse("Cuerpo de la petición no es JSON válido");
     }
+
+    const supabase = createServiceRoleClient();
+    const { data: existingRow, error: fetchError } = await supabase
+      .from("reservations")
+      .select("id, source, import_type")
+      .eq("id", reservationId)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("Error fetching reservation for PATCH:", fetchError);
+      return errorResponse("Error al obtener la reserva", 500);
+    }
+    if (!existingRow) {
+      return notFoundResponse("Reserva");
+    }
+
+    const existing = existingRow as {
+      source: string;
+      import_type: string | null;
+    };
+
+    const touchesPersonalContact =
+      body.name !== undefined ||
+      body.email !== undefined ||
+      body.phone !== undefined ||
+      body.order_number !== undefined;
+
+    if (touchesPersonalContact) {
+      if (!isSuperAdmin) {
+        return forbiddenResponse(
+          "Solo la familia (super admin) puede editar los datos personales del cliente",
+        );
+      }
+      if (!canSuperAdminEditReservationContact(existing)) {
+        return validationErrorResponse(
+          "Los datos personales solo se pueden editar en reservas manuales del panel (no reservas web)",
+        );
+      }
+    }
+
     const updatePayload: Record<string, unknown> = {};
 
     if (typeof body.name === "string") {
-      updatePayload.name = body.name.trim() || body.name;
+      const name = body.name.trim();
+      if (!name) {
+        return validationErrorResponse("El nombre no puede estar vacío");
+      }
+      updatePayload.name = name;
     }
     if (typeof body.email === "string") {
-      updatePayload.email = body.email.trim() || body.email;
+      const email = body.email.trim().toLowerCase();
+      if (!email) {
+        return validationErrorResponse("El email no puede estar vacío");
+      }
+      updatePayload.email = email;
     }
     if (typeof body.phone === "string") {
       updatePayload.phone = body.phone.trim();
@@ -262,7 +312,6 @@ export async function PATCH(
       return validationErrorResponse("No hay campos válidos para actualizar");
     }
 
-    const supabase = createServiceRoleClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tipos generados de Supabase no incluyen todos los campos en Update
     const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)

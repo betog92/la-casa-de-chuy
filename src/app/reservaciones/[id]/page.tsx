@@ -54,6 +54,138 @@ import TransferMonedasPanel from "@/components/TransferMonedasPanel";
 import { AdminReservationInternalInfo } from "@/components/admin/AdminReservationInternalInfo";
 import type { Reservation } from "@/types/reservation";
 import { durationMinutesBetween } from "@/utils/reservation-helpers";
+import { canSuperAdminEditReservationContact } from "@/lib/admin/reservation-contact-edit";
+
+const contactInputClass =
+  "w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]";
+
+type ContactEditForm = {
+  name: string;
+  email: string;
+  phone: string;
+  order_number: string;
+};
+
+function ReservationContactFields({
+  reservation,
+  editForm,
+  setEditForm,
+  editable,
+  orderLabel,
+}: {
+  reservation: Reservation;
+  editForm: ContactEditForm;
+  setEditForm: React.Dispatch<
+    React.SetStateAction<{
+      name: string;
+      email: string;
+      phone: string;
+      order_number: string;
+      import_notes: string;
+      photographer_studio: string;
+    }>
+  >;
+  editable: boolean;
+  orderLabel: string;
+}) {
+  if (editable) {
+    return (
+      <>
+        <div>
+          <label htmlFor="edit-name" className="text-sm text-zinc-600 mb-1 block">
+            Nombre
+          </label>
+          <input
+            id="edit-name"
+            type="text"
+            value={editForm.name}
+            onChange={(e) =>
+              setEditForm((f) => ({ ...f, name: e.target.value }))
+            }
+            className={contactInputClass}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="edit-email" className="text-sm text-zinc-600 mb-1 block">
+            Email
+          </label>
+          <input
+            id="edit-email"
+            type="email"
+            value={editForm.email}
+            onChange={(e) =>
+              setEditForm((f) => ({ ...f, email: e.target.value }))
+            }
+            className={contactInputClass}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="edit-phone" className="text-sm text-zinc-600 mb-1 block">
+            Teléfono
+          </label>
+          <input
+            id="edit-phone"
+            type="tel"
+            value={editForm.phone}
+            onChange={(e) =>
+              setEditForm((f) => ({ ...f, phone: e.target.value }))
+            }
+            className={contactInputClass}
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="edit-order-number"
+            className="text-sm text-zinc-600 mb-1 block"
+          >
+            {orderLabel}
+          </label>
+          <input
+            id="edit-order-number"
+            type="text"
+            value={editForm.order_number}
+            onChange={(e) =>
+              setEditForm((f) => ({ ...f, order_number: e.target.value }))
+            }
+            className={contactInputClass}
+            placeholder="Opcional"
+          />
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div>
+        <p className="text-sm text-zinc-600 mb-1">Nombre</p>
+        <p className="text-lg font-medium text-[#103948]">{reservation.name}</p>
+      </div>
+      <div>
+        <p className="text-sm text-zinc-600 mb-1">Email</p>
+        <p className="text-lg font-medium text-[#103948]">{reservation.email}</p>
+      </div>
+      <div>
+        <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
+        <p className="text-lg font-medium text-[#103948]">
+          {reservation.phone || "No proporcionado"}
+        </p>
+      </div>
+      {(reservation.order_number || reservation.google_event_id) && (
+        <div>
+          <p className="text-sm text-zinc-600 mb-1">{orderLabel}</p>
+          <p className="text-lg font-medium text-[#103948]">
+            {reservation.order_number
+              ? `#${reservation.order_number}`
+              : reservation.google_event_id}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function ReservationDetailsPage() {
   const params = useParams();
@@ -481,6 +613,65 @@ export default function ReservationDetailsPage() {
       reservation.import_type === "manual_client"
     );
 
+  const canEditContact =
+    reservation != null &&
+    isSuperAdmin &&
+    canSuperAdminEditReservationContact(reservation);
+
+  const contactOrderLabel =
+    reservation?.source === "admin"
+      ? "Número de orden"
+      : "Orden (web anterior)";
+
+  const patchReservationDetails = async (
+    fields: Record<string, string | null | undefined>,
+  ) => {
+    if (!reservation) return;
+    setEditDetailError(null);
+    setSaveDetailSuccess(false);
+    setSavingDetail(true);
+    try {
+      const res = await fetch(`/api/reservations/${reservation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setEditDetailError(data.error || "Error al guardar");
+        return;
+      }
+      const updated = data.reservation;
+      setReservation((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: updated.name ?? prev.name,
+              email: updated.email ?? prev.email,
+              phone: updated.phone ?? prev.phone,
+              order_number: updated.order_number ?? prev.order_number ?? null,
+              import_notes: updated.import_notes ?? prev.import_notes ?? null,
+              import_notes_edited_at:
+                updated.import_notes_edited_at ??
+                prev.import_notes_edited_at ??
+                null,
+              import_notes_edited_by:
+                updated.import_notes_edited_by ??
+                prev.import_notes_edited_by ??
+                null,
+              photographer_studio:
+                updated.photographer_studio ?? prev.photographer_studio ?? null,
+            }
+          : null,
+      );
+      setSaveDetailSuccess(true);
+    } catch {
+      setEditDetailError("Error de conexión");
+    } finally {
+      setSavingDetail(false);
+    }
+  };
+
   const hasRescheduleInfoBlock =
     (reservation?.reschedule_history?.length ?? 0) > 0 ||
     ((reservation?.reschedule_count ?? 0) > 0 &&
@@ -706,27 +897,17 @@ export default function ReservationDetailsPage() {
                 ) : (reservation.source === "google_import" || reservation.source === "admin") &&
                 reservation.import_type === "manual_client" ? (
                   <>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Nombre</p>
-                      <p className="text-lg font-medium text-[#103948]">{reservation.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Email</p>
-                      <p className="text-lg font-medium text-[#103948]">{reservation.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
-                      <p className="text-lg font-medium text-[#103948]">
-                        {reservation.phone || "No proporcionado"}
+                    <ReservationContactFields
+                      reservation={reservation}
+                      editForm={editForm}
+                      setEditForm={setEditForm}
+                      editable={canEditContact}
+                      orderLabel={contactOrderLabel}
+                    />
+                    {canEditContact && (
+                      <p className="text-xs text-zinc-500">
+                        Puedes corregir nombre, email o teléfono si hubo un error al capturar la cita.
                       </p>
-                    </div>
-                    {(reservation.order_number || reservation.google_event_id) && (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
-                        <p className="text-lg font-medium text-[#103948]">
-                          {reservation.order_number ? `#${reservation.order_number}` : reservation.google_event_id}
-                        </p>
-                      </div>
                     )}
                     <div>
                       <label
@@ -769,51 +950,29 @@ export default function ReservationDetailsPage() {
                     )}
                     <button
                       type="button"
-                      onClick={async () => {
-                        setEditDetailError(null);
-                        setSaveDetailSuccess(false);
-                        setSavingDetail(true);
-                        try {
-                          const res = await fetch(`/api/reservations/${reservation.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              import_notes: editForm.import_notes || null,
-                              photographer_studio:
-                                editForm.photographer_studio.trim() || null,
-                            }),
-                          });
-                          const data = await res.json();
-                          if (!data.success) {
-                            setEditDetailError(data.error || "Error al guardar");
-                            return;
-                          }
-                          const updated = data.reservation;
-                          setReservation((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  import_notes: updated.import_notes ?? prev.import_notes ?? null,
-                                  import_notes_edited_at: updated.import_notes_edited_at ?? prev.import_notes_edited_at ?? null,
-                                  import_notes_edited_by: updated.import_notes_edited_by ?? prev.import_notes_edited_by ?? null,
-                                  photographer_studio:
-                                    updated.photographer_studio ??
-                                    prev.photographer_studio ??
-                                    null,
-                                }
-                              : null
-                          );
-                          setSaveDetailSuccess(true);
-                        } catch {
-                          setEditDetailError("Error de conexión");
-                        } finally {
-                          setSavingDetail(false);
-                        }
-                      }}
+                      onClick={() =>
+                        void patchReservationDetails({
+                          ...(canEditContact
+                            ? {
+                                name: editForm.name.trim(),
+                                email: editForm.email.trim(),
+                                phone: editForm.phone.trim(),
+                                order_number: editForm.order_number.trim() || null,
+                              }
+                            : {}),
+                          import_notes: editForm.import_notes || null,
+                          photographer_studio:
+                            editForm.photographer_studio.trim() || null,
+                        })
+                      }
                       disabled={savingDetail}
                       className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
                     >
-                      {savingDetail ? "Guardando…" : "Guardar detalles de la cita"}
+                      {savingDetail
+                        ? "Guardando…"
+                        : canEditContact
+                          ? "Guardar datos y detalles"
+                          : "Guardar detalles de la cita"}
                     </button>
                     {reservation.import_notes_edited_at && (() => {
                       const editedAt = new Date(reservation.import_notes_edited_at);
@@ -829,35 +988,57 @@ export default function ReservationDetailsPage() {
                   </>
                 ) : (
                   <>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Nombre</p>
-                      <p className="text-lg font-medium text-[#103948]">{reservation.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Email</p>
-                      <p className="text-lg font-medium text-[#103948]">{reservation.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-600 mb-1">Teléfono</p>
-                      <p className="text-lg font-medium text-[#103948]">
-                        {reservation.phone || "No proporcionado"}
+                    <ReservationContactFields
+                      reservation={reservation}
+                      editForm={editForm}
+                      setEditForm={setEditForm}
+                      editable={canEditContact}
+                      orderLabel={contactOrderLabel}
+                    />
+                    {reservation.source === "web" && isSuperAdmin && (
+                      <p className="text-xs text-zinc-500">
+                        Los datos personales de reservas hechas en la página web no se pueden editar.
                       </p>
-                    </div>
-                    {(reservation.source === "google_import" || reservation.source === "admin") && (reservation.order_number || reservation.google_event_id) && (
-                      <div>
-                        <p className="text-sm text-zinc-600 mb-1">{reservation.source === "admin" ? "Número de orden" : "Orden (web anterior)"}</p>
-                        <p className="text-lg font-medium text-[#103948]">
-                          {reservation.order_number ? `#${reservation.order_number}` : reservation.google_event_id}
-                        </p>
-                      </div>
                     )}
-                    {(reservation.source === "google_import" || reservation.source === "admin") && reservation.import_notes && (
+                    {canEditContact && (
+                      <p className="text-xs text-zinc-500">
+                        Puedes corregir los datos del cliente si hubo un error al registrar la cita manual.
+                      </p>
+                    )}
+                    {(reservation.source === "google_import" || reservation.source === "admin") && reservation.import_notes && !canEditContact && (
                       <div>
                         <p className="text-sm text-zinc-600 mb-1">Detalles de la cita</p>
                         <p className="text-base font-medium text-[#103948] whitespace-pre-line">
                           {reservation.import_notes}
                         </p>
                       </div>
+                    )}
+                    {canEditContact && (
+                      <>
+                        {editDetailError && (
+                          <p className="text-sm text-red-600">{editDetailError}</p>
+                        )}
+                        {saveDetailSuccess && (
+                          <p className="text-sm text-green-600 font-medium">
+                            Datos guardados correctamente.
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void patchReservationDetails({
+                              name: editForm.name.trim(),
+                              email: editForm.email.trim(),
+                              phone: editForm.phone.trim(),
+                              order_number: editForm.order_number.trim() || null,
+                            })
+                          }
+                          disabled={savingDetail}
+                          className="rounded bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f2d38] disabled:opacity-50"
+                        >
+                          {savingDetail ? "Guardando…" : "Guardar datos del cliente"}
+                        </button>
+                      </>
                     )}
                     {reservation.created_by && (
                       <div>
