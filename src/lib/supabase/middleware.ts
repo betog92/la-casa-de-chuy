@@ -29,7 +29,20 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  try {
+    await supabase.auth.getUser();
+  } catch (err) {
+    // Red caída, DNS o refresh inválido: no tumbar toda la app en local
+    const message = err instanceof Error ? err.message : String(err);
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[middleware] No se pudo contactar Supabase Auth (revisa internet o borra cookies de localhost):",
+        message
+      );
+    } else {
+      console.error("[middleware] Supabase Auth error:", message);
+    }
+  }
 
   return supabaseResponse;
 }

@@ -47,6 +47,11 @@ next-env.d.ts
 bookings.csv
 orders_export_1.csv
 
+# Respaldos y previews de import historial (datos de clientes)
+scripts/_archivo-historial-importaciones/respaldos/
+scripts/_archivo-historial-importaciones/import-historical-alvero-*
+scripts/_archivo-historial-importaciones/import-history-delete-*
+
 # Docs internos (no subir al repo)
 ADMIN.md
 PENDIENTES.md

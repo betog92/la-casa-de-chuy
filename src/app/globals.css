@@ -56,10 +56,19 @@ html {
   display: none;
 }
 
-/* Botones Anterior/Siguiente deshabilitados en los límites (mes actual / +6 meses) */
+/* Botones Anterior/Siguiente deshabilitados en los límites (historial / +6 meses) */
 .rbc-toolbar button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Días pasados en vista mes: tono suave, sin bloquear clics */
+.rbc-month-view .rbc-day-bg.rbc-past-day {
+  background-color: #fafafa;
+}
+.rbc-month-view .rbc-date-cell.rbc-past-day > a,
+.rbc-month-view .rbc-date-cell.rbc-past-day > button {
+  color: #71717a;
 }
 
 /* Nombre del mes más visible en el calendario admin */

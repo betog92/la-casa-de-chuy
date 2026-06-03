@@ -27,6 +27,9 @@ const getMonterreyDate = (): Date => {
   return startOfDay(monterreyTime);
 };
 
+/** Meses hacia atrás que se puede navegar en el calendario (historial). */
+const CALENDAR_HISTORY_MONTHS_BACK = 24;
+
 /** Colores de eventos del calendario (leyenda y eventPropGetter usan la misma fuente) */
 const CALENDAR_COLORS = {
   reservation: "#103948",
@@ -82,7 +85,14 @@ interface CalendarEvent {
   start: Date;
   end: Date;
   allDay?: boolean;
-  resource?: { reservationId?: number; source?: string; import_type?: string | null; isVestidos?: boolean; googleEventId?: string };
+  resource?: {
+    reservationId?: number;
+    source?: string;
+    import_type?: string | null;
+    status?: string;
+    isVestidos?: boolean;
+    googleEventId?: string;
+  };
 }
 
 interface GooglePreviewEvent {
@@ -106,19 +116,20 @@ export default function AdminCalendarioPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Inicializar fecha desde URL para que al volver (Atrás) se restaure el mes (sin pasar del mes actual ni 6 meses adelante)
+  // Inicializar fecha desde URL (historial hasta CALENDAR_HISTORY_MONTHS_BACK; máx. 6 meses adelante)
   const getInitialDate = useCallback(() => {
     const m = searchParams.get("month");
     const today = getMonterreyDate();
-    const minD = startOfMonth(today);
+    const minD = addMonths(startOfMonth(today), -CALENDAR_HISTORY_MONTHS_BACK);
     const maxD = addMonths(today, 6);
-    if (!m || m.length < 6) return minD;
+    const defaultMonth = startOfMonth(today);
+    if (!m || m.length < 6) return defaultMonth;
     const parts = m.split("-");
     const year = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10);
-    if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) return minD;
+    if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) return defaultMonth;
     const parsed = parse(`${year}-${String(month).padStart(2, "0")}-01`, "yyyy-MM-dd", new Date());
-    if (Number.isNaN(parsed.getTime())) return minD;
+    if (Number.isNaN(parsed.getTime())) return defaultMonth;
     const d = startOfMonth(parsed);
     if (d < minD) return minD;
     if (d > maxD) return maxD;
@@ -196,7 +207,12 @@ export default function AdminCalendarioPage() {
           title: string;
           start: string;
           end: string;
-          resource?: { reservationId: number; source?: string; import_type?: string | null };
+          resource?: {
+            reservationId: number;
+            source?: string;
+            import_type?: string | null;
+            status?: string;
+          };
         }) => ({
           ...e,
           start: new Date(e.start),
@@ -366,9 +382,13 @@ export default function AdminCalendarioPage() {
     []
   );
 
-  // Límite: no ir antes del mes actual ni más de 6 meses al futuro
-  const minDate = useMemo(() => startOfMonth(getMonterreyDate()), []);
-  const maxDate = useMemo(() => addMonths(getMonterreyDate(), 6), []);
+  const today = useMemo(() => getMonterreyDate(), []);
+  // Historial hacia atrás; máximo 6 meses al futuro
+  const minDate = useMemo(
+    () => addMonths(startOfMonth(today), -CALENDAR_HISTORY_MONTHS_BACK),
+    [today]
+  );
+  const maxDate = useMemo(() => addMonths(today, 6), [today]);
 
   const handleNavigate = useCallback(
     (newDate: Date) => {
@@ -385,8 +405,6 @@ export default function AdminCalendarioPage() {
     [minDate, maxDate, router]
   );
 
-  const today = useMemo(() => getMonterreyDate(), []);
-
   const isNextDisabled = useMemo(() => {
     if (view === "month") return startOfMonth(date).getTime() >= startOfMonth(maxDate).getTime();
     if (view === "week") return startOfWeek(date, { locale: es }).getTime() >= startOfWeek(maxDate, { locale: es }).getTime();
@@ -394,10 +412,10 @@ export default function AdminCalendarioPage() {
   }, [view, date, maxDate]);
 
   const isPrevDisabled = useMemo(() => {
-    if (view === "month") return startOfMonth(date).getTime() <= startOfMonth(today).getTime();
-    if (view === "week") return startOfWeek(date, { locale: es }).getTime() <= startOfWeek(today, { locale: es }).getTime();
-    return startOfDay(date).getTime() <= startOfDay(today).getTime();
-  }, [view, date, today]);
+    if (view === "month") return startOfMonth(date).getTime() <= startOfMonth(minDate).getTime();
+    if (view === "week") return startOfWeek(date, { locale: es }).getTime() <= startOfWeek(minDate, { locale: es }).getTime();
+    return startOfDay(date).getTime() <= startOfDay(minDate).getTime();
+  }, [view, date, minDate]);
 
   const CustomToolbar = useCallback(
     (props: {
@@ -578,6 +596,16 @@ export default function AdminCalendarioPage() {
     [view]
   );
 
+  const dayPropGetter = useCallback(
+    (dayDate: Date) => {
+      if (startOfDay(dayDate) < today) {
+        return { className: "rbc-past-day" };
+      }
+      return {};
+    },
+    [today]
+  );
+
   const messages = useMemo(() => ({
     today: "Hoy",
     previous: "Anterior",
@@ -603,7 +631,8 @@ export default function AdminCalendarioPage() {
           Calendario
         </h1>
         <p className="mt-1 text-zinc-600">
-          Vista de reservas. Haz clic en una para ver detalles.
+          Vista de reservas. Usa Anterior para ver meses pasados (hasta {CALENDAR_HISTORY_MONTHS_BACK} meses).
+          Haz clic en una cita para ver detalles.
         </p>
       </div>
 
@@ -644,6 +673,7 @@ export default function AdminCalendarioPage() {
             onRangeChange={handleRangeChange}
             onSelectEvent={handleSelectEvent}
             onSelectSlot={handleSelectSlot}
+            dayPropGetter={dayPropGetter}
             selectable={isMobile && (view === "month" || view === "week")}
             getNow={getMonterreyDate}
             messages={messages}
@@ -671,6 +701,7 @@ export default function AdminCalendarioPage() {
               }
               const importType = event.resource?.import_type;
               const source = event.resource?.source;
+              const isCompleted = event.resource?.status === "completed";
               let bgColor: string = CALENDAR_COLORS.reservation;
               if (source === "google_import" || source === "admin") {
                 if (importType === "appointly") bgColor = CALENDAR_COLORS.reservationOldWeb;
@@ -679,11 +710,14 @@ export default function AdminCalendarioPage() {
                 else if (importType === "manual_other") bgColor = CALENDAR_COLORS.reservationManual;
                 else bgColor = source === "admin" ? CALENDAR_COLORS.reservation : CALENDAR_COLORS.reservationOldWeb;
               }
+              let opacity =
+                source === "google_import" || (source === "admin" && importType) ? 0.85 : 1;
+              if (isCompleted) opacity = Math.min(opacity, 0.75);
               return {
                 style: {
                   backgroundColor: bgColor,
                   borderRadius: "4px",
-                  opacity: source === "google_import" || (source === "admin" && importType) ? 0.85 : 1,
+                  opacity,
                 },
               };
             }}
@@ -717,6 +751,14 @@ export default function AdminCalendarioPage() {
         <span className="flex items-center gap-2">
           <span className="h-3 w-3 min-w-[0.75rem] shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.vestidos }} aria-hidden />
           Renta de vestidos
+        </span>
+        <span className="flex items-center gap-2 basis-full sm:basis-auto text-zinc-600">
+          <span
+            className="h-3 w-3 shrink-0 rounded"
+            style={{ backgroundColor: CALENDAR_COLORS.reservation, opacity: 0.75 }}
+            aria-hidden
+          />
+          Citas ya realizadas (mismo color, más tenue)
         </span>
       </div>
 

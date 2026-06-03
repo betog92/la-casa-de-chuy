@@ -1,9 +1,12 @@
 # Importación de citas (archivado)
 
-La guía y los scripts de reimportación **ya no se usan**. Quedaron guardados solo como historial:
+La guía y los scripts de reimportación **one-shot originales** ya no se usan. Están en:
 
 **`scripts/_archivo-historial-importaciones/`**
 
-Ahí están `IMPORTAR-CITAS.md` (guía completa) y los `.mjs` de import. **No volver a ejecutarlos** salvo emergencia extrema y con conocimiento de que pueden borrar/reescribir datos en Supabase.
+- Guía completa: `IMPORTAR-CITAS.md` (dentro de esa carpeta)
+- Respaldos CSV/JSON de operaciones en BD: `respaldos/` (limpieza historial 2026-06-03, import Alvero, etc.)
 
-Para el calendario de vestidos (fuera de este archivo), ver comentarios en `src/app/api/admin/google-calendar/vestidos/route.ts` y `scripts/sync-vestidos-calendar.mjs`.
+**Scripts operativos actuales** (historial Alvero, vestidos): ver [`scripts/README.md`](scripts/README.md).
+
+Para vestidos: `scripts/sync-vestidos-calendar.mjs` y `src/app/api/admin/google-calendar/vestidos/route.ts`.

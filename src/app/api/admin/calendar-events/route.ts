@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       .select("id, date, start_time, end_time, name, email, price, status, source, import_type, order_number")
       .gte("date", start)
       .lte("date", end)
-      .eq("status", "confirmed")
+      .in("status", ["confirmed", "completed"])
       .order("date", { ascending: true })
       .order("start_time", { ascending: true });
 
@@ -67,7 +67,17 @@ export async function GET(request: NextRequest) {
       const ampm = h < 12 ? "am" : "pm";
       return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
     };
-    type Row = { id: number; date: string; start_time: string; end_time: string; name: string; source: string; import_type: string | null; order_number: string | null };
+    type Row = {
+      id: number;
+      date: string;
+      start_time: string;
+      end_time: string;
+      name: string;
+      status: string;
+      source: string;
+      import_type: string | null;
+      order_number: string | null;
+    };
     const MONTERREY_TZ = "America/Monterrey";
     const toTimePart = (t: string) => {
       const s = String(t || "0").trim();
@@ -91,7 +101,12 @@ export async function GET(request: NextRequest) {
           title,
           start: startDate.toISOString(),
           end: endDate.toISOString(),
-          resource: { reservationId: r.id, source: r.source, import_type: r.import_type },
+          resource: {
+            reservationId: r.id,
+            source: r.source,
+            import_type: r.import_type,
+            status: r.status,
+          },
         };
       }
       // Citas de Alberto (manual_client): mostrar número de orden; resto: ID de reserva
@@ -102,7 +117,12 @@ export async function GET(request: NextRequest) {
         title,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
-        resource: { reservationId: r.id, source: r.source, import_type: r.import_type },
+        resource: {
+          reservationId: r.id,
+          source: r.source,
+          import_type: r.import_type,
+          status: r.status,
+        },
       };
     });
 
