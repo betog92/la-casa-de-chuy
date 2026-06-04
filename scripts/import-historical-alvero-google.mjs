@@ -186,29 +186,44 @@ function extractData(event) {
 function mergeConsecutiveSlots(events) {
   if (events.length === 0) return [];
 
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.start.dateTime).getTime() - new Date(b.start.dateTime).getTime()
+  );
+
   const merged = [];
   let i = 0;
 
-  while (i < events.length) {
-    const current = events[i];
-    const next = events[i + 1];
+  while (i < sorted.length) {
+    let block = { ...sorted[i], _merged: false };
+    let j = i + 1;
 
-    const currentSummary = (current.summary ?? "").trim();
-    const currentDesc = (current.description ?? "").trim();
-    const currentEnd = new Date(current.end.dateTime);
+    while (j < sorted.length) {
+      const next = sorted[j];
+      const blockEnd = new Date(block.end.dateTime);
+      const nextStart = new Date(next.start.dateTime);
+      const isConsecutive = Math.abs(blockEnd.getTime() - nextStart.getTime()) <= 60000;
+      if (!isConsecutive) break;
 
-    const isSameSummary = next && (next.summary ?? "").trim() === currentSummary;
-    const isSameDesc = next && (next.description ?? "").trim() === currentDesc;
-    const nextStart = next ? new Date(next.start.dateTime) : null;
-    const isConsecutive = nextStart && Math.abs(currentEnd - nextStart) <= 60000;
+      const blockSummary = (block.summary ?? "").trim();
+      const blockDesc = (block.description ?? "").trim();
+      const nextSummary = (next.summary ?? "").trim();
+      const nextDesc = (next.description ?? "").trim();
+      const sameMeta = blockSummary === nextSummary && blockDesc === nextDesc;
 
-    if (isSameSummary && isSameDesc && isConsecutive) {
-      merged.push({ ...current, end: next.end, _merged: true });
-      i += 2;
-    } else {
-      merged.push({ ...current, _merged: false });
-      i += 1;
+      const orderBlock = getOrderNumber(blockSummary, block.description ?? "");
+      const orderNext = getOrderNumber(nextSummary, next.description ?? "");
+      const sameOrder = orderBlock && orderNext && orderBlock === orderNext;
+
+      if (sameMeta || sameOrder) {
+        block = { ...block, end: next.end, _merged: true };
+        j += 1;
+      } else {
+        break;
+      }
     }
+
+    merged.push(block);
+    i = j;
   }
 
   return merged;

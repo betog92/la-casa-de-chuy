@@ -51,6 +51,7 @@ orders_export_1.csv
 scripts/_archivo-historial-importaciones/respaldos/
 scripts/_archivo-historial-importaciones/import-historical-alvero-*
 scripts/_archivo-historial-importaciones/import-history-delete-*
+scripts/_archivo-historial-importaciones/merge-duplicate-alvero-*
 
 # Docs internos (no subir al repo)
 ADMIN.md

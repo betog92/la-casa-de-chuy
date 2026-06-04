@@ -701,7 +701,6 @@ export default function AdminCalendarioPage() {
               }
               const importType = event.resource?.import_type;
               const source = event.resource?.source;
-              const isCompleted = event.resource?.status === "completed";
               let bgColor: string = CALENDAR_COLORS.reservation;
               if (source === "google_import" || source === "admin") {
                 if (importType === "appointly") bgColor = CALENDAR_COLORS.reservationOldWeb;
@@ -710,14 +709,12 @@ export default function AdminCalendarioPage() {
                 else if (importType === "manual_other") bgColor = CALENDAR_COLORS.reservationManual;
                 else bgColor = source === "admin" ? CALENDAR_COLORS.reservation : CALENDAR_COLORS.reservationOldWeb;
               }
-              let opacity =
-                source === "google_import" || (source === "admin" && importType) ? 0.85 : 1;
-              if (isCompleted) opacity = Math.min(opacity, 0.75);
               return {
                 style: {
                   backgroundColor: bgColor,
                   borderRadius: "4px",
-                  opacity,
+                  opacity:
+                    source === "google_import" || (source === "admin" && importType) ? 0.85 : 1,
                 },
               };
             }}
@@ -751,14 +748,6 @@ export default function AdminCalendarioPage() {
         <span className="flex items-center gap-2">
           <span className="h-3 w-3 min-w-[0.75rem] shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.vestidos }} aria-hidden />
           Renta de vestidos
-        </span>
-        <span className="flex items-center gap-2 basis-full sm:basis-auto text-zinc-600">
-          <span
-            className="h-3 w-3 shrink-0 rounded"
-            style={{ backgroundColor: CALENDAR_COLORS.reservation, opacity: 0.75 }}
-            aria-hidden
-          />
-          Citas ya realizadas (mismo color, más tenue)
         </span>
       </div>
 
