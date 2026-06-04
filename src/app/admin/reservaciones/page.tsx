@@ -28,6 +28,9 @@ import {
   getReservationStatusLabel,
 } from "@/utils/reservation-status-display";
 import { isOriginFilter } from "@/lib/admin/reservation-filters";
+import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
+
+const PAGE_SIZE = 50;
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import {
   ALVERO_DURATION_MIN,
@@ -120,7 +123,10 @@ function AdminReservacionesPageInner() {
   const sp = useSearchParams();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
+  const tableSectionRef = useRef<HTMLDivElement>(null);
+  const skipTableScrollRef = useRef(true);
   const [error, setError] = useState("");
   const originParam = sp.get("origin");
   const [filters, setFilters] = useState(() => ({
@@ -217,6 +223,7 @@ function AdminReservacionesPageInner() {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
       setDebouncedSearch(filters.search.trim());
+      setOffset(0);
     }, 300);
     return () => {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -234,6 +241,9 @@ function AdminReservacionesPageInner() {
       if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
       if (filters.origin) params.set("origin", filters.origin);
       if (debouncedSearch) params.set("search", debouncedSearch);
+      params.set("sort", "recent");
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(offset));
       const res = await axios.get(`/api/admin/reservations?${params}`);
       if (res.data.success) {
         setReservations(res.data.reservations ?? []);
@@ -246,11 +256,38 @@ function AdminReservacionesPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.status, filters.paymentStatus, filters.origin, debouncedSearch]);
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.status,
+    filters.paymentStatus,
+    filters.origin,
+    debouncedSearch,
+    offset,
+  ]);
 
   useEffect(() => {
     fetchReservations();
   }, [fetchReservations]);
+
+  useEffect(() => {
+    if (skipTableScrollRef.current) {
+      skipTableScrollRef.current = false;
+      return;
+    }
+    tableSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [offset]);
+
+  useEffect(() => {
+    if (total <= 0) {
+      if (offset !== 0) setOffset(0);
+      return;
+    }
+    const maxOffset = Math.max(0, (Math.ceil(total / PAGE_SIZE) - 1) * PAGE_SIZE);
+    if (offset > maxOffset) setOffset(maxOffset);
+  }, [total, offset]);
+
+  const tablePageBusy = loading && reservations.length > 0;
 
   useEffect(() => {
     if (!showNewModal) {
@@ -709,7 +746,13 @@ function AdminReservacionesPageInner() {
           <h1 className="text-3xl font-bold text-[#103948]" style={{ fontFamily: "var(--font-cormorant), serif" }}>
             Reservaciones
           </h1>
-          <p className="mt-1 text-zinc-600">Listado de todas las reservas</p>
+          <p className="mt-1 text-zinc-600">
+            {loading && reservations.length === 0
+              ? "Cargando reservas…"
+              : total === 0
+                ? "Sin reservas con los filtros actuales"
+                : `${total} reserva${total !== 1 ? "s" : ""}`}
+          </p>
         </div>
         <button type="button" onClick={openNewModal} className="rounded-lg bg-[#103948] px-4 py-2 text-sm font-medium text-white hover:bg-[#0d2d39]">
           Nueva reserva / evento
@@ -729,15 +772,38 @@ function AdminReservacionesPageInner() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Desde</label>
-          <input type="date" value={filters.dateFrom} onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm" />
+          <input
+            type="date"
+            value={filters.dateFrom}
+            onChange={(e) => {
+              setOffset(0);
+              setFilters((f) => ({ ...f, dateFrom: e.target.value }));
+            }}
+            className="rounded border border-zinc-300 px-3 py-2 text-sm"
+          />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Hasta</label>
-          <input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm" />
+          <input
+            type="date"
+            value={filters.dateTo}
+            onChange={(e) => {
+              setOffset(0);
+              setFilters((f) => ({ ...f, dateTo: e.target.value }));
+            }}
+            className="rounded border border-zinc-300 px-3 py-2 text-sm"
+          />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Origen</label>
-          <select value={filters.origin} onChange={(e) => setFilters((f) => ({ ...f, origin: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
+          <select
+            value={filters.origin}
+            onChange={(e) => {
+              setOffset(0);
+              setFilters((f) => ({ ...f, origin: e.target.value }));
+            }}
+            className="rounded border border-zinc-300 px-3 py-2 text-sm"
+          >
             <option value="">Todas</option>
             <option value="native">Nativas (web / admin)</option>
             <option value="imported">Importadas</option>
@@ -745,7 +811,14 @@ function AdminReservacionesPageInner() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Estado</label>
-          <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
+          <select
+            value={filters.status}
+            onChange={(e) => {
+              setOffset(0);
+              setFilters((f) => ({ ...f, status: e.target.value }));
+            }}
+            className="rounded border border-zinc-300 px-3 py-2 text-sm"
+          >
             <option value="">Todos</option>
             <option value="confirmed">Confirmadas</option>
             <option value="cancelled">Canceladas</option>
@@ -754,7 +827,14 @@ function AdminReservacionesPageInner() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">Pago</label>
-          <select value={filters.paymentStatus} onChange={(e) => setFilters((f) => ({ ...f, paymentStatus: e.target.value }))} className="rounded border border-zinc-300 px-3 py-2 text-sm">
+          <select
+            value={filters.paymentStatus}
+            onChange={(e) => {
+              setOffset(0);
+              setFilters((f) => ({ ...f, paymentStatus: e.target.value }));
+            }}
+            className="rounded border border-zinc-300 px-3 py-2 text-sm"
+          >
             <option value="">Todos</option>
             <option value="pending">Pago pendiente</option>
           </select>
@@ -765,13 +845,20 @@ function AdminReservacionesPageInner() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-        {loading ? (
+      <div
+        ref={tableSectionRef}
+        className="scroll-mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
+      >
+        {loading && reservations.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative">
+            <div
+              className={`overflow-x-auto transition-opacity ${tablePageBusy ? "pointer-events-none opacity-50" : ""}`}
+              aria-busy={loading}
+            >
             <table className="min-w-full divide-y divide-zinc-200">
               <thead>
                 <tr>
@@ -860,11 +947,24 @@ function AdminReservacionesPageInner() {
                 )}
               </tbody>
             </table>
+            </div>
+            {tablePageBusy ? (
+              <div
+                className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/60"
+                aria-hidden
+              >
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
+              </div>
+            ) : null}
           </div>
         )}
-        {!loading && total > 0 && (
-          <div className="border-t border-zinc-200 px-4 py-2 text-sm text-zinc-500">Total: {total} reserva{total !== 1 ? "s" : ""}</div>
-        )}
+        <AdminTablePagination
+          offset={offset}
+          pageSize={PAGE_SIZE}
+          total={total}
+          loading={loading}
+          onOffsetChange={setOffset}
+        />
       </div>
 
       {showNewModal && (

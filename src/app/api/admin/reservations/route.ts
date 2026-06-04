@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
       200
     );
     const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10) || 0);
+    const sortParam = searchParams.get("sort");
+    const sortById = sortParam === "id";
 
     const supabase = createServiceRoleClient();
 
@@ -61,9 +63,18 @@ export async function GET(request: NextRequest) {
       .select(
         "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, payment_method, payment_status, created_at, reschedule_count, discount_code, source, google_event_id, import_type, order_number",
         { count: "exact" }
-      )
-      .order("id", { ascending: false })
-      .range(offset, offset + limit - 1);
+      );
+
+    if (sortById) {
+      query = query.order("id", { ascending: false });
+    } else {
+      query = query
+        .not("created_at", "is", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
+    }
+
+    query = query.range(offset, offset + limit - 1);
 
     // Excluir slots de Nancy / "Reservado para Alvero" (manual_available)
     query = excludeManualAvailableSlots(query);

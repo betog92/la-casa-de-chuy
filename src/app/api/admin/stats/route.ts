@@ -44,7 +44,6 @@ export async function GET() {
     const [
       { data: sessionsTodayRows, error: sessionsTodayErr },
       { data: revenueTodayRows, error: revenueTodayErr },
-      { data: recentReservations, error: recentErr },
       { data: weekRevenueRows, error: weekErr },
       { count: cancelledTodayCount, error: cancelledTodayErr },
       { count: pendingManualPaymentsCount, error: pendingManualErr },
@@ -62,15 +61,6 @@ export async function GET() {
           .not("created_at", "is", null)
           .gte("created_at", startOfTodayMx)
           .lt("created_at", startOfTomorrowMx),
-      ),
-      filterNativeReservations(
-        supabase
-          .from("reservations")
-          .select("id, date, start_time, name, email, price, status, created_at")
-          .not("created_at", "is", null)
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false })
-          .limit(25),
       ),
       filterNativeReservations(
         supabase
@@ -106,10 +96,6 @@ export async function GET() {
     if (revenueTodayErr) {
       console.error("[admin stats revenueToday]", revenueTodayErr);
       return errorResponse("No se pudieron cargar los ingresos del día", 500);
-    }
-    if (recentErr) {
-      console.error("[admin stats recentReservations]", recentErr);
-      return errorResponse("No se pudo cargar las reservas recientes", 500);
     }
     if (weekErr) {
       console.error("[admin stats weekRevenue]", weekErr);
@@ -152,7 +138,6 @@ export async function GET() {
       },
       weekRevenue: weekTotal,
       pendingManualPayments,
-      recentReservations: recentReservations ?? [],
     });
   } catch (error) {
     console.error("Error fetching admin stats:", error);

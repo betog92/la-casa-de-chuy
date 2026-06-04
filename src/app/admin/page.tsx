@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -34,8 +35,9 @@ interface Stats {
   };
   weekRevenue: number;
   pendingManualPayments: number;
-  recentReservations: RecentReservation[];
 }
+
+const RECENT_PAGE_SIZE = 25;
 
 function reservationStatusLabel(status: string): string {
   switch (status) {
@@ -80,11 +82,18 @@ function formatRegisteredAt(iso: string | null): { relative: string; full: strin
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [recentReservations, setRecentReservations] = useState<RecentReservation[]>([]);
+  const [recentTotal, setRecentTotal] = useState(0);
+  const [recentOffset, setRecentOffset] = useState(0);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [recentLoading, setRecentLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const recentTableRef = useRef<HTMLDivElement>(null);
+  const skipRecentScrollRef = useRef(true);
 
   useEffect(() => {
     const fetchStats = async () => {
+      setStatsLoading(true);
       try {
         const res = await axios.get("/api/admin/stats");
         if (res.data.success) {
@@ -99,14 +108,63 @@ export default function AdminDashboardPage() {
             : "Error al cargar estadísticas",
         );
       } finally {
-        setLoading(false);
+        setStatsLoading(false);
       }
     };
 
     void fetchStats();
   }, []);
 
-  if (loading) {
+  const fetchRecent = useCallback(async () => {
+    setRecentLoading(true);
+    try {
+      const params = new URLSearchParams({
+        origin: "native",
+        sort: "recent",
+        limit: String(RECENT_PAGE_SIZE),
+        offset: String(recentOffset),
+      });
+      const res = await axios.get(`/api/admin/reservations?${params}`);
+      if (res.data.success) {
+        setRecentReservations(res.data.reservations ?? []);
+        setRecentTotal(res.data.total ?? 0);
+      }
+    } catch {
+      setRecentReservations([]);
+      setRecentTotal(0);
+    } finally {
+      setRecentLoading(false);
+    }
+  }, [recentOffset]);
+
+  useEffect(() => {
+    void fetchRecent();
+  }, [fetchRecent]);
+
+  useEffect(() => {
+    if (skipRecentScrollRef.current) {
+      skipRecentScrollRef.current = false;
+      return;
+    }
+    recentTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [recentOffset]);
+
+  useEffect(() => {
+    if (recentTotal <= 0) {
+      if (recentOffset !== 0) setRecentOffset(0);
+      return;
+    }
+    const maxOffset = Math.max(
+      0,
+      (Math.ceil(recentTotal / RECENT_PAGE_SIZE) - 1) * RECENT_PAGE_SIZE,
+    );
+    if (recentOffset > maxOffset) setRecentOffset(maxOffset);
+  }, [recentTotal, recentOffset]);
+
+  const loading = statsLoading;
+  const recentTableBusy = recentLoading && recentReservations.length > 0;
+
+  if (loading && !stats) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
@@ -226,10 +284,10 @@ export default function AdminDashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-[#103948]">
               Reservas recientes
+              {recentTotal > 0 ? (
+                <span className="ml-1.5 font-normal text-zinc-500">({recentTotal})</span>
+              ) : null}
             </h2>
-            <p className="text-sm text-zinc-500">
-              Últimas altas desde la web o el panel (sin importaciones).
-            </p>
           </div>
           <Link
             href="/admin/reservaciones?origin=native"
@@ -239,8 +297,16 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          {s.recentReservations.length === 0 ? (
+        <div ref={recentTableRef} className="relative scroll-mt-4">
+        <div
+          className={`overflow-x-auto transition-opacity ${recentTableBusy ? "pointer-events-none opacity-50" : ""}`}
+          aria-busy={recentLoading}
+        >
+          {recentLoading && recentReservations.length === 0 ? (
+            <div className="flex justify-center px-5 py-10">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
+            </div>
+          ) : recentReservations.length === 0 ? (
             <div className="px-5 py-10 text-center text-zinc-500">
               No hay reservas nativas recientes. Las citas importadas están en{" "}
               <Link href="/admin/reservaciones?origin=imported" className="font-medium text-[#103948] hover:underline">
@@ -261,7 +327,7 @@ export default function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {s.recentReservations.map((r) => {
+                {recentReservations.map((r) => {
                   const reg = formatRegisteredAt(r.created_at);
                   return (
                     <tr
@@ -325,6 +391,22 @@ export default function AdminDashboardPage() {
             </table>
           )}
         </div>
+        {recentTableBusy ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/60"
+            aria-hidden
+          >
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#103948] border-t-transparent" />
+          </div>
+        ) : null}
+        </div>
+        <AdminTablePagination
+          offset={recentOffset}
+          pageSize={RECENT_PAGE_SIZE}
+          total={recentTotal}
+          loading={recentLoading}
+          onOffsetChange={setRecentOffset}
+        />
       </div>
     </div>
   );
