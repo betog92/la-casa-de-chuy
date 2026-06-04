@@ -49,6 +49,8 @@ function getEventColor(event: { resource?: { isVestidos?: boolean; source?: stri
     if (importType === "manual_client") return CALENDAR_COLORS.alveroReservation;
     if (importType === "manual_available") return CALENDAR_COLORS.alveroSpace;
     if (importType === "manual_other") return CALENDAR_COLORS.reservationManual;
+    // Cita creada en el panel (variante cliente): source admin, sin import_type
+    if (source === "admin" && !importType) return CALENDAR_COLORS.reservationManual;
     return source === "admin" ? CALENDAR_COLORS.reservation : CALENDAR_COLORS.reservationOldWeb;
   }
   return CALENDAR_COLORS.reservation;
@@ -699,19 +701,11 @@ export default function AdminCalendarioPage() {
                   },
                 };
               }
-              const importType = event.resource?.import_type;
               const source = event.resource?.source;
-              let bgColor: string = CALENDAR_COLORS.reservation;
-              if (source === "google_import" || source === "admin") {
-                if (importType === "appointly") bgColor = CALENDAR_COLORS.reservationOldWeb;
-                else if (importType === "manual_client") bgColor = CALENDAR_COLORS.alveroReservation;
-                else if (importType === "manual_available") bgColor = CALENDAR_COLORS.alveroSpace;
-                else if (importType === "manual_other") bgColor = CALENDAR_COLORS.reservationManual;
-                else bgColor = source === "admin" ? CALENDAR_COLORS.reservation : CALENDAR_COLORS.reservationOldWeb;
-              }
+              const importType = event.resource?.import_type;
               return {
                 style: {
-                  backgroundColor: bgColor,
+                  backgroundColor: getEventColor(event),
                   borderRadius: "4px",
                   opacity:
                     source === "google_import" || (source === "admin" && importType) ? 0.85 : 1,
