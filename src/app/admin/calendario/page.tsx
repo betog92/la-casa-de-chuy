@@ -285,23 +285,27 @@ export default function AdminCalendarioPage() {
   }, [loadVestidos]);
 
   const vestidosAsCalendarEvents = useMemo((): CalendarEvent[] => {
-    return vestidosEvents.map((ev) => {
-      const isAllDay = ev.isAllDay ?? !ev.originalStart?.includes("T");
-      const atNoon = parse(ev.date + "T12:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date());
-      const startDay = startOfDay(atNoon);
-      const start = isAllDay ? startDay : new Date(ev.originalStart);
-      const end = isAllDay ? endOfDay(startDay) : new Date(ev.originalEnd);
-      const title = vestidoTitleOverrides[ev.googleEventId] ?? ev.title_override ?? ev.title;
-      return {
-        id: `vestido-${ev.googleEventId}`,
-        title,
-        start,
-        end,
-        allDay: isAllDay,
-        resource: { isVestidos: true, googleEventId: ev.googleEventId },
-      };
-    });
-  }, [vestidosEvents, vestidoTitleOverrides]);
+    const rangeStart = startOfDay(range.start);
+    const rangeEnd = endOfDay(range.end);
+    return vestidosEvents
+      .map((ev) => {
+        const isAllDay = ev.isAllDay ?? !ev.originalStart?.includes("T");
+        const atNoon = parse(ev.date + "T12:00:00", "yyyy-MM-dd'T'HH:mm:ss", new Date());
+        const startDay = startOfDay(atNoon);
+        const start = isAllDay ? startDay : new Date(ev.originalStart);
+        const end = isAllDay ? endOfDay(startDay) : new Date(ev.originalEnd);
+        const title = vestidoTitleOverrides[ev.googleEventId] ?? ev.title_override ?? ev.title;
+        return {
+          id: `vestido-${ev.googleEventId}`,
+          title,
+          start,
+          end,
+          allDay: isAllDay,
+          resource: { isVestidos: true, googleEventId: ev.googleEventId },
+        };
+      })
+      .filter((ev) => ev.start <= rangeEnd && ev.end >= rangeStart);
+  }, [vestidosEvents, vestidoTitleOverrides, range.start, range.end]);
 
   const allDisplayEvents = useMemo(
     () => [...events, ...vestidosAsCalendarEvents],
