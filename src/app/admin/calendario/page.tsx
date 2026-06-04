@@ -20,6 +20,12 @@ import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import axios from "axios";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import {
+  formatDayModalTimeRange,
+  getDayModalPrimaryLabel,
+  getDayModalTypeLabel,
+  stripLeadingTimeFromTitle,
+} from "@/lib/admin/calendar-day-modal-display";
 
 const getMonterreyDate = (): Date => {
   const now = new Date();
@@ -594,9 +600,10 @@ export default function AdminCalendarioPage() {
   /** En vista Día, ocultar la hora en el título (ya está en el gutter) */
   const EventComponent = useCallback(
     ({ event, title }: { event: CalendarEvent; title?: string }) => {
-      const text = view === "day" && typeof title === "string"
-        ? title.replace(/^\d{1,2}:\d{2}\s*(?:a\.?m\.?|p\.?m\.?)\s*-\s*/i, "")
-        : (title ?? event.title);
+      const text =
+        view === "day" && typeof title === "string"
+          ? stripLeadingTimeFromTitle(title)
+          : (title ?? event.title);
       return <span>{text}</span>;
     },
     [view]
@@ -762,6 +769,11 @@ export default function AdminCalendarioPage() {
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
               <h2 className="text-lg font-semibold text-[#103948]">
                 {format(dayModal.date, "EEEE d 'de' MMMM", { locale: es })}
+                {sortedDayModalEvents.length > 0 ? (
+                  <span className="ml-1.5 text-base font-normal text-zinc-500">
+                    · {sortedDayModalEvents.length}
+                  </span>
+                ) : null}
               </h2>
               <button
                 type="button"
@@ -777,33 +789,48 @@ export default function AdminCalendarioPage() {
                 <p className="py-6 text-center text-sm text-zinc-500">No hay eventos este día.</p>
               ) : (
                 <ul className="space-y-2">
-                  {sortedDayModalEvents.map((ev) => (
-                    <li key={ev.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDayModal(null);
-                          openReservationOrVestido(ev);
-                        }}
-                        className="flex w-full items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2.5 text-left text-sm transition-colors hover:bg-zinc-50 active:bg-zinc-100"
-                      >
-                        <span
-                          className="h-4 w-4 shrink-0 rounded"
-                          style={{
-                            backgroundColor: getEventColor(ev),
-                            border: ev.resource?.isVestidos ? "1px dashed rgba(0,0,0,0.2)" : undefined,
+                  {sortedDayModalEvents.map((ev) => {
+                    const timeLabel = formatDayModalTimeRange(ev.start, ev.end, ev.allDay);
+                    const primaryLabel = getDayModalPrimaryLabel(ev);
+                    const typeLabel = getDayModalTypeLabel(ev);
+                    return (
+                      <li key={ev.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDayModal(null);
+                            openReservationOrVestido(ev);
                           }}
-                          aria-hidden
-                        />
-                        <span className="min-w-0 flex-1 truncate font-medium text-zinc-800">{ev.title}</span>
-                        {!ev.resource?.isVestidos && (
-                          <span className="shrink-0 text-xs text-zinc-500">
-                            {format(ev.start, "h:mm a", { locale: es })} – {format(ev.end, "h:mm a", { locale: es })}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
+                          className="flex w-full gap-3 rounded-lg border border-zinc-200 px-3 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100"
+                        >
+                          <span
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded"
+                            style={{
+                              backgroundColor: getEventColor(ev),
+                              border: ev.resource?.isVestidos
+                                ? "1px dashed rgba(0,0,0,0.2)"
+                                : undefined,
+                            }}
+                            aria-hidden
+                          />
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <time
+                              dateTime={`${ev.start.toISOString()}/${ev.end.toISOString()}`}
+                              className="w-[5.25rem] shrink-0 text-sm font-semibold tabular-nums leading-snug text-zinc-700"
+                            >
+                              {timeLabel}
+                            </time>
+                            <div className="min-w-0 flex-1">
+                              <p className="line-clamp-2 text-sm font-medium leading-snug text-zinc-900">
+                                {primaryLabel}
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-500">{typeLabel}</p>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
