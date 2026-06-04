@@ -632,10 +632,7 @@ export default function AdminCalendarioPage() {
         >
           Calendario
         </h1>
-        <p className="mt-1 text-zinc-600">
-          Vista de reservas. Usa Anterior para ver meses pasados (hasta {CALENDAR_HISTORY_MONTHS_BACK} meses).
-          Haz clic en una cita para ver detalles.
-        </p>
+        <p className="mt-1 text-zinc-600">Vista de reservas.</p>
       </div>
 
       {error && (
