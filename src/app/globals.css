@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --brand-primary: #103948;
+  --brand-primary-hover: #0d2d38;
 }
 
 @theme inline {
@@ -185,7 +187,7 @@ html {
 
 /* Realzar el badge cuando el tile está activo/seleccionado (fondo oscuro) */
 .react-calendar__tile--active.has-override::after {
-  box-shadow: 0 0 0 1px #18181b;
+  box-shadow: 0 0 0 1px var(--brand-primary);
 }
 
 /* Modo compacto: tiles más chatos para dashboards admin */
@@ -218,16 +220,16 @@ html {
 }
 
 .react-calendar__tile--active {
-  background: #18181b !important;
+  background: var(--brand-primary) !important;
   color: white !important;
   font-weight: 600;
 }
 
 .react-calendar__tile--active:enabled:hover {
-  background: #27272a !important;
+  background: var(--brand-primary-hover) !important;
 }
 
-.react-calendar__tile:enabled:hover {
+.react-calendar__tile:enabled:not(.last-minute-promo):hover {
   background: #f4f4f5;
 }
 
@@ -401,11 +403,193 @@ button.react-calendar__tile.heatmap-closed-or-unavailable.react-calendar__tile--
 .react-calendar__tile--active.heatmap-medium,
 .react-calendar__tile--active.heatmap-low,
 .react-calendar__tile--active.heatmap-minimal {
-  background-color: #18181b !important;
+  background-color: var(--brand-primary) !important;
+  color: white !important;
+}
+
+/* Promo activa: fondo lo pone ::after, no el heatmap */
+.react-calendar__tile--active.last-minute-promo.heatmap-high,
+.react-calendar__tile--active.last-minute-promo.heatmap-medium,
+.react-calendar__tile--active.last-minute-promo.heatmap-low,
+.react-calendar__tile--active.last-minute-promo.heatmap-minimal {
+  background-color: transparent !important;
   color: white !important;
 }
 
 /* El día actual hereda los estilos del heatmap - sin estilos especiales */
+
+/* Promo último minuto (-15%) en calendario público /reservar */
+.react-calendar__tile.last-minute-promo {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/*
+ * Borde “barber pole” — ::before con 4 lados (direcciones opuestas) + ::after relleno.
+ * Arriba→der / abajo→izq / derecha→abajo / izquierda→arriba.
+ * También en día seleccionado (--active): borde animado + centro oscuro.
+ */
+.react-calendar__tile.last-minute-promo:not(.heatmap-closed-or-unavailable) {
+  /*
+   * Amarillo–dorado–naranja: lenguaje visual de cupón / etiqueta de oferta.
+   * (Evitamos rojo = cerrado en el heatmap y verde = disponibilidad.)
+   */
+  --last-minute-barber-c1: #eab308; /* yellow-500 — “rebaja”, etiqueta SALE */
+  --last-minute-barber-c2: #fef9c3; /* yellow-100 — separador tipo cupón */
+  --last-minute-barber-c3: #f97316; /* orange-500 — urgencia promo, coherente con badge */
+  --last-minute-barber-stripe: repeating-linear-gradient(
+    -45deg,
+    var(--last-minute-barber-c1) 0 5px,
+    var(--last-minute-barber-c2) 5px 10px,
+    var(--last-minute-barber-c3) 10px 15px
+  );
+  /* Espejo en lados opuestos → franjas van en sentido contrario */
+  --last-minute-barber-stripe-mirror: repeating-linear-gradient(
+    135deg,
+    var(--last-minute-barber-c1) 0 5px,
+    var(--last-minute-barber-c2) 5px 10px,
+    var(--last-minute-barber-c3) 10px 15px
+  );
+  --last-minute-barber-period: calc(15px * sqrt(2));
+  --last-minute-barber-edge: 3px;
+  /* Sin border transparente: dejaba un halo blanco entre las franjas y la grilla */
+  border: none !important;
+  background-color: transparent !important;
+}
+
+.react-calendar__tile.last-minute-promo:not(.heatmap-closed-or-unavailable)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--last-minute-barber-stripe),
+    var(--last-minute-barber-stripe-mirror), var(--last-minute-barber-stripe-mirror),
+    var(--last-minute-barber-stripe);
+  background-size: var(--last-minute-barber-period) var(--last-minute-barber-edge),
+    var(--last-minute-barber-period) var(--last-minute-barber-edge),
+    var(--last-minute-barber-edge) var(--last-minute-barber-period),
+    var(--last-minute-barber-edge) var(--last-minute-barber-period);
+  background-position: left top, left bottom, left top, right top;
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  animation: last-minute-barber-edges 2.2s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.react-calendar__tile.last-minute-promo:not(.heatmap-closed-or-unavailable)::after {
+  content: "";
+  position: absolute;
+  /* Solape 0.5px bajo las franjas → evita línea blanca interior por subpíxeles */
+  inset: calc(var(--last-minute-barber-edge) - 0.5px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.react-calendar__tile.last-minute-promo:not(.heatmap-closed-or-unavailable):not(
+    .react-calendar__tile--active
+  )::after {
+  background-color: var(--last-minute-barber-fill);
+}
+
+.react-calendar__tile.last-minute-promo.react-calendar__tile--active:not(
+    .heatmap-closed-or-unavailable
+  )::after {
+  background-color: var(--brand-primary);
+}
+
+.react-calendar__tile.last-minute-promo abbr {
+  position: relative;
+  z-index: 2;
+}
+
+.react-calendar__tile.heatmap-high.last-minute-promo:not(
+    .react-calendar__tile--active
+  ) {
+  --last-minute-barber-fill: #a6dcba;
+}
+
+.react-calendar__tile.heatmap-medium.last-minute-promo:not(
+    .react-calendar__tile--active
+  ) {
+  --last-minute-barber-fill: #c7e896;
+}
+
+.react-calendar__tile.heatmap-low.last-minute-promo:not(
+    .react-calendar__tile--active
+  ) {
+  --last-minute-barber-fill: #f8e5aa;
+}
+
+.react-calendar__tile.heatmap-minimal.last-minute-promo:not(
+    .react-calendar__tile--active
+  ) {
+  --last-minute-barber-fill: #fdcead;
+}
+
+@keyframes last-minute-barber-edges {
+  from {
+    background-position: left top, left bottom, left top, right top;
+  }
+  to {
+    background-position: var(--last-minute-barber-period) top,
+      calc(var(--last-minute-barber-period) * -1) bottom,
+      left calc(var(--last-minute-barber-period) * -1),
+      right var(--last-minute-barber-period);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-calendar__tile.last-minute-promo::before {
+    animation: none;
+  }
+}
+
+/*
+ * Badge -15%: secundario al borde animado; escala con el tile (em) + mínimos en px.
+ */
+.react-calendar__tile .last-minute-promo-badge {
+  position: absolute;
+  top: max(4px, 0.2em);
+  right: max(4px, 0.2em);
+  font-size: max(0.5625rem, 0.72em);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #92400e;
+  background-color: rgba(255, 251, 235, 0.98);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  border-radius: 3px;
+  padding: 0.12em 0.35em;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.react-calendar__tile--active.last-minute-promo .last-minute-promo-badge {
+  color: #fef3c7;
+  background-color: rgba(16, 57, 72, 0.92);
+  border-color: rgba(251, 191, 36, 0.75);
+}
+
+@media (min-width: 640px) {
+  .react-calendar__tile .last-minute-promo-badge {
+    top: max(5px, 0.22em);
+    right: max(5px, 0.22em);
+    font-size: max(0.6875rem, 0.75em);
+    border-radius: 4px;
+    padding: 0.14em 0.4em;
+  }
+}
+
+@media (min-width: 1024px) {
+  .react-calendar__tile .last-minute-promo-badge {
+    top: max(5px, 0.22em);
+    right: max(5px, 0.22em);
+    font-size: max(0.75rem, 0.82em);
+    border-radius: 4px;
+    padding: 0.16em 0.48em;
+    letter-spacing: -0.01em;
+  }
+}
 
 /* Hero carousel (Swiper) - paginación */
 .hero-pagination .swiper-pagination-bullet {

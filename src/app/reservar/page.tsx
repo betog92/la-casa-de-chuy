@@ -10,11 +10,18 @@ import {
   endOfMonth,
   isSameMonth,
 } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
-import { calculatePriceWithCustom, getDayType } from "@/utils/pricing";
+import {
+  applyLastMinuteDiscount,
+  calculatePrice,
+  getDayOverride,
+  getDayType,
+  isLastMinuteEligible,
+  LAST_MINUTE_DISCOUNT_PERCENT,
+} from "@/utils/pricing";
+import { getMonterreyToday } from "@/utils/business-days";
 import { formatTimeRange, formatCurrency } from "@/utils/formatters";
 import type { TimeSlot } from "@/utils/availability";
 import "react-calendar/dist/Calendar.css";
@@ -52,15 +59,8 @@ const normalizeDate = (date: Date): Date => {
   return normalized;
 };
 
-// Helper para obtener la fecha actual en zona horaria de Monterrey
-const getMonterreyDate = (): Date => {
-  const now = new Date();
-  const monterreyTime = toZonedTime(now, "America/Monterrey");
-  return normalizeDate(monterreyTime);
-};
-
 const isFutureDate = (date: Date): boolean => {
-  const today = getMonterreyDate();
+  const today = getMonterreyToday();
   const checkDate = normalizeDate(date);
   return checkDate >= today;
 };
@@ -70,7 +70,12 @@ export default function ReservarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [price, setPrice] = useState<number | null>(null);
+  const [basePrice, setBasePrice] = useState<number | null>(null);
+  const [displayPrice, setDisplayPrice] = useState<number | null>(null);
+  const [lastMinuteApplied, setLastMinuteApplied] = useState(false);
+  const [isPromotionalPrice, setIsPromotionalPrice] = useState(false);
+  const [isHolidayOverride, setIsHolidayOverride] = useState(false);
+  const [standardPrice, setStandardPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closedDates, setClosedDates] = useState<Set<string>>(new Set());
@@ -85,9 +90,16 @@ export default function ReservarPage() {
   useEffect(() => {
     if (!selectedDate) {
       setAvailableSlots([]);
-      setPrice(null);
+      setBasePrice(null);
+      setDisplayPrice(null);
+      setLastMinuteApplied(false);
+      setIsPromotionalPrice(false);
+      setIsHolidayOverride(false);
+      setStandardPrice(null);
       return;
     }
+
+    let cancelled = false;
 
     const fetchAvailability = async () => {
       setLoading(true);
@@ -96,25 +108,52 @@ export default function ReservarPage() {
       try {
         const supabase = createClient();
 
-        // Obtener slots disponibles
-        const slots = await getAvailableSlots(supabase, selectedDate);
-        setAvailableSlots(slots);
+        const [slots, override] = await Promise.all([
+          getAvailableSlots(supabase, selectedDate),
+          getDayOverride(supabase, selectedDate),
+        ]);
 
-        // Calcular precio
-        const calculatedPrice = await calculatePriceWithCustom(
-          supabase,
-          selectedDate
+        if (cancelled) return;
+
+        const holidayOverride = override?.isHoliday ?? false;
+        const calculatedBase = calculatePrice(
+          selectedDate,
+          override?.customPrice ?? null,
+          holidayOverride
         );
-        setPrice(calculatedPrice);
+        const tariffPrice = calculatePrice(
+          selectedDate,
+          null,
+          holidayOverride
+        );
+        const promotional =
+          override?.customPrice != null && calculatedBase < tariffPrice;
+        const lastMinute = applyLastMinuteDiscount(
+          selectedDate,
+          calculatedBase
+        );
+
+        setAvailableSlots(slots);
+        setBasePrice(calculatedBase);
+        setDisplayPrice(lastMinute.price);
+        setLastMinuteApplied(lastMinute.applied);
+        setIsPromotionalPrice(promotional);
+        setIsHolidayOverride(holidayOverride);
+        setStandardPrice(tariffPrice);
       } catch (err) {
+        if (cancelled) return;
         setError("Error al cargar disponibilidad");
         console.error(err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchAvailability();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDate]);
 
   const getSlotsForDay = useCallback(
@@ -229,7 +268,12 @@ export default function ReservarPage() {
 
         setLoading(true);
         setAvailableSlots([]);
-        setPrice(null);
+        setBasePrice(null);
+        setDisplayPrice(null);
+        setLastMinuteApplied(false);
+        setIsPromotionalPrice(false);
+        setIsHolidayOverride(false);
+        setStandardPrice(null);
         setSelectedTime(null);
         setSelectedDate(value);
       }
@@ -243,22 +287,24 @@ export default function ReservarPage() {
 
   // Manejar continuar al formulario
   const handleContinue = useCallback(() => {
-    if (!selectedDate || !selectedTime || !price) return;
+    if (!selectedDate || !selectedTime || basePrice == null || displayPrice == null)
+      return;
 
     const dateString = format(selectedDate, "yyyy-MM-dd");
+    // Precio base: el formulario aplica último minuto con isLastMinute: true
     sessionStorage.setItem(
       "reservationData",
-      JSON.stringify({ date: dateString, time: selectedTime, price })
+      JSON.stringify({ date: dateString, time: selectedTime, price: basePrice })
     );
     router.push(`/reservar/formulario?date=${dateString}&time=${selectedTime}`);
-  }, [selectedDate, selectedTime, price, router]);
+  }, [selectedDate, selectedTime, basePrice, displayPrice, router]);
 
   // Usar fecha de Monterrey para minDate y maxDate
   // Se recalculan en cada render para asegurar fecha actual
   // Esto previene que minDate quede desactualizado si el componente permanece montado pasada la medianoche
-  const minDate = getMonterreyDate();
+  const minDate = getMonterreyToday();
 
-  const maxDate = addMonths(getMonterreyDate(), 6);
+  const maxDate = addMonths(getMonterreyToday(), 6);
   maxDate.setHours(23, 59, 59, 999);
 
   // Función para deshabilitar fechas pasadas, cerradas, sin disponibilidad o más de 6 meses
@@ -268,7 +314,7 @@ export default function ReservarPage() {
 
       const dateString = format(date, "yyyy-MM-dd");
       const checkDate = normalizeDate(date);
-      const today = getMonterreyDate();
+      const today = getMonterreyToday();
       const future = isFutureDate(date);
 
       // Verificar si el mes está cargado antes de deshabilitar por 0 slots
@@ -293,59 +339,114 @@ export default function ReservarPage() {
     [maxDate, closedDates, monthAvailability, isMonthLoadedForDate]
   );
 
-  // Función para aplicar clases CSS según disponibilidad (heatmap)
-  const tileClassName = useCallback(
-    ({ date, view }: { date: Date; view: string }) => {
-      if (view !== "month") return "";
-
+  const getTileAvailability = useCallback(
+    (date: Date) => {
       const dateString = format(date, "yyyy-MM-dd");
       const checkDate = normalizeDate(date);
-      const today = getMonterreyDate();
+      const today = getMonterreyToday();
       const future = isFutureDate(date);
       const isToday = checkDate.getTime() === today.getTime();
       const isClosed = closedDates.has(dateString);
       const slots = monthAvailability.get(dateString);
-
-      // Verificar si el mes de esta fecha está cargado
       const isMonthLoaded = isMonthLoadedForDate(date);
-
-      // Si el mes no está cargado, no aplicar estilos (evita flash rojo inicial)
-      if (!isMonthLoaded && future) return "";
-
-      // Si el mes está cargado pero slots es undefined, significa que tiene 0 slots
-      // (la función SQL solo retorna días con slots > 0)
       const availableSlots = slots ?? 0;
 
-      // Si es el día actual y no tiene slots, no aplicar estilo rojo (ya está deshabilitado)
-      // Debe verse como los días pasados, sin estilo especial
+      return {
+        dateString,
+        checkDate,
+        today,
+        future,
+        isToday,
+        isClosed,
+        isMonthLoaded,
+        availableSlots,
+      };
+    },
+    [closedDates, monthAvailability, isMonthLoadedForDate]
+  );
+
+  // Función para aplicar clases CSS según disponibilidad (heatmap) + promo último minuto
+  const tileClassName = useCallback(
+    ({ date, view }: { date: Date; view: string }) => {
+      if (view !== "month") return "";
+
+      const {
+        checkDate,
+        today,
+        future,
+        isToday,
+        isClosed,
+        isMonthLoaded,
+        availableSlots,
+      } = getTileAvailability(date);
+
+      if (!isMonthLoaded && future) return "";
+
       if (isToday && availableSlots === 0) {
-        return ""; // No aplicar estilo, solo deshabilitado
+        return "";
       }
 
-      // Días cerrados o sin disponibilidad futuros → rojo
+      const classes: string[] = [];
+
       if (
         (isClosed || availableSlots === 0) &&
         future &&
         checkDate <= maxDate &&
-        !isToday // Excluir el día actual (ya se maneja arriba)
+        !isToday
       ) {
-        return "heatmap-closed-or-unavailable";
-      }
-
-      // Calcular heatmap según porcentaje de disponibilidad
-      if (availableSlots > 0) {
+        classes.push("heatmap-closed-or-unavailable");
+      } else if (availableSlots > 0) {
         const maxSlots = date.getDay() === 0 ? 7 : 11;
         const percentage = (availableSlots / maxSlots) * 100;
 
-        if (percentage >= 80) return "heatmap-high";
-        if (percentage >= 50) return "heatmap-medium";
-        if (percentage >= 25) return "heatmap-low";
-        if (percentage > 0) return "heatmap-minimal";
+        if (percentage >= 80) classes.push("heatmap-high");
+        else if (percentage >= 50) classes.push("heatmap-medium");
+        else if (percentage >= 25) classes.push("heatmap-low");
+        else if (percentage > 0) classes.push("heatmap-minimal");
       }
 
-      return "";
+      if (availableSlots > 0 && isLastMinuteEligible(date)) {
+        classes.push("last-minute-promo");
+      }
+
+      return classes.join(" ");
     },
-    [closedDates, monthAvailability, maxDate, isMonthLoadedForDate]
+    [getTileAvailability, maxDate]
+  );
+
+  const tileContent = useCallback(
+    ({ date, view }: { date: Date; view: string }) => {
+      if (view !== "month") return null;
+
+      const { future, isMonthLoaded, availableSlots } = getTileAvailability(date);
+      if (!isMonthLoaded && future) return null;
+      if (availableSlots <= 0 || !isLastMinuteEligible(date)) return null;
+
+      return (
+        <span className="last-minute-promo-badge">
+          -{LAST_MINUTE_DISCOUNT_PERCENT}%
+        </span>
+      );
+    },
+    [getTileAvailability]
+  );
+
+  const formatLongDate = useCallback(
+    (_locale: string | undefined, date: Date) => {
+      const label = format(date, "EEEE, d 'de' MMMM 'de' yyyy", {
+        locale: es,
+      });
+      const { isMonthLoaded, availableSlots } = getTileAvailability(date);
+      if (
+        isMonthLoaded &&
+        availableSlots > 0 &&
+        isLastMinuteEligible(date)
+      ) {
+        return `${label}. ${LAST_MINUTE_DISCOUNT_PERCENT}% de descuento último minuto`;
+      }
+      return label;
+    },
+    [getTileAvailability]
   );
 
   // Inicialización del componente
@@ -359,7 +460,7 @@ export default function ReservarPage() {
 
     const initialize = async () => {
       const supabase = createClient();
-      const today = getMonterreyDate();
+      const today = getMonterreyToday();
       const threeMonthsLater = addMonths(today, 3);
 
       // Cargar fechas cerradas
@@ -385,16 +486,60 @@ export default function ReservarPage() {
     initialize();
   }, [mounted, loadMonthAvailability]);
 
-  const getDayTypeLabel = useCallback((date: Date | null): string => {
-    if (!date) return "";
-    const dayType = getDayType(date);
-    const labels: Record<string, string> = {
-      holiday: "Día Festivo",
-      sunday: "Domingo",
-      weekend: "Fin de Semana",
-    };
-    return labels[dayType] || "Día Normal";
-  }, []);
+  const isHolidayTariff = useMemo(() => {
+    if (!selectedDate) return false;
+    return isHolidayOverride || getDayType(selectedDate) === "holiday";
+  }, [selectedDate, isHolidayOverride]);
+
+  const getTariffContext = useCallback(
+    (date: Date | null): string | null => {
+      if (!date) return null;
+      if (isPromotionalPrice) return "precio promocional";
+      if (isHolidayOverride || getDayType(date) === "holiday") {
+        return "tarifa festiva";
+      }
+      if (getDayType(date) === "sunday") return "tarifa de domingo";
+      return null;
+    },
+    [isPromotionalPrice, isHolidayOverride]
+  );
+
+  const priceContextLabel = useMemo(() => {
+    if (lastMinuteApplied) return "Descuento último minuto";
+    if (isPromotionalPrice) return "Precio promocional";
+    if (!selectedDate) return "Precio regular";
+    if (isHolidayTariff) return "Tarifa festiva";
+    if (getDayType(selectedDate) === "sunday") return "Tarifa de domingo";
+    return "Precio regular";
+  }, [
+    lastMinuteApplied,
+    isPromotionalPrice,
+    selectedDate,
+    isHolidayTariff,
+  ]);
+
+  const strikethroughPrice = useMemo(() => {
+    if (lastMinuteApplied && basePrice != null) return basePrice;
+    if (isPromotionalPrice && standardPrice != null) return standardPrice;
+    return null;
+  }, [lastMinuteApplied, isPromotionalPrice, basePrice, standardPrice]);
+
+  const priceContextSubline = useMemo(() => {
+    if (!lastMinuteApplied || basePrice == null || displayPrice == null) {
+      return null;
+    }
+    const savings = formatCurrency(basePrice - displayPrice);
+    const tariff = getTariffContext(selectedDate);
+    return tariff
+      ? `Sobre ${tariff} · ahorras $${savings} MXN`
+      : `Ahorras $${savings} MXN`;
+  }, [
+    lastMinuteApplied,
+    basePrice,
+    displayPrice,
+    getTariffContext,
+    selectedDate,
+  ]);
 
   return (
     <div className="min-h-screen min-w-[390px] bg-gradient-to-b from-zinc-50 to-white py-6 sm:py-12">
@@ -425,6 +570,8 @@ export default function ReservarPage() {
                     maxDate={maxDate}
                     tileDisabled={tileDisabled}
                     tileClassName={tileClassName}
+                    tileContent={tileContent}
+                    formatLongDate={formatLongDate}
                     onActiveStartDateChange={({ activeStartDate }) => {
                       if (activeStartDate) {
                         handleMonthChange(activeStartDate);
@@ -433,55 +580,53 @@ export default function ReservarPage() {
                     className="w-full rounded-lg border-0"
                     showNeighboringMonth={false}
                   />
-                  {/* Leyenda del heatmap - Solo visible en pantallas grandes */}
-                  <div className="mt-4 hidden grid-cols-5 gap-2 border-t border-zinc-200 pt-4 lg:grid">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-4 w-4 rounded border border-zinc-300"
-                        style={{ backgroundColor: "rgba(22, 163, 74, 0.38)" }}
-                      />
-                      <span className="text-xs text-zinc-600 sm:text-sm">
-                        Alta
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-4 w-4 rounded border border-zinc-300"
-                        style={{ backgroundColor: "rgba(132, 204, 22, 0.45)" }}
-                      />
-                      <span className="text-xs text-zinc-600 sm:text-sm">
-                        Moderada
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-4 w-4 rounded border border-zinc-300"
-                        style={{ backgroundColor: "rgba(234, 179, 8, 0.35)" }}
-                      />
-                      <span className="text-xs text-zinc-600 sm:text-sm">
-                        Poca
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-4 w-4 rounded border border-zinc-300"
-                        style={{ backgroundColor: "rgba(249, 115, 22, 0.35)" }}
-                      />
-                      <span className="text-xs text-zinc-600 sm:text-sm">
-                        Muy poca
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-4 w-4 rounded border"
-                        style={{
-                          backgroundColor: "#fef2f2",
-                          borderColor: "#ef4444",
-                        }}
-                      />
-                      <span className="text-xs text-zinc-600 sm:text-sm">
-                        Sin disponibilidad
-                      </span>
+                  {/* Leyenda — desktop: disponibilidad + promo en fila aparte */}
+                  <div className="mt-4 hidden border-t border-zinc-200 pt-4 lg:block">
+                    <div className="grid grid-cols-5 gap-x-3 gap-y-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-4 w-4 shrink-0 rounded border border-zinc-300"
+                          style={{ backgroundColor: "rgba(22, 163, 74, 0.38)" }}
+                        />
+                        <span className="text-xs text-zinc-600">Alta</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-4 w-4 shrink-0 rounded border border-zinc-300"
+                          style={{
+                            backgroundColor: "rgba(132, 204, 22, 0.45)",
+                          }}
+                        />
+                        <span className="text-xs text-zinc-600">Moderada</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-4 w-4 shrink-0 rounded border border-zinc-300"
+                          style={{ backgroundColor: "rgba(234, 179, 8, 0.35)" }}
+                        />
+                        <span className="text-xs text-zinc-600">Poca</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-4 w-4 shrink-0 rounded border border-zinc-300"
+                          style={{
+                            backgroundColor: "rgba(249, 115, 22, 0.35)",
+                          }}
+                        />
+                        <span className="text-xs text-zinc-600">Muy poca</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-4 w-4 shrink-0 rounded border"
+                          style={{
+                            backgroundColor: "#fef2f2",
+                            borderColor: "#ef4444",
+                          }}
+                        />
+                        <span className="text-xs text-zinc-600">
+                          Sin disponibilidad
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -515,9 +660,13 @@ export default function ReservarPage() {
                   <h2 className="mb-3 text-lg font-semibold text-zinc-900 sm:mb-4 sm:text-2xl">
                     Horarios Disponibles
                   </h2>
-                  <p className="mb-3 text-xs text-zinc-600 sm:mb-4 sm:text-sm">
-                    {format(selectedDate, "EEEE, d 'de' MMMM", { locale: es })}
-                  </p>
+                  <div className="mb-3 sm:mb-4">
+                    <p className="text-xs capitalize text-zinc-700 sm:text-sm">
+                      {format(selectedDate, "EEEE, d 'de' MMMM", {
+                        locale: es,
+                      })}
+                    </p>
+                  </div>
 
                   {/* Lista de horarios */}
                   <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 sm:mb-6 sm:gap-3">
@@ -532,8 +681,8 @@ export default function ReservarPage() {
                             onClick={() => handleTimeSelect(time)}
                             className={`rounded-lg border-2 px-3 py-2 text-center text-sm font-semibold transition-all whitespace-nowrap sm:px-4 sm:py-3 sm:text-base ${
                               isSelected
-                                ? "border-zinc-900 bg-zinc-900 text-white"
-                                : "border-zinc-300 bg-white text-zinc-900 hover:border-zinc-900 hover:bg-zinc-50"
+                                ? "border-[#103948] bg-[#103948] text-white"
+                                : "border-zinc-300 bg-white text-zinc-900 hover:border-[#103948] hover:bg-zinc-50"
                             }`}
                           >
                             {formatTimeRange(
@@ -547,15 +696,38 @@ export default function ReservarPage() {
                   </div>
 
                   {/* Precio */}
-                  {price && (
-                    <div className="mb-4 rounded-lg bg-zinc-50 p-3 sm:mb-6 sm:p-4">
-                      <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:justify-between lg:items-center">
-                        <span className="text-sm text-zinc-600 sm:text-base">
-                          {getDayTypeLabel(selectedDate)}
-                        </span>
-                        <span className="text-xl font-bold text-zinc-900 sm:text-2xl">
-                          ${formatCurrency(price)} MXN
-                        </span>
+                  {displayPrice != null && basePrice != null && (
+                    <div
+                      className={`mb-4 rounded-lg border bg-zinc-50 p-3 sm:mb-6 sm:p-4 ${
+                        lastMinuteApplied
+                          ? "border-zinc-200 border-l-4 border-l-amber-400"
+                          : "border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-zinc-800 sm:text-base">
+                            {priceContextLabel}
+                          </p>
+                          {priceContextSubline ? (
+                            <p className="mt-1 text-xs text-zinc-500 sm:text-sm">
+                              {priceContextSubline}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {strikethroughPrice != null ? (
+                            <p className="text-sm text-zinc-400 line-through">
+                              ${formatCurrency(strikethroughPrice)}
+                            </p>
+                          ) : null}
+                          <p className="text-xl font-bold tabular-nums text-zinc-900 sm:text-2xl">
+                            ${formatCurrency(displayPrice)}
+                            <span className="ml-1 text-sm font-normal text-zinc-500">
+                              MXN
+                            </span>
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -563,8 +735,8 @@ export default function ReservarPage() {
                   {/* Botón Continuar */}
                   <button
                     onClick={handleContinue}
-                    disabled={!selectedTime || !price}
-                    className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-base font-semibold text-white transition-all hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 sm:px-6 sm:py-4 sm:text-lg"
+                    disabled={!selectedTime || displayPrice == null}
+                    className="w-full rounded-lg bg-[#103948] px-4 py-3 text-base font-semibold text-white transition-all hover:bg-[#0d2d38] disabled:cursor-not-allowed disabled:bg-zinc-400 sm:px-6 sm:py-4 sm:text-lg"
                   >
                     Continuar
                   </button>

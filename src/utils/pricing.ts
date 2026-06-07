@@ -1,7 +1,15 @@
-import { format, getDay, isSameDay, differenceInDays, startOfDay } from "date-fns";
+import {
+  format,
+  getDay,
+  isSameDay,
+  differenceInCalendarDays,
+  parse,
+} from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { getMonterreyToday } from "./business-days";
+/** Porcentaje de descuento último minuto (hoy + 3 días calendario en Monterrey). */
+export const LAST_MINUTE_DISCOUNT_PERCENT = 15;
 
 // =====================================================
 // CONSTANTES DE PRECIOS BASE
@@ -204,6 +212,23 @@ export async function calculatePriceWithCustom(
 // =====================================================
 
 /**
+ * Indica si la fecha califica para descuento de último minuto (hoy + 3 días).
+ * Misma regla que `applyLastMinuteDiscount` (zona Monterrey).
+ */
+export function isLastMinuteEligible(date: Date): boolean {
+  const todayStr = formatInTimeZone(
+    new Date(),
+    "America/Monterrey",
+    "yyyy-MM-dd"
+  );
+  const dateStr = format(date, "yyyy-MM-dd");
+  const today = parse(todayStr, "yyyy-MM-dd", new Date());
+  const reservationDate = parse(dateStr, "yyyy-MM-dd", new Date());
+  const diffDays = differenceInCalendarDays(reservationDate, today);
+  return diffDays >= 0 && diffDays <= 3;
+}
+
+/**
  * Calcula descuento de último minuto (15% off)
  * Aplica a los próximos 4 días
  *
@@ -215,16 +240,10 @@ export function applyLastMinuteDiscount(
   date: Date,
   basePrice: number
 ): { price: number; discount: number; applied: boolean } {
-  const today = getMonterreyToday();
-  const reservationDate = startOfDay(date);
-
-  // Calcular diferencia en días usando date-fns (más preciso)
-  const diffDays = differenceInDays(reservationDate, today);
-
-  // Aplicar descuento si es dentro de los próximos 4 días (0, 1, 2, 3)
-  // 0 = hoy, 1 = mañana, 2 = pasado mañana, 3 = el siguiente día
-  if (diffDays >= 0 && diffDays <= 3) {
-    const discount = basePrice * 0.15;
+  if (isLastMinuteEligible(date)) {
+    const discount = Math.round(
+      (basePrice * LAST_MINUTE_DISCOUNT_PERCENT) / 100
+    );
     return {
       price: basePrice - discount,
       discount,

@@ -1,7 +1,8 @@
-import { parse, differenceInDays, startOfDay } from "date-fns";
+import { parse } from "date-fns";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
+  applyLastMinuteDiscount,
   calculateFinalPrice,
   type PriceCalculationResult,
 } from "@/utils/pricing";
@@ -351,16 +352,9 @@ export async function computeAuthoritativeReservationPrice(
     discountCodeDiscount = codeDiscount;
     let p = basePrice - codeDiscount;
 
-    const today = getMonterreyToday();
-    const reservationDate = startOfDay(date);
-    const diffDays = differenceInDays(reservationDate, today);
-    if (diffDays >= 0 && diffDays <= 3) {
-      const lm = p * 0.15;
-      lastMinuteDiscount = lm;
-      p -= lm;
-    } else {
-      lastMinuteDiscount = 0;
-    }
+    const lastMinute = applyLastMinuteDiscount(date, p);
+    lastMinuteDiscount = lastMinute.discount;
+    p = lastMinute.price;
 
     if (useLoyaltyDiscount && confirmedReservationCount >= 1) {
       let pct = 0;
