@@ -10,6 +10,10 @@ import {
   REFERRAL_INVITEE_DISCOUNT_MXN,
   REFERRAL_REFERRER_CREDIT_MXN,
 } from "@/lib/payments/referral-validation";
+import {
+  ensurePublicUserRow,
+  syncUserToDatabase,
+} from "@/lib/supabase/user-sync";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -52,6 +56,31 @@ export async function GET() {
     // Service-role para leer tablas con RLS habilitada sin políticas
     // específicas (referral_codes/redemptions sólo se exponen vía esta API).
     const service = createServiceRoleClient();
+
+    // El código de referido vive en `referral_codes` (FK a auth.users), pero la
+    // validación en checkout lee el email del referidor desde `public.users`.
+    // Sincronizamos primero para evitar códigos "huérfanos" sin perfil público.
+    const syncResult = await syncUserToDatabase(user);
+    const { data: publicProfile } = await service
+      .from("users")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!publicProfile) {
+      const repaired = await ensurePublicUserRow(service, user);
+      if (!repaired.ok) {
+        console.error(
+          "[/api/referrals/me] No se pudo asegurar public.users antes del código:",
+          syncResult.error,
+          repaired.error,
+        );
+        return errorResponse(
+          "No se pudo preparar tu cuenta. Intenta de nuevo en unos segundos.",
+          500,
+        );
+      }
+    }
 
     // RPC atómica: garantiza un código (existente o recién creado) sin race.
     const { data: ensuredCode, error: rpcErr } = await service.rpc(

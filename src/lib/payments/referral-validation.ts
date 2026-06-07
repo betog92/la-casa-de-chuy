@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { ensurePublicUserRow } from "@/lib/supabase/user-sync";
 
 /**
  * Configuración de negocio del programa de referidos V2.
@@ -30,6 +31,71 @@ export type ReferralValidationResult =
       referrerCreditAmount: number;
     }
   | { ok: false; message: string };
+
+type ReferrerEmailLookup =
+  | { ok: true; email: string }
+  | { ok: false; message: string };
+
+/**
+ * Resuelve el email del referidor desde `public.users`, con fallback a
+ * `auth.users` y reparación best-effort del perfil público si falta.
+ */
+async function resolveReferrerEmail(
+  supabase: SupabaseClient<Database>,
+  referrerUserId: string,
+): Promise<ReferrerEmailLookup> {
+  const { data: profile, error: profileError } = await supabase
+    .from("users")
+    .select("email")
+    .eq("id", referrerUserId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error(
+      "[referral-validation] Error consultando email del referidor:",
+      profileError,
+    );
+    return {
+      ok: false,
+      message: "No se pudo validar el referido. Intenta de nuevo.",
+    };
+  }
+
+  const profileEmail = (profile as { email: string } | null)?.email;
+  if (profileEmail) {
+    return {
+      ok: true,
+      email: profileEmail.toLowerCase().trim(),
+    };
+  }
+
+  const { data: authData, error: authError } =
+    await supabase.auth.admin.getUserById(referrerUserId);
+
+  if (authError || !authData?.user?.email) {
+    console.error(
+      "[referral-validation] Referidor sin perfil en public.users ni auth:",
+      referrerUserId,
+      authError,
+    );
+    return {
+      ok: false,
+      message: "Este código no es válido en este momento.",
+    };
+  }
+
+  const email = authData.user.email.toLowerCase().trim();
+  const repair = await ensurePublicUserRow(supabase, authData.user);
+  if (!repair.ok) {
+    console.warn(
+      "[referral-validation] No se pudo reparar public.users del referidor:",
+      referrerUserId,
+      repair.error,
+    );
+  }
+
+  return { ok: true, email };
+}
 
 /**
  * Valida un código de referido contra la nueva tabla `referral_codes`.
@@ -101,11 +167,9 @@ export async function validateReferralForReservationPrice(
     };
   }
 
-  // Lanzamos en paralelo las 3 queries independientes que necesitamos para
-  // decidir: reservas previas del invitado, redenciones previas para
-  // (código, email) y el email del referidor (para detectar auto-referido
-  // cuando el invitado entra sin sesión).
-  const [reservationsRes, redemptionRes, referrerRes] = await Promise.all([
+  // En paralelo: reservas previas del invitado, redenciones previas y email del
+  // referidor (con fallback a auth.users si falta public.users).
+  const [reservationsRes, redemptionRes, referrerEmailRes] = await Promise.all([
     supabase
       .from("reservations")
       .select("id", { count: "exact", head: true })
@@ -117,11 +181,7 @@ export async function validateReferralForReservationPrice(
       .eq("referral_code_id", code.id)
       .eq("redeemed_email", normalizedEmail)
       .maybeSingle(),
-    supabase
-      .from("users")
-      .select("email")
-      .eq("id", code.user_id)
-      .maybeSingle(),
+    resolveReferrerEmail(supabase, code.user_id),
   ]);
 
   if (reservationsRes.error) {
@@ -166,39 +226,14 @@ export async function validateReferralForReservationPrice(
     };
   }
 
-  // Fail-closed en la consulta del email del referidor: si la query falla,
-  // `referrerRes.data` es null y el check de auto-referido por email (abajo)
-  // se saltaría silenciosamente, permitiendo que el dueño del código lo use
-  // como guest con su propio correo.
-  if (referrerRes.error) {
-    console.error(
-      "[referral-validation] Error consultando email del referidor:",
-      referrerRes.error,
-    );
-    return {
-      ok: false,
-      message: "No se pudo validar el referido. Intenta de nuevo.",
-    };
-  }
-  if (!referrerRes.data) {
-    // Datos inconsistentes: existe el código pero no su dueño en public.users.
-    // En el flujo normal el trigger garantiza ambos; si falta, fail closed.
-    console.error(
-      "[referral-validation] Dueño del código no encontrado en public.users:",
-      code.user_id,
-    );
-    return {
-      ok: false,
-      message: "Este código no es válido en este momento.",
-    };
+  if (!referrerEmailRes.ok) {
+    return { ok: false, message: referrerEmailRes.message };
   }
 
   // Auto-referido por email (caso: invitado sin sesión usa el código del
   // dueño de la cuenta).
-  const referrerEmail = ((referrerRes.data as { email: string }).email ?? "")
-    .toLowerCase()
-    .trim();
-  if (referrerEmail && referrerEmail === normalizedEmail) {
+  const referrerEmail = referrerEmailRes.email;
+  if (referrerEmail === normalizedEmail) {
     return {
       ok: false,
       message: "No puedes usar tu propio código de referido.",

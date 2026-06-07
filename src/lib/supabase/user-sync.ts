@@ -12,6 +12,40 @@ import {
 type UserInsert = Database["public"]["Tables"]["users"]["Insert"];
 type ServiceClient = ReturnType<typeof createServiceRoleClient>;
 
+/**
+ * Garantiza una fila mínima en `public.users` para un usuario de auth.
+ * Idempotente: usado antes de crear códigos de referido o reparar perfiles huérfanos.
+ */
+export async function ensurePublicUserRow(
+  serviceClient: ServiceClient,
+  user: Pick<User, "id" | "email" | "created_at">,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!user.email) {
+    return { ok: false, error: "Usuario sin email" };
+  }
+
+  const normalizedEmail = user.email.toLowerCase().trim();
+  const { error } = await serviceClient
+    .from("users")
+    // @ts-ignore
+    .upsert(
+      {
+        id: user.id,
+        email: normalizedEmail,
+        created_at: user.created_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+
+  if (error) {
+    console.error("[ensurePublicUserRow] upsert falló:", error);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true };
+}
+
 export type SyncUserResult = {
   success: boolean;
   error?: string;
