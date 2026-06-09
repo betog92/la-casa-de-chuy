@@ -13,6 +13,26 @@ type UserInsert = Database["public"]["Tables"]["users"]["Insert"];
 type ServiceClient = ReturnType<typeof createServiceRoleClient>;
 
 /**
+ * Metadata de auth fresca vía Admin API (más completa que el JWT de sesión).
+ */
+export async function getAuthUserForSync(
+  serviceClient: ServiceClient,
+  sessionUser: User,
+): Promise<User> {
+  const { data, error } = await serviceClient.auth.admin.getUserById(
+    sessionUser.id,
+  );
+  if (error || !data.user) {
+    console.warn(
+      "[getAuthUserForSync] admin getUserById falló, usando sesión:",
+      error?.message,
+    );
+    return sessionUser;
+  }
+  return data.user;
+}
+
+/**
  * Garantiza una fila mínima en `public.users` para un usuario de auth.
  * Idempotente: usado antes de crear códigos de referido o reparar perfiles huérfanos.
  */
@@ -117,8 +137,12 @@ async function linkReferralRedemptions(
  * el upsert en `public.users` falla (p. ej. trigger de código de referido).
  *
  * @param user - Usuario de Supabase Auth (debe tener id y email)
+ * @param existingClient - Cliente service-role reutilizable (evita crear uno nuevo)
  */
-export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
+export async function syncUserToDatabase(
+  user: User,
+  existingClient?: ServiceClient,
+): Promise<SyncUserResult> {
   if (!user.email) {
     return {
       success: false,
@@ -127,7 +151,7 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
   }
 
   try {
-    const serviceClient = createServiceRoleClient();
+    const serviceClient = existingClient ?? createServiceRoleClient();
     const normalizedEmail = user.email.toLowerCase().trim();
 
     const [profileRes, guestResRes] = await Promise.all([
@@ -145,6 +169,19 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
         .limit(10),
     ]);
 
+    if (profileRes.error) {
+      console.error(
+        "[syncUserToDatabase] Error leyendo perfil:",
+        profileRes.error,
+      );
+    }
+    if (guestResRes.error) {
+      console.error(
+        "[syncUserToDatabase] Error leyendo reservas invitado:",
+        guestResRes.error,
+      );
+    }
+
     const profileExists = Boolean(profileRes.data && !profileRes.error);
     const currentProfile: ProfileContact = profileRes.data
       ? {
@@ -153,7 +190,10 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
         }
       : { name: null, phone: null };
 
-    const guestReservations = (guestResRes.data ?? []) as ContactSource[];
+    const guestLookupFailed = Boolean(guestResRes.error);
+    const guestReservations = guestLookupFailed
+      ? []
+      : ((guestResRes.data ?? []) as ContactSource[]);
     const metadataContact = contactFromAuthMetadata(user);
     const contactSourcesForFill: ContactSource[] = [
       ...(metadataContact ? [metadataContact] : []),
@@ -165,7 +205,8 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
     if (
       profileExists &&
       isProfileContactComplete(currentProfile) &&
-      !hasUnlinkedReservations
+      !hasUnlinkedReservations &&
+      !guestLookupFailed
     ) {
       // Un update barato por si quedó redemption sin redeemed_user_id
       await linkReferralRedemptions(serviceClient, user.id, normalizedEmail);
@@ -204,7 +245,12 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
     }
 
     let linkedReservationCount = 0;
-    if (hasUnlinkedReservations) {
+    let linkFailed = false;
+    const shouldAttemptLink =
+      hasUnlinkedReservations ||
+      (guestLookupFailed && !isProfileContactComplete(currentProfile));
+
+    if (shouldAttemptLink) {
       const { data: linkedRows, error: linkError } = await serviceClient
         .from("reservations")
         // @ts-ignore
@@ -215,13 +261,10 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
 
       if (linkError) {
         console.error("Error linking guest reservations:", linkError);
-        return {
-          success: false,
-          error: "Error al vincular reservas de invitado",
-          linkedReservationCount: 0,
-        };
+        linkFailed = true;
+      } else {
+        linkedReservationCount = linkedRows?.length ?? 0;
       }
-      linkedReservationCount = linkedRows?.length ?? 0;
     }
 
     let contactSources: ContactSource[] = contactSourcesForFill;
@@ -231,13 +274,20 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
       guestReservations.length === 0 &&
       !isProfileContactComplete(currentProfile)
     ) {
-      const { data: ownedReservations } = await serviceClient
-        .from("reservations")
-        .select("name, phone")
-        .eq("user_id", user.id)
-        .ilike("email", normalizedEmail)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const { data: ownedReservations, error: ownedResError } =
+        await serviceClient
+          .from("reservations")
+          .select("name, phone")
+          .eq("user_id", user.id)
+          .ilike("email", normalizedEmail)
+          .order("created_at", { ascending: false })
+          .limit(10);
+      if (ownedResError) {
+        console.error(
+          "[syncUserToDatabase] Error leyendo reservas vinculadas:",
+          ownedResError,
+        );
+      }
       contactSources = [
         ...(metadataContact ? [metadataContact] : []),
         ...((ownedReservations ?? []) as ContactSource[]),
@@ -249,6 +299,30 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
       patchUserContact(serviceClient, user.id, contactSources),
     ]);
 
+    let profileRepaired = false;
+    if (upsertError || linkFailed) {
+      const { data: afterProfile } = await serviceClient
+        .from("users")
+        .select("name, phone")
+        .eq("id", user.id)
+        .maybeSingle();
+      profileRepaired = Boolean(
+        afterProfile && isProfileContactComplete(afterProfile as ProfileContact),
+      );
+    }
+
+    if (linkFailed && shouldAttemptLink) {
+      console.warn(
+        "[syncUserToDatabase] Vinculación de reservas falló; se intentó reparar perfil",
+        {
+          userId: user.id,
+          email: normalizedEmail,
+          profileRepaired,
+          guestLookupFailed,
+        },
+      );
+    }
+
     const partialProfile = Boolean(upsertError && linkedReservationCount > 0);
 
     if (upsertError) {
@@ -259,13 +333,29 @@ export async function syncUserToDatabase(user: User): Promise<SyncUserResult> {
         );
       }
       return {
-        success: linkedReservationCount > 0,
+        success: linkedReservationCount > 0 || profileRepaired,
         partialProfile,
         error:
-          linkedReservationCount > 0
+          linkedReservationCount > 0 || profileRepaired
             ? undefined
             : "Error al sincronizar usuario",
         linkedReservationCount,
+      };
+    }
+
+    if (linkFailed && shouldAttemptLink && !profileRepaired) {
+      return {
+        success: false,
+        error: "Error al vincular reservas de invitado",
+        linkedReservationCount: 0,
+      };
+    }
+
+    if (linkFailed && shouldAttemptLink && profileRepaired) {
+      return {
+        success: true,
+        linkedReservationCount: 0,
+        partialProfile: true,
       };
     }
 

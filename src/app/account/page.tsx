@@ -18,6 +18,10 @@ import {
   getReservationStatusColor,
   getReservationStatusLabel,
 } from "@/utils/reservation-status-display";
+import {
+  clearContactSyncCache,
+  syncProfileIfNeeded,
+} from "@/lib/auth/sync-profile-if-needed";
 
 interface UserProfile {
   email: string;
@@ -129,9 +133,9 @@ export default function AccountPage() {
       }
 
       try {
-        const response = await axios.get("/api/users/profile");
+        let response = await axios.get("/api/users/profile");
         if (response.data.success) {
-          const {
+          let {
             email,
             name,
             phone,
@@ -139,6 +143,20 @@ export default function AccountPage() {
             credits = 0,
             loyaltyLevelName = "Inicial",
           } = response.data;
+
+          if (!name?.trim() || !phone?.trim()) {
+            clearContactSyncCache(user.id);
+            await syncProfileIfNeeded(user.id);
+            response = await axios.get("/api/users/profile");
+            if (response.data.success) {
+              email = response.data.email;
+              name = response.data.name;
+              phone = response.data.phone;
+              loyaltyPoints = response.data.loyaltyPoints ?? 0;
+              credits = response.data.credits ?? 0;
+              loyaltyLevelName = response.data.loyaltyLevelName ?? "Inicial";
+            }
+          }
 
           setProfile({ email, name, phone });
           setBenefits({

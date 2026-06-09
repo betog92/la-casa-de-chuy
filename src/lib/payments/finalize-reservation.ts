@@ -715,13 +715,19 @@ export async function finalizeReservationFromPayload(
             { name: input.name, phone: input.phone },
           ]);
           if (!patch) return;
-          await supabase
+          const { error: updateError } = await supabase
             .from("users")
             .update({
               ...patch,
               updated_at: new Date().toISOString(),
             } as never)
             .eq("id", userId);
+          if (updateError) {
+            console.error(
+              "[finalize-reservation] Error actualizando name/phone:",
+              updateError,
+            );
+          }
         } catch (err) {
           console.error("Error updating user profile:", err);
         }

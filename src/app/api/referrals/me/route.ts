@@ -10,10 +10,7 @@ import {
   REFERRAL_INVITEE_DISCOUNT_MXN,
   REFERRAL_REFERRER_CREDIT_MXN,
 } from "@/lib/payments/referral-validation";
-import {
-  ensurePublicUserRow,
-  syncUserToDatabase,
-} from "@/lib/supabase/user-sync";
+import { ensurePublicUserRow } from "@/lib/supabase/user-sync";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -59,8 +56,6 @@ export async function GET() {
 
     // El código de referido vive en `referral_codes` (FK a auth.users), pero la
     // validación en checkout lee el email del referidor desde `public.users`.
-    // Sincronizamos primero para evitar códigos "huérfanos" sin perfil público.
-    const syncResult = await syncUserToDatabase(user);
     const { data: publicProfile } = await service
       .from("users")
       .select("id")
@@ -72,7 +67,6 @@ export async function GET() {
       if (!repaired.ok) {
         console.error(
           "[/api/referrals/me] No se pudo asegurar public.users antes del código:",
-          syncResult.error,
           repaired.error,
         );
         return errorResponse(

@@ -12,6 +12,10 @@ import {
   buildSignUpMetadata,
   type SignUpContact,
 } from "@/lib/auth/sign-up-contact";
+import {
+  clearContactSyncCache,
+  syncProfileIfNeeded,
+} from "@/lib/auth/sync-profile-if-needed";
 
 interface AuthContextType {
   user: User | null;
@@ -68,10 +72,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escuchar cambios en la autenticación
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      if (event === "SIGNED_IN" && session?.user?.id) {
+        void syncProfileIfNeeded(session.user.id);
+      }
+      if (event === "SIGNED_OUT") {
+        clearContactSyncCache();
+      }
     });
 
     return () => subscription.unsubscribe();

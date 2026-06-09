@@ -34,7 +34,6 @@ function EmailVerifiedContent() {
         ? "a tu cuenta"
         : "a la siguiente página";
 
-  // Esperar sesión antes del countdown para leer redirect_after_verify en metadata
   useEffect(() => {
     if (loading || adminLoading) return;
 

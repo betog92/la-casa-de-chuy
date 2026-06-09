@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { syncUserToDatabase } from "@/lib/supabase/user-sync";
+import {
+  getAuthUserForSync,
+  syncUserToDatabase,
+} from "@/lib/supabase/user-sync";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   successResponse,
   errorResponse,
@@ -36,8 +40,9 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse("Usuario no autenticado");
     }
 
-    // Sincronizar usuario usando función helper
-    const syncResult = await syncUserToDatabase(user);
+    const serviceClient = createServiceRoleClient();
+    const userForSync = await getAuthUserForSync(serviceClient, user);
+    const syncResult = await syncUserToDatabase(userForSync, serviceClient);
 
     if (!syncResult.success) {
       return errorResponse(

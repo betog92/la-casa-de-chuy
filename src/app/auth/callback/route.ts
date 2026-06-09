@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthErrorMessage } from "@/utils/auth-error-messages";
-import { syncUserToDatabase } from "@/lib/supabase/user-sync";
+import {
+  getAuthUserForSync,
+  syncUserToDatabase,
+} from "@/lib/supabase/user-sync";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import { readRedirectAfterVerify } from "@/lib/auth/sign-up-contact";
 
 export async function GET(request: NextRequest) {
@@ -81,7 +85,9 @@ export async function GET(request: NextRequest) {
           redirectUrl = postVerifyRedirect;
         }
 
-        const syncResult = await syncUserToDatabase(user);
+        const serviceClient = createServiceRoleClient();
+        const userForSync = await getAuthUserForSync(serviceClient, user);
+        const syncResult = await syncUserToDatabase(userForSync, serviceClient);
         if (!syncResult.success) {
           console.error(
             "[auth/callback] syncUserToDatabase falló:",
