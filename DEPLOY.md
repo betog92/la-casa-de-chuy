@@ -355,6 +355,35 @@ curl -H "Authorization: Bearer <CRON_SECRET>" \
 (`vercel.json`). No dupliques `complete-past-sessions` en Vercel si ya está
 en cron-job.org.
 
+### 7.cinco Cron de perfiles incompletos (`repair-incomplete-profiles`) con cron-job.org
+
+Repara filas en `public.users` sin `name`/`phone` usando `syncUserToDatabase`
+(metadata de auth, reservas de invitado o vinculadas). Procesa hasta **30**
+usuarios por corrida (los más antiguos por `updated_at`).
+
+**Configuración en [cron-job.org](https://console.cron-job.org/) (resumen):**
+
+1. Crea un **cron job** nuevo.
+2. **URL:** `https://<tu-dominio-prod>/api/cron/repair-incomplete-profiles`
+3. **Método:** GET o POST (ambos válidos).
+4. **Cabecera:** `Authorization` = `Bearer <CRON_SECRET>` (el mismo
+   `CRON_SECRET` que en Vercel; sin comillas en el valor del header).
+5. **Programación:** una vez al día (por ejemplo **08:00** America/Monterrey).
+   Idempotente: usuarios ya completos se omiten en el fast-path del sync.
+6. Activa **notificaciones de fallo** del job (email) si el status no es 2xx.
+
+**Backfill manual (opcional):** `npx tsx scripts/repair-incomplete-profiles.ts`
+(preview) o `--commit` para aplicar en lote desde tu máquina.
+
+**Prueba:**
+
+```bash
+curl -H "Authorization: Bearer <CRON_SECRET>" \
+  https://<tu-dominio-prod>/api/cron/repair-incomplete-profiles
+```
+
+**Nota:** este cron **no** está en `vercel.json`; solo cron-job.org.
+
 ### 8. Testing en Producción
 
 Prueba las siguientes funcionalidades:
