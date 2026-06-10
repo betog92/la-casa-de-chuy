@@ -27,7 +27,11 @@ import {
   getReservationStatusColor,
   getReservationStatusLabel,
 } from "@/utils/reservation-status-display";
-import { isOriginFilter } from "@/lib/admin/reservation-filters";
+import {
+  isImportTypeFilter,
+  isOriginFilter,
+  isSourceFilter,
+} from "@/lib/admin/reservation-filters";
 import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
 
 const PAGE_SIZE = 50;
@@ -129,6 +133,8 @@ function AdminReservacionesPageInner() {
   const skipTableScrollRef = useRef(true);
   const [error, setError] = useState("");
   const originParam = sp.get("origin");
+  const sourceParam = sp.get("source");
+  const importTypeParam = sp.get("importType");
   const [filters, setFilters] = useState(() => ({
     dateFrom: sp.get("dateFrom") || "",
     dateTo: sp.get("dateTo") || "",
@@ -137,6 +143,8 @@ function AdminReservacionesPageInner() {
     search: sp.get("search") || sp.get("email") || "",
     paymentStatus: sp.get("paymentStatus") || "",
     origin: isOriginFilter(originParam) ? originParam : "",
+    source: isSourceFilter(sourceParam) ? sourceParam : "",
+    importType: isImportTypeFilter(importTypeParam) ? importTypeParam : "",
   }));
   const [debouncedSearch, setDebouncedSearch] = useState(
     () => sp.get("search") || sp.get("email") || "",
@@ -240,6 +248,8 @@ function AdminReservacionesPageInner() {
       if (filters.status) params.set("status", filters.status);
       if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
       if (filters.origin) params.set("origin", filters.origin);
+      if (filters.source) params.set("source", filters.source);
+      if (filters.importType) params.set("importType", filters.importType);
       if (debouncedSearch) params.set("search", debouncedSearch);
       params.set("sort", "recent");
       params.set("limit", String(PAGE_SIZE));
@@ -262,6 +272,8 @@ function AdminReservacionesPageInner() {
     filters.status,
     filters.paymentStatus,
     filters.origin,
+    filters.source,
+    filters.importType,
     debouncedSearch,
     offset,
   ]);

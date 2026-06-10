@@ -25,16 +25,259 @@ interface RecentReservation {
   created_at: string | null;
 }
 
+interface RevenueBreakdown {
+  web: number;
+  manual: number;
+  total: number;
+  webCount: number;
+  manualCount: number;
+}
+
 interface Stats {
   today: {
-    totalReservations: number;
-    confirmedReservations: number;
-    cancelledReservations: number;
-    completedReservations: number;
-    revenue: number;
+    revenue: RevenueBreakdown;
+    alveroSessions: number;
   };
-  weekRevenue: number;
+  week: {
+    revenue: RevenueBreakdown;
+    alveroSessions: number;
+  };
   pendingManualPayments: number;
+  pendingManualPaymentsAmount: number;
+}
+
+function dashboardMoney(amount: number): string {
+  return `$${formatCurrency(amount)}`;
+}
+
+function breakdownAmount(amount: number): string {
+  if (amount <= 0) return "—";
+  return dashboardMoney(amount);
+}
+
+function breakdownCountSuffix(count: number): string {
+  if (count <= 0) return "";
+  return ` (${count})`;
+}
+
+function MetricTooltip({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      aria-label={text}
+      className="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-zinc-200 text-[10px] font-semibold leading-none text-zinc-400 hover:border-zinc-300 hover:text-zinc-500"
+    >
+      ?
+    </span>
+  );
+}
+
+function SectionHeading({
+  title,
+  subtitle,
+  tooltip,
+}: {
+  title: string;
+  subtitle?: string;
+  tooltip?: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1">
+        <h2 className="text-sm font-semibold text-[#103948]">{title}</h2>
+        {tooltip ? <MetricTooltip text={tooltip} /> : null}
+      </div>
+      {subtitle ? (
+        <p className="mt-0.5 text-xs text-zinc-400">{subtitle}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function PeriodLabel({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="min-h-[2.25rem]">
+      <p className="text-xs font-medium text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-xs text-zinc-400">{hint ?? "\u00A0"}</p>
+    </div>
+  );
+}
+
+function RevenueBreakdownInline({ revenue }: { revenue: RevenueBreakdown }) {
+  const webHref = "/admin/reservaciones?source=web&status=confirmed";
+  const manualHref =
+    "/admin/reservaciones?source=admin&paymentStatus=paid&status=confirmed";
+
+  return (
+    <p className="mt-2 text-sm text-zinc-500">
+      <Link
+        href={webHref}
+        className="transition-colors hover:text-[#103948] hover:underline"
+      >
+        Web{" "}
+        <span
+          className={`tabular-nums ${
+            revenue.web > 0 ? "text-zinc-700" : "text-zinc-300"
+          }`}
+        >
+          {breakdownAmount(revenue.web)}
+          {revenue.webCount > 0 ? (
+            <span className="text-zinc-400">
+              {breakdownCountSuffix(revenue.webCount)}
+            </span>
+          ) : null}
+        </span>
+      </Link>
+      <span className="mx-1.5 text-zinc-300">·</span>
+      <Link
+        href={manualHref}
+        className="transition-colors hover:text-[#103948] hover:underline"
+      >
+        Manual{" "}
+        <span
+          className={`tabular-nums ${
+            revenue.manual > 0 ? "text-zinc-700" : "text-zinc-300"
+          }`}
+        >
+          {breakdownAmount(revenue.manual)}
+          {revenue.manualCount > 0 ? (
+            <span className="text-zinc-400">
+              {breakdownCountSuffix(revenue.manualCount)}
+            </span>
+          ) : null}
+        </span>
+      </Link>
+    </p>
+  );
+}
+
+function RevenuePeriodColumn({
+  label,
+  hint,
+  revenue,
+}: {
+  label: string;
+  hint?: string;
+  revenue: RevenueBreakdown;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <PeriodLabel label={label} hint={hint} />
+      <p className="mt-2 text-3xl font-bold text-green-700 tabular-nums">
+        {dashboardMoney(revenue.total)}
+      </p>
+      <RevenueBreakdownInline revenue={revenue} />
+    </div>
+  );
+}
+
+function alveroCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "cita" : "citas"}`;
+}
+
+function AlveroPeriodColumn({
+  label,
+  hint,
+  count,
+}: {
+  label: string;
+  hint?: string;
+  count: number;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <PeriodLabel label={label} hint={hint} />
+      <p className="mt-2 text-3xl font-bold text-[#103948] tabular-nums">
+        {count}
+      </p>
+      <p className="mt-1 text-sm text-zinc-500">{alveroCountLabel(count)}</p>
+    </div>
+  );
+}
+
+function AlveroPanel({
+  todayCount,
+  weekCount,
+}: {
+  todayCount: number;
+  weekCount: number;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-200 border-l-4 border-l-violet-300 bg-white p-5 shadow-sm">
+      <div className="grid gap-6 sm:grid-cols-2">
+        <AlveroPeriodColumn
+          label="Hoy"
+          hint="Registradas hoy"
+          count={todayCount}
+        />
+        <div className="sm:border-l sm:border-zinc-100 sm:pl-6">
+          <AlveroPeriodColumn
+            label="Última semana"
+            hint="Últimos 7 días"
+            count={weekCount}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RevenuePanel({
+  today,
+  week,
+  pendingManualPayments,
+  pendingManualPaymentsAmount,
+}: {
+  today: { revenue: RevenueBreakdown };
+  week: { revenue: RevenueBreakdown };
+  pendingManualPayments: number;
+  pendingManualPaymentsAmount: number;
+}) {
+  const pending = pendingManualPayments ?? 0;
+  const pendingAmount = pendingManualPaymentsAmount ?? 0;
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+      <div className="grid gap-6 sm:grid-cols-2">
+        <RevenuePeriodColumn
+          label="Hoy"
+          hint="Registradas hoy"
+          revenue={today.revenue}
+        />
+        <div className="sm:border-l sm:border-zinc-100 sm:pl-6">
+          <RevenuePeriodColumn
+            label="Última semana"
+            hint="Últimos 7 días"
+            revenue={week.revenue}
+          />
+        </div>
+      </div>
+
+      {pending > 0 && (
+        <Link
+          href="/admin/pagos-manuales"
+          className="mt-4 flex flex-col gap-1 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm transition-colors hover:bg-amber-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="text-amber-900">
+            {pending} {pending === 1 ? "pago manual" : "pagos manuales"} por
+            validar
+            {pendingAmount > 0 ? (
+              <>
+                {" "}
+                ·{" "}
+                <span className="font-semibold tabular-nums">
+                  {dashboardMoney(pendingAmount)}
+                </span>{" "}
+                <span className="text-amber-700">por cobrar</span>
+              </>
+            ) : null}
+            <span className="text-amber-700"> (no incluidos arriba)</span>
+          </span>
+          <span className="shrink-0 font-medium text-amber-900">Ver lista →</span>
+        </Link>
+      )}
+    </div>
+  );
 }
 
 const RECENT_PAGE_SIZE = 25;
@@ -97,7 +340,13 @@ export default function AdminDashboardPage() {
       try {
         const res = await axios.get("/api/admin/stats");
         if (res.data.success) {
-          setStats(res.data);
+          setStats({
+            today: res.data.today,
+            week: res.data.week,
+            pendingManualPayments: res.data.pendingManualPayments ?? 0,
+            pendingManualPaymentsAmount:
+              res.data.pendingManualPaymentsAmount ?? 0,
+          });
         } else {
           setError(res.data.error || "Error al cargar estadísticas");
         }
@@ -191,93 +440,42 @@ export default function AdminDashboardPage() {
         >
           Panel de administración
         </h1>
-        <p className="mt-1 text-zinc-600">
-          Resumen del día y últimas reservas nativas (web o panel).
-        </p>
+        <p className="mt-1 text-zinc-600">Ingresos y últimas reservas.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">Citas confirmadas hoy</p>
-          <p className="mt-0.5 text-xs text-zinc-400">
-            Sesiones con fecha de hoy en el calendario
-          </p>
-          <p className="mt-1 text-2xl font-bold text-[#103948]">
-            {s.today.confirmedReservations}
-          </p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">Ingresos hoy</p>
-          <p className="mt-0.5 text-xs text-zinc-400">
-            Ventas confirmadas registradas hoy
-          </p>
-          <p className="mt-1 text-2xl font-bold text-green-700">
-            {formatCurrency(s.today.revenue)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">
-            Ingresos última semana
-          </p>
-          <p className="mt-0.5 text-xs text-zinc-400">Ventas confirmadas</p>
-          <p className="mt-1 text-2xl font-bold text-green-700">
-            {formatCurrency(s.weekRevenue)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-zinc-500">Canceladas hoy</p>
-          <p className="mt-1 text-2xl font-bold text-red-600">
-            {s.today.cancelledReservations}
-          </p>
-        </div>
-      </div>
+      <section className="space-y-4">
+        <SectionHeading
+          title="Ingresos · La Casa de Chuy"
+          subtitle="Web y manuales cobrados · por fecha de registro"
+          tooltip="Ventas confirmadas de la página web y manuales ya cobradas. No incluye Alvero ni pagos manuales pendientes."
+        />
+        <RevenuePanel
+          today={{ revenue: s.today.revenue }}
+          week={{ revenue: s.week.revenue }}
+          pendingManualPayments={s.pendingManualPayments}
+          pendingManualPaymentsAmount={s.pendingManualPaymentsAmount ?? 0}
+        />
+      </section>
 
-      {(() => {
-        const pendingManual = s.pendingManualPayments ?? 0;
-        return (
+      <section className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <SectionHeading
+            title="Alvero"
+            subtitle="Estudio aparte · solo conteo de citas, sin ingresos"
+            tooltip="Citas tipo Alvero registradas en el panel. Negocio independiente de La Casa de Chuy."
+          />
           <Link
-            href="/admin/pagos-manuales"
-            className={`flex items-center justify-between rounded-lg border p-5 shadow-sm transition-colors ${
-              pendingManual > 0
-                ? "border-amber-200 bg-amber-50 hover:bg-amber-100"
-                : "border-zinc-200 bg-white hover:bg-zinc-50"
-            }`}
+            href="/admin/reservaciones?importType=manual_client&status=confirmed"
+            className="shrink-0 text-sm font-medium text-[#103948] hover:underline"
           >
-            <div>
-              <p
-                className={`text-sm font-medium ${
-                  pendingManual > 0 ? "text-amber-900" : "text-zinc-500"
-                }`}
-              >
-                Pagos manuales por validar
-              </p>
-              <p
-                className={`mt-1 text-2xl font-bold ${
-                  pendingManual > 0 ? "text-amber-700" : "text-emerald-700"
-                }`}
-              >
-                {pendingManual}
-              </p>
-              <p
-                className={`mt-0.5 text-xs ${
-                  pendingManual > 0 ? "text-amber-800" : "text-zinc-400"
-                }`}
-              >
-                {pendingManual > 0
-                  ? "Hay cobros manuales esperando validación."
-                  : "Sin pagos manuales pendientes."}
-              </p>
-            </div>
-            <span
-              className={`text-sm font-medium ${
-                pendingManual > 0 ? "text-amber-900" : "text-[#103948]"
-              }`}
-            >
-              Ver lista →
-            </span>
+            Ver citas →
           </Link>
-        );
-      })()}
+        </div>
+        <AlveroPanel
+          todayCount={s.today.alveroSessions}
+          weekCount={s.week.alveroSessions}
+        />
+      </section>
 
       <div className="rounded-lg border border-zinc-200 bg-white shadow-sm">
         <div className="flex flex-col gap-1 border-b border-zinc-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">

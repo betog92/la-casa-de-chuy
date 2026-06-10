@@ -25,8 +25,12 @@ import {
 import { sendReservationConfirmation } from "@/lib/email";
 import {
   applyOriginFilter,
+  applyImportTypeFilter,
+  applySourceFilter,
   excludeManualAvailableSlots,
+  isImportTypeFilter,
   isOriginFilter,
+  isSourceFilter,
 } from "@/lib/admin/reservation-filters";
 
 /**
@@ -47,6 +51,12 @@ export async function GET(request: NextRequest) {
     const paymentStatusFilter = searchParams.get("paymentStatus");
     const originParam = searchParams.get("origin");
     const originFilter = isOriginFilter(originParam) ? originParam : null;
+    const sourceParam = searchParams.get("source");
+    const sourceFilter = isSourceFilter(sourceParam) ? sourceParam : null;
+    const importTypeParam = searchParams.get("importType");
+    const importTypeFilter = isImportTypeFilter(importTypeParam)
+      ? importTypeParam
+      : null;
     const search = searchParams.get("search")?.trim() || "";
     const limit = Math.min(
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50),
@@ -116,8 +126,12 @@ export async function GET(request: NextRequest) {
     }
     if (paymentStatusFilter === "pending") {
       query = query.eq("payment_status", "pending");
+    } else if (paymentStatusFilter === "paid") {
+      query = query.eq("payment_status", "paid");
     }
     query = applyOriginFilter(query, originFilter);
+    query = applySourceFilter(query, sourceFilter);
+    query = applyImportTypeFilter(query, importTypeFilter);
 
     const { data, error, count } = await query;
 
