@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import Calendar from "react-calendar";
@@ -111,6 +112,13 @@ interface Reservation {
   google_event_id?: string | null;
 }
 
+interface VestidoSearchHit {
+  googleEventId: string;
+  displayTitle: string;
+  date: string;
+  description: string | null;
+}
+
 export default function AdminReservacionesPage() {
   return (
     <Suspense fallback={<div className="p-6 text-zinc-500">Cargando…</div>}>
@@ -126,6 +134,7 @@ function AdminReservacionesPageInner() {
   // para que enlaces como /admin/reservaciones?search=foo@bar.com filtren al cargar.
   const sp = useSearchParams();
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [vestidoEvents, setVestidoEvents] = useState<VestidoSearchHit[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -219,6 +228,8 @@ function AdminReservacionesPageInner() {
   const closedDatesLoadedRef = useRef(false);
   /** Evita que una respuesta lenta de otra fecha/variant pise slots actuales. */
   const availabilityRequestIdRef = useRef(0);
+  /** Evita que una respuesta lenta de listado pise filtros/búsqueda actuales. */
+  const fetchReservationsRequestIdRef = useRef(0);
 
   const minDate = useMemo(() => getMonterreyDate(), []);
   const maxDate = useMemo(() => {
@@ -238,7 +249,8 @@ function AdminReservacionesPageInner() {
     };
   }, [filters.search]);
 
-  const fetchReservations = useCallback(async () => {
+  const fetchReservations = useCallback(async (signal?: AbortSignal) => {
+    const reqId = ++fetchReservationsRequestIdRef.current;
     setLoading(true);
     setError("");
     try {
@@ -254,17 +266,27 @@ function AdminReservacionesPageInner() {
       params.set("sort", "recent");
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(offset));
-      const res = await axios.get(`/api/admin/reservations?${params}`);
+      const res = await axios.get(`/api/admin/reservations?${params}`, { signal });
+      if (reqId !== fetchReservationsRequestIdRef.current) return;
       if (res.data.success) {
         setReservations(res.data.reservations ?? []);
+        if (offset === 0) {
+          setVestidoEvents(res.data.vestidoEvents ?? []);
+        }
         setTotal(res.data.total ?? 0);
       } else {
+        if (offset === 0) setVestidoEvents([]);
         setError(res.data.error || "Error al cargar");
       }
     } catch (err) {
+      if (axios.isCancel(err) || (err as Error)?.name === "CanceledError") return;
+      if (reqId !== fetchReservationsRequestIdRef.current) return;
+      if (offset === 0) setVestidoEvents([]);
       setError(axios.isAxiosError(err) ? (err.response?.data?.error as string) || "Error" : "Error");
     } finally {
-      setLoading(false);
+      if (reqId === fetchReservationsRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [
     filters.dateFrom,
@@ -278,8 +300,12 @@ function AdminReservacionesPageInner() {
     offset,
   ]);
 
+  const showVestidoHits = debouncedSearch.length > 0 && offset === 0;
+
   useEffect(() => {
-    fetchReservations();
+    const controller = new AbortController();
+    void fetchReservations(controller.signal);
+    return () => controller.abort();
   }, [fetchReservations]);
 
   useEffect(() => {
@@ -773,10 +799,12 @@ function AdminReservacionesPageInner() {
 
       <div className="flex flex-wrap gap-4 rounded-lg border border-zinc-200 bg-white p-4">
         <div className="flex-1 min-w-[200px]">
-          <label className="mb-1 block text-xs font-medium text-zinc-500">Buscar (nombre, email, teléfono, orden #)</label>
+          <label className="mb-1 block text-xs font-medium text-zinc-500">
+            Buscar (cliente, orden #, vestido…)
+          </label>
           <input
             type="text"
-            placeholder="Nombre, email, teléfono o #6521..."
+            placeholder="Nombre, vestido #3839, email, teléfono…"
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
             className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
@@ -856,6 +884,43 @@ function AdminReservacionesPageInner() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
       )}
+
+      {showVestidoHits && vestidoEvents.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-sky-200 bg-white shadow-sm">
+          <div className="border-b border-sky-100 bg-sky-50/80 px-4 py-3 sm:px-5">
+            <p className="text-sm font-semibold text-[#103948]">
+              Eventos de vestidos ({vestidoEvents.length})
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Calendario azul · abre el mes del evento
+            </p>
+          </div>
+          <ul className="divide-y divide-zinc-100">
+            {vestidoEvents.map((ev) => (
+              <li key={ev.googleEventId}>
+                <Link
+                  href={`/admin/calendario?month=${ev.date.slice(0, 7)}`}
+                  className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-sky-50/50 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-zinc-900">
+                      {ev.displayTitle}
+                    </p>
+                    {ev.description ? (
+                      <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">
+                        {ev.description}
+                      </p>
+                    ) : null}
+                  </div>
+                  <p className="shrink-0 text-sm text-zinc-600">
+                    {formatDisplayDateShort(ev.date)}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div
         ref={tableSectionRef}

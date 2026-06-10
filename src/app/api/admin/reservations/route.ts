@@ -32,6 +32,8 @@ import {
   isOriginFilter,
   isSourceFilter,
 } from "@/lib/admin/reservation-filters";
+import { buildIlikePattern } from "@/lib/admin/ilike-pattern";
+import { searchVestidoCalendarEvents } from "@/lib/admin/vestido-event-search";
 
 /**
  * Lista reservas con filtros opcionales (fecha, estado).
@@ -90,17 +92,9 @@ export async function GET(request: NextRequest) {
     query = excludeManualAvailableSlots(query);
 
     if (search) {
-      // Búsqueda "contiene": nombre, email, teléfono, orden #, google_event_id y (si es número) id
+      // Búsqueda "contiene": nombre, email, teléfono, orden #, google_event_id, id
       const term = search.replace(/^#/, "").trim();
-      const escaped = search
-        .replace(/\\/g, "\\\\")
-        .replace(/%/g, "\\%")
-        .replace(/_/g, "\\_")
-        .replace(/'/g, "''");
-      const pattern = `%${escaped}%`;
-      const quoted = pattern.includes(",") || pattern.includes('"')
-        ? `"${pattern.replace(/"/g, '""')}"`
-        : pattern;
+      const quoted = buildIlikePattern(search);
       const orParts = [
         `name.ilike.${quoted}`,
         `email.ilike.${quoted}`,
@@ -133,7 +127,20 @@ export async function GET(request: NextRequest) {
     query = applySourceFilter(query, sourceFilter);
     query = applyImportTypeFilter(query, importTypeFilter);
 
-    const { data, error, count } = await query;
+    // Vestidos: solo en la primera página (mismos resultados al paginar reservas)
+    const vestidoSearchPromise =
+      search && offset === 0
+        ? searchVestidoCalendarEvents(supabase, search, {
+            dateFrom,
+            dateTo,
+            limit: 25,
+          })
+        : Promise.resolve([]);
+
+    const [{ data, error, count }, vestidoEvents] = await Promise.all([
+      query,
+      vestidoSearchPromise,
+    ]);
 
     if (error) {
       console.error("Error listing reservations:", error);
@@ -143,6 +150,7 @@ export async function GET(request: NextRequest) {
     return successResponse({
       reservations: data ?? [],
       total: count ?? 0,
+      vestidoEvents,
     });
   } catch (error) {
     console.error("Error in admin reservations GET:", error);
