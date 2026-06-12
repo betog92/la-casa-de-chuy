@@ -105,6 +105,7 @@ export interface Database {
           import_notes_edited_at: string | null;
           import_notes_edited_by_user_id: string | null;
           municipio: string | null;
+          stamp_card_code: string | null;
         };
         Insert: {
           id?: number;
@@ -159,6 +160,7 @@ export interface Database {
           import_notes_edited_at?: string | null;
           import_notes_edited_by_user_id?: string | null;
           municipio?: string | null;
+          stamp_card_code?: string | null;
         };
         Update: {
           id?: number;
@@ -179,6 +181,7 @@ export interface Database {
           import_notes_edited_at?: string | null;
           import_notes_edited_by_user_id?: string | null;
           municipio?: string | null;
+          stamp_card_code?: string | null;
           email?: string;
           name?: string;
           phone?: string;

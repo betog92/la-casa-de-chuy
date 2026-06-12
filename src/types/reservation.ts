@@ -69,6 +69,8 @@ export interface Reservation {
   order_number?: string | null;
   /** Municipio (citas Alvero / manual_client); solo admin */
   municipio?: string | null;
+  /** Código del tarjetero físico (citas manuales La Casa de Chuy) */
+  stamp_card_code?: string | null;
   import_notes?: string | null;
   import_notes_edited_at?: string | null;
   import_notes_edited_by_user_id?: string | null;

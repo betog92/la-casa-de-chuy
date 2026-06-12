@@ -1,4 +1,7 @@
 import { isSessionType } from "@/utils/session-type";
+import {
+  normalizeStampCardCode,
+} from "@/lib/admin/stamp-card-code";
 
 /** Reserva creada en la web (Conekta); contacto no editable por nadie. */
 export function isWebReservation(source: string | null | undefined): boolean {
@@ -68,6 +71,7 @@ type ReservationDetailEditForm = {
   order_number: string;
   municipio: string;
   import_notes: string;
+  stamp_card_code: string;
   photographer_studio: string;
   /** "" = sin tipo (null en BD) */
   session_type: string;
@@ -82,6 +86,7 @@ export function buildReservationDetailPatch(
     order_number?: string | null;
     municipio?: string | null;
     import_notes?: string | null;
+    stamp_card_code?: string | null;
     photographer_studio?: string | null;
     session_type?: string | null;
   },
@@ -91,6 +96,7 @@ export function buildReservationDetailPatch(
     includeOrderNumber?: boolean;
     includeMunicipio?: boolean;
     includeNotes?: boolean;
+    includeStampCard?: boolean;
     includePhotographer?: boolean;
     includeSessionType?: boolean;
   },
@@ -124,6 +130,12 @@ export function buildReservationDetailPatch(
     const next = normalizeImportNotesValue(form.import_notes);
     const prev = normalizeImportNotesValue(reservation.import_notes);
     if (next !== prev) patch.import_notes = next;
+  }
+
+  if (options.includeStampCard) {
+    const next = normalizeStampCardCode(form.stamp_card_code);
+    const prev = normalizeStampCardCode(reservation.stamp_card_code);
+    if (next !== prev) patch.stamp_card_code = next;
   }
 
   if (options.includePhotographer) {

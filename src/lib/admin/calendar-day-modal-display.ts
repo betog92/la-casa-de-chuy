@@ -5,6 +5,7 @@ export type DayModalEventResource = {
   isVestidos?: boolean;
   source?: string;
   import_type?: string | null;
+  stamp_card_code?: string | null;
 };
 
 export type DayModalEventLike = {
@@ -39,7 +40,11 @@ export function getDayModalTypeLabel(ev: DayModalEventLike): string {
   if (importType === "manual_client") return "Reservación de Alvero";
   if (importType === "appointly") return "Reservación (página web vieja)";
   if (importType === "manual_other") return "Reservación manual";
-  if (source === "admin" && !importType) return "Reservación manual";
+  if (source === "admin" && !importType) {
+    const code = ev.resource?.stamp_card_code?.trim();
+    if (code) return `Sesión regalo tarjetero (${code})`;
+    return "Reservación manual";
+  }
   if (source === "google_import") return "Importada";
   if (source === "admin") return "Reservación";
   return "Reservación";

@@ -33,6 +33,10 @@ import {
   isSourceFilter,
 } from "@/lib/admin/reservation-filters";
 import { buildIlikePattern } from "@/lib/admin/ilike-pattern";
+import {
+  normalizeStampCardCode,
+  stampCardGiftPaymentFields,
+} from "@/lib/admin/stamp-card-code";
 import { searchVestidoCalendarEvents } from "@/lib/admin/vestido-event-search";
 
 /**
@@ -73,7 +77,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, payment_method, payment_status, created_at, reschedule_count, discount_code, source, google_event_id, import_type, order_number",
+        "id, email, name, phone, date, start_time, end_time, price, original_price, status, payment_id, payment_method, payment_status, created_at, reschedule_count, discount_code, source, google_event_id, import_type, order_number, stamp_card_code",
         { count: "exact" }
       );
 
@@ -101,6 +105,7 @@ export async function GET(request: NextRequest) {
         `phone.ilike.${quoted}`,
         `order_number.ilike.${quoted}`,
         `google_event_id.ilike.${quoted}`,
+        `stamp_card_code.ilike.${quoted}`,
       ];
       const num = parseInt(term, 10);
       if (term !== "" && !Number.isNaN(num) && num > 0 && String(num) === term) {
@@ -203,6 +208,8 @@ export async function POST(request: NextRequest) {
       municipio,
       replaces_reservation_id: bodyReplacesId,
       import_notes: bodyImportNotes,
+      stamp_card_code: bodyStampCardCode,
+      cupon: bodyCupon,
     } = body;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -240,33 +247,48 @@ export async function POST(request: NextRequest) {
     let finalMunicipio: string | null = null;
     let shouldSendEmail = false;
     let paymentStatus: "pending" | "paid" | "not_applicable" = "not_applicable";
+    let stampCardCode: string | null = null;
 
     if (variant === "cliente") {
       if (!name?.trim()) return validationErrorResponse("Nombre requerido");
       if (!email?.trim()) return validationErrorResponse("Email requerido");
       if (!phone?.trim()) return validationErrorResponse("Teléfono requerido");
-      const priceNum = Number(price);
-      if (!Number.isFinite(priceNum) || priceNum <= 0) {
-        return validationErrorResponse("El precio debe ser mayor a 0");
-      }
-      if (
-        !payment_method ||
-        !["efectivo", "transferencia"].includes(payment_method)
-      ) {
-        return validationErrorResponse(
-          "Método de pago inválido (use efectivo o transferencia)"
-        );
-      }
       finalName = String(name).trim();
       finalEmail = String(email).toLowerCase().trim();
       finalPhone = String(phone).trim();
-      finalPrice = priceNum;
-      finalPaymentMethod = payment_method as "efectivo" | "transferencia";
       shouldSendEmail = Boolean(sendEmail);
-      // Empleadas: siempre pending → cola de pagos manuales para que familia valide.
-      // Familia puede marcar pagado al crear si ya recibieron el cobro.
-      paymentStatus =
-        isSuperAdmin && bodyPaymentStatus === "paid" ? "paid" : "pending";
+      stampCardCode = normalizeStampCardCode(
+        bodyStampCardCode ?? bodyCupon ?? null,
+      );
+      if (stampCardCode) {
+        const priceNum = Number(price);
+        if (Number.isFinite(priceNum) && priceNum !== 0) {
+          return validationErrorResponse(
+            "La sesión regalo con cupón debe tener precio $0",
+          );
+        }
+        finalPrice = 0;
+        finalPaymentMethod = null;
+        paymentStatus = "not_applicable";
+      } else {
+        const priceNum = Number(price);
+        if (!Number.isFinite(priceNum) || priceNum <= 0) {
+          return validationErrorResponse("El precio debe ser mayor a 0");
+        }
+        if (
+          !payment_method ||
+          !["efectivo", "transferencia"].includes(payment_method)
+        ) {
+          return validationErrorResponse(
+            "Método de pago inválido (use efectivo o transferencia)",
+          );
+        }
+        finalPrice = priceNum;
+        finalPaymentMethod = payment_method as "efectivo" | "transferencia";
+        // Empleadas: siempre pending → cola de pagos manuales para que familia valide.
+        paymentStatus =
+          isSuperAdmin && bodyPaymentStatus === "paid" ? "paid" : "pending";
+      }
     } else if (variant === "reservado_alvero") {
       finalName = "Espacio reservado para Alvero";
       finalEmail = PLACEHOLDER_EMAIL;
@@ -382,7 +404,10 @@ export async function POST(request: NextRequest) {
 
     const endTime = calculateEndTime(startTime, durationMin);
     const paidAtCreation =
-      variant === "cliente" && paymentStatus === "paid" && isSuperAdmin;
+      variant === "cliente" &&
+      stampCardCode === null &&
+      paymentStatus === "paid" &&
+      isSuperAdmin;
 
     let importNotes: string | null = null;
     if (
@@ -426,6 +451,10 @@ export async function POST(request: NextRequest) {
       discount_code: null,
       discount_code_discount: 0,
       ...(importNotes !== null && { import_notes: importNotes }),
+      ...(stampCardCode !== null && {
+        stamp_card_code: stampCardCode,
+        ...stampCardGiftPaymentFields(),
+      }),
     };
 
     let reservationId: number;

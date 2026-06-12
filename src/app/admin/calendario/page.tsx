@@ -41,15 +41,24 @@ const CALENDAR_COLORS = {
   reservation: "#103948",
   reservationOldWeb: "#0e7490",
   reservationManual: "#b91c1c",
+  stampCard: "#059669",
   alveroReservation: "#6d28d9",
   alveroSpace: "#b45309",
   vestidos: "#0ea5e9",
 } as const;
 
-function getEventColor(event: { resource?: { isVestidos?: boolean; source?: string; import_type?: string | null } }): string {
+function getEventColor(event: {
+  resource?: {
+    isVestidos?: boolean;
+    source?: string;
+    import_type?: string | null;
+    stamp_card_code?: string | null;
+  };
+}): string {
   if (event.resource?.isVestidos) return CALENDAR_COLORS.vestidos;
   const source = event.resource?.source;
   const importType = event.resource?.import_type;
+  if (event.resource?.stamp_card_code?.trim()) return CALENDAR_COLORS.stampCard;
   if (source === "google_import" || source === "admin") {
     if (importType === "appointly") return CALENDAR_COLORS.reservationOldWeb;
     if (importType === "manual_client") return CALENDAR_COLORS.alveroReservation;
@@ -98,6 +107,7 @@ interface CalendarEvent {
     source?: string;
     import_type?: string | null;
     status?: string;
+    stamp_card_code?: string | null;
     isVestidos?: boolean;
     googleEventId?: string;
   };
@@ -220,6 +230,7 @@ export default function AdminCalendarioPage() {
             source?: string;
             import_type?: string | null;
             status?: string;
+            stamp_card_code?: string | null;
           };
         }) => ({
           ...e,
@@ -738,6 +749,10 @@ export default function AdminCalendarioPage() {
         <span className="flex items-center gap-2">
           <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.reservationManual }} aria-hidden />
           Reservación manuales
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.stampCard }} aria-hidden />
+          Sesión regalo (tarjetero)
         </span>
         <span className="flex items-center gap-2">
           <span className="h-3 w-3 shrink-0 rounded" style={{ backgroundColor: CALENDAR_COLORS.alveroReservation }} aria-hidden />

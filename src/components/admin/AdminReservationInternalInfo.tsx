@@ -18,6 +18,10 @@ import {
   canAdminEditImportNotes,
   isAlveroClientReservation,
 } from "@/lib/admin/reservation-contact-edit";
+import {
+  isManualChuyReservation,
+  isStampCardGiftReservation,
+} from "@/lib/admin/stamp-card-code";
 
 const fieldInputClass =
   "w-full rounded border border-zinc-300 px-3 py-2 text-sm text-[#103948] focus:border-[#103948] focus:outline-none focus:ring-1 focus:ring-[#103948]";
@@ -31,6 +35,7 @@ type EditForm = {
   order_number: string;
   municipio: string;
   import_notes: string;
+  stamp_card_code: string;
   photographer_studio: string;
   session_type: string;
 };
@@ -131,6 +136,10 @@ export function AdminReservationInternalInfo({
   }, [internalSaveSuccess]);
 
   const showNotesEditor = canAdminEditImportNotes(reservation);
+  const showStampCardField = isManualChuyReservation(reservation);
+  const isGiftSession =
+    isStampCardGiftReservation(reservation) ||
+    (showStampCardField && editForm.stamp_card_code.trim().length > 0);
   const showMunicipioField = isAlveroClientReservation(reservation);
   const orderLabel = orderNumberLabel(reservation);
   const showOrderField =
@@ -144,6 +153,7 @@ export function AdminReservationInternalInfo({
         includeOrderNumber: canEditOrderNumber,
         includeMunicipio: showMunicipioField,
         includeNotes: showNotesEditor,
+        includeStampCard: showStampCardField,
         includePhotographer: true,
         includeSessionType: isSuperAdmin,
       }),
@@ -154,13 +164,16 @@ export function AdminReservationInternalInfo({
       reservation.order_number,
       reservation.municipio,
       reservation.session_type,
+      reservation.stamp_card_code,
       editForm.import_notes,
+      editForm.stamp_card_code,
       editForm.photographer_studio,
       editForm.order_number,
       editForm.municipio,
       editForm.session_type,
       showNotesEditor,
       showMunicipioField,
+      showStampCardField,
       canEditOrderNumber,
       isSuperAdmin,
     ],
@@ -395,6 +408,40 @@ export function AdminReservationInternalInfo({
             ) : null}
           </div>
         )}
+
+        {showStampCardField ? (
+          <div className="grid gap-1.5">
+            <label
+              htmlFor="admin-stamp-card-code"
+              className="text-sm text-zinc-600 block"
+            >
+              Cupón (tarjetero)
+            </label>
+            <input
+              id="admin-stamp-card-code"
+              type="text"
+              maxLength={64}
+              value={editForm.stamp_card_code}
+              onChange={(e) =>
+                setEditForm((f) => ({
+                  ...f,
+                  stamp_card_code: e.target.value,
+                }))
+              }
+              className={fieldInputClass}
+              placeholder="Ej. TARJ-0042"
+            />
+            <p className="text-xs text-zinc-500">
+              Solo sesión regalo. Al guardar con cupón, la cita queda en $0 sin
+              cobro.
+            </p>
+            {isGiftSession ? (
+              <p className="text-xs font-medium text-emerald-700">
+                Sesión regalo — precio $0, sin Pagos manuales.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="flex flex-col gap-3">

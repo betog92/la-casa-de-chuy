@@ -193,6 +193,7 @@ function AdminReservacionesPageInner() {
     vestido_title: "",
     vestido_notes: "",
     import_notes: "",
+    stamp_card_code: "",
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -520,9 +521,13 @@ function AdminReservacionesPageInner() {
       date: format(pickerDate, "yyyy-MM-dd"),
       startTime: time,
       // Solo cliente usa precio del calendario; Alvero/reservado permiten precio manual o 0.
-      ...(f.variant === "cliente" && pickerPrice !== null
+      ...(f.variant === "cliente" &&
+      pickerPrice !== null &&
+      !f.stamp_card_code.trim()
         ? { price: pickerPrice }
-        : {}),
+        : f.variant === "cliente" && f.stamp_card_code.trim()
+          ? { price: 0 }
+          : {}),
     }));
   }, [pickerDate, pickerPrice]);
 
@@ -620,6 +625,7 @@ function AdminReservacionesPageInner() {
       vestido_title: "",
       vestido_notes: "",
       import_notes: "",
+      stamp_card_code: "",
     });
     setPickerDate(tomorrow);
     setPickerTime(null);
@@ -713,7 +719,13 @@ function AdminReservacionesPageInner() {
         setCreateError("Completa nombre, email y teléfono.");
         return;
       }
-      if (!price || price <= 0) {
+      const stampCode = newForm.stamp_card_code?.trim() ?? "";
+      if (stampCode) {
+        if (price !== 0) {
+          setCreateError("La sesión regalo con cupón debe tener precio $0.");
+          return;
+        }
+      } else if (!price || price <= 0) {
         setCreateError("El precio debe ser mayor a 0.");
         return;
       }
@@ -738,10 +750,17 @@ function AdminReservacionesPageInner() {
         payload.name = name!.trim();
         payload.email = email!.trim();
         payload.phone = phone!.trim();
-        payload.price = price;
-        payload.payment_method = payment_method;
-        payload.payment_status = newForm.payment_state === "already_paid" ? "paid" : "pending";
         payload.sendEmail = sendEmail;
+        const stampCode = newForm.stamp_card_code?.trim();
+        if (stampCode) {
+          payload.stamp_card_code = stampCode;
+          payload.price = 0;
+        } else {
+          payload.price = price;
+          payload.payment_method = payment_method;
+          payload.payment_status =
+            newForm.payment_state === "already_paid" ? "paid" : "pending";
+        }
       } else if (variant === "reservado_alvero") {
         // API usa placeholders para nombre, email, teléfono y precio 0
       } else {
@@ -1251,8 +1270,11 @@ function AdminReservacionesPageInner() {
                               })}
                             </div>
                           )}
-                          {newForm.variant === "cliente" && pickerPrice !== null && (
+                          {newForm.variant === "cliente" && pickerPrice !== null && !newForm.stamp_card_code.trim() && (
                             <p className="mt-3 text-sm font-semibold text-zinc-900">Precio: {formatCurrency(pickerPrice)}</p>
+                          )}
+                          {newForm.variant === "cliente" && newForm.stamp_card_code.trim() && (
+                            <p className="mt-3 text-sm font-semibold text-emerald-800">Sesión regalo — $0</p>
                           )}
                         </>
                       );
@@ -1276,40 +1298,80 @@ function AdminReservacionesPageInner() {
                     <input type="tel" value={newForm.phone} onChange={(e) => setNewForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" placeholder="Ej. 8123456789" required />
                   </div>
                   <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Cupón (tarjetero)</label>
+                    <input
+                      type="text"
+                      value={newForm.stamp_card_code}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setNewForm((f) => ({
+                          ...f,
+                          stamp_card_code: code,
+                          price: code.trim() ? 0 : pickerPrice ?? f.price,
+                        }));
+                      }}
+                      className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
+                      placeholder="Ej. TARJ-0042"
+                      maxLength={64}
+                    />
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Solo para sesión regalo.
+                    </p>
+                  </div>
+                  <div>
                     <label className="mb-1 block text-xs font-medium text-zinc-600">Precio (MXN) *</label>
-                    <input type="number" min={0} step={1} value={newForm.price || ""} onChange={(e) => setNewForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm" required />
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={newForm.stamp_card_code.trim() ? 0 : newForm.price || ""}
+                      onChange={(e) =>
+                        setNewForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))
+                      }
+                      disabled={!!newForm.stamp_card_code.trim()}
+                      className="w-full rounded border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-500"
+                      required
+                    />
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">Método de pago *</label>
-                    <select value={newForm.payment_method} onChange={(e) => setNewForm((f) => ({ ...f, payment_method: e.target.value as "efectivo" | "transferencia" }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm">
-                      <option value="efectivo">Efectivo</option>
-                      <option value="transferencia">Transferencia</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-zinc-600">Estado del pago</p>
-                    {isSuperAdmin ? (
-                      <>
-                        <div className="flex flex-wrap gap-4">
-                          <label className="flex cursor-pointer items-center gap-2">
-                            <input type="radio" name="payment_state" checked={newForm.payment_state === "pending"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "pending" }))} className="rounded-full border-zinc-300" />
-                            <span className="text-sm">Cliente aún no ha pagado</span>
-                          </label>
-                          <label className="flex cursor-pointer items-center gap-2">
-                            <input type="radio" name="payment_state" checked={newForm.payment_state === "already_paid"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "already_paid" }))} className="rounded-full border-zinc-300" />
-                            <span className="text-sm">Cliente ya pagó (efectivo/transferencia)</span>
-                          </label>
-                        </div>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          Si aún no pagó, aparecerá en Pagos manuales para validar después.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                        El pago quedará pendiente y la familia lo validará en Pagos manuales, aunque el cliente ya haya pagado en el momento.
-                      </p>
-                    )}
-                  </div>
+                  {!newForm.stamp_card_code.trim() ? (
+                    <>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">Método de pago *</label>
+                        <select value={newForm.payment_method} onChange={(e) => setNewForm((f) => ({ ...f, payment_method: e.target.value as "efectivo" | "transferencia" }))} className="w-full rounded border border-zinc-300 px-3 py-2 text-sm">
+                          <option value="efectivo">Efectivo</option>
+                          <option value="transferencia">Transferencia</option>
+                        </select>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-xs font-medium text-zinc-600">Estado del pago</p>
+                        {isSuperAdmin ? (
+                          <>
+                            <div className="flex flex-wrap gap-4">
+                              <label className="flex cursor-pointer items-center gap-2">
+                                <input type="radio" name="payment_state" checked={newForm.payment_state === "pending"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "pending" }))} className="rounded-full border-zinc-300" />
+                                <span className="text-sm">Cliente aún no ha pagado</span>
+                              </label>
+                              <label className="flex cursor-pointer items-center gap-2">
+                                <input type="radio" name="payment_state" checked={newForm.payment_state === "already_paid"} onChange={() => setNewForm((f) => ({ ...f, payment_state: "already_paid" }))} className="rounded-full border-zinc-300" />
+                                <span className="text-sm">Cliente ya pagó (efectivo/transferencia)</span>
+                              </label>
+                            </div>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Si aún no pagó, aparecerá en Pagos manuales para validar después.
+                            </p>
+                          </>
+                        ) : (
+                          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                            El pago quedará pendiente y la familia lo validará en Pagos manuales, aunque el cliente ya haya pagado en el momento.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                      Sesión regalo: sin cobro ni validación en Pagos manuales.
+                    </p>
+                  )}
                   <label className="flex cursor-pointer items-center gap-2">
                     <input type="checkbox" checked={newForm.sendEmail} onChange={(e) => setNewForm((f) => ({ ...f, sendEmail: e.target.checked }))} className="rounded border-zinc-300" />
                     <span className="text-sm text-zinc-600">Enviar email de confirmación</span>

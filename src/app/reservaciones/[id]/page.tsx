@@ -85,6 +85,7 @@ function ReservationContactFields({
       order_number: string;
       municipio: string;
       import_notes: string;
+      stamp_card_code: string;
       photographer_studio: string;
       session_type: string;
     }>
@@ -192,6 +193,7 @@ export default function ReservationDetailsPage() {
     order_number: "",
     municipio: "",
     import_notes: "",
+    stamp_card_code: "",
     photographer_studio: "",
     session_type: "",
   });
@@ -222,6 +224,7 @@ export default function ReservationDetailsPage() {
       order_number: reservation.order_number ?? "",
       municipio: reservation.municipio ?? "",
       import_notes: reservation.import_notes ?? "",
+      stamp_card_code: reservation.stamp_card_code ?? "",
       photographer_studio: reservation.photographer_studio ?? "",
       session_type: reservation.session_type ?? "",
     });
@@ -233,6 +236,7 @@ export default function ReservationDetailsPage() {
     reservation?.order_number,
     reservation?.municipio,
     reservation?.import_notes,
+    reservation?.stamp_card_code,
     reservation?.photographer_studio,
     reservation?.session_type,
   ]);
@@ -655,6 +659,20 @@ export default function ReservationDetailsPage() {
               municipio: updated.municipio ?? prev.municipio ?? null,
               user_id: updated.user_id ?? prev.user_id ?? null,
               import_notes: updated.import_notes ?? prev.import_notes ?? null,
+              stamp_card_code:
+                updated.stamp_card_code !== undefined
+                  ? updated.stamp_card_code
+                  : prev.stamp_card_code ?? null,
+              price:
+                updated.price !== undefined ? updated.price : prev.price,
+              payment_status:
+                updated.payment_status !== undefined
+                  ? updated.payment_status
+                  : prev.payment_status,
+              payment_method:
+                updated.payment_method !== undefined
+                  ? updated.payment_method
+                  : prev.payment_method,
               import_notes_edited_at:
                 updated.import_notes_edited_at ??
                 prev.import_notes_edited_at ??

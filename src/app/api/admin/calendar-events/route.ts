@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     const { data, error } = await supabase
       .from("reservations")
-      .select("id, date, start_time, end_time, name, email, price, status, source, import_type, order_number")
+      .select("id, date, start_time, end_time, name, email, price, status, source, import_type, order_number, stamp_card_code")
       .gte("date", start)
       .lte("date", end)
       .in("status", ["confirmed", "completed"])
@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
       source: string;
       import_type: string | null;
       order_number: string | null;
+      stamp_card_code: string | null;
     };
     const MONTERREY_TZ = "America/Monterrey";
     const toTimePart = (t: string) => {
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest) {
             source: r.source,
             import_type: r.import_type,
             status: r.status,
+            stamp_card_code: r.stamp_card_code,
           },
         };
       }
@@ -122,6 +124,7 @@ export async function GET(request: NextRequest) {
           source: r.source,
           import_type: r.import_type,
           status: r.status,
+          stamp_card_code: r.stamp_card_code,
         },
       };
     });

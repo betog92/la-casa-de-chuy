@@ -9,6 +9,12 @@ import {
   isAlveroClientReservation,
 } from "@/lib/admin/reservation-contact-edit";
 import {
+  isManualChuyReservation,
+  isStampCardGiftReservation,
+  normalizeStampCardCode,
+  stampCardGiftPaymentFields,
+} from "@/lib/admin/stamp-card-code";
+import {
   successResponse,
   errorResponse,
   validationErrorResponse,
@@ -60,7 +66,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("reservations")
       .select(
-        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, municipio, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio"
+        "id, email, name, phone, date, start_time, end_time, price, original_price, payment_id, payment_method, payment_status, payment_validated_at, payment_validated_by_user_id, status, created_at, last_minute_discount, loyalty_discount, loyalty_points_used, credits_used, referral_discount, discount_code, discount_code_discount, refund_amount, refund_id, refund_status, cancelled_at, reschedule_count, original_date, original_start_time, original_payment_id, additional_payment_id, additional_payment_amount, additional_payment_method, user_id, created_by_user_id, rescheduled_by_user_id, cancelled_by_user_id, source, google_event_id, import_type, order_number, municipio, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, stamp_card_code, session_type, photographer_studio"
       )
       .eq("id", reservationId)
       .single();
@@ -188,6 +194,7 @@ export async function GET(
       delete reservation.order_number;
       delete reservation.municipio;
       delete reservation.google_event_id;
+      delete reservation.stamp_card_code;
     }
 
     return successResponse({
@@ -231,7 +238,7 @@ export async function PATCH(
     const { data: existingRow, error: fetchError } = await supabase
       .from("reservations")
       .select(
-        "id, source, import_type, import_notes, name, email, phone, order_number, municipio, session_type, photographer_studio",
+        "id, source, import_type, import_notes, name, email, phone, order_number, municipio, stamp_card_code, price, payment_status, payment_method, session_type, photographer_studio",
       )
       .eq("id", reservationId)
       .maybeSingle();
@@ -253,6 +260,10 @@ export async function PATCH(
       phone: string | null;
       order_number: string | null;
       municipio: string | null;
+      stamp_card_code: string | null;
+      price: number;
+      payment_status: string | null;
+      payment_method: string | null;
       session_type: string | null;
       photographer_studio: string | null;
     };
@@ -349,6 +360,73 @@ export async function PATCH(
       }
     }
 
+    if (body.stamp_card_code !== undefined || body.cupon !== undefined) {
+      if (!isManualChuyReservation(existing)) {
+        return validationErrorResponse(
+          "El cupón del tarjetero solo aplica en citas manuales de La Casa de Chuy",
+        );
+      }
+      const raw =
+        body.stamp_card_code !== undefined
+          ? body.stamp_card_code
+          : body.cupon;
+      const next = normalizeStampCardCode(
+        raw === "" || raw == null ? null : String(raw),
+      );
+      const prev = normalizeStampCardCode(existing.stamp_card_code);
+      if (next !== prev) {
+        if (next) {
+          updatePayload.stamp_card_code = next;
+          Object.assign(updatePayload, stampCardGiftPaymentFields());
+        } else {
+          const bodyPrice =
+            body.price !== undefined ? Number(body.price) : undefined;
+          const effectivePrice =
+            bodyPrice !== undefined && Number.isFinite(bodyPrice)
+              ? bodyPrice
+              : Number(existing.price) || 0;
+          if (effectivePrice <= 0) {
+            return validationErrorResponse(
+              "Al quitar el cupón de regalo debes indicar un precio mayor a 0",
+            );
+          }
+          updatePayload.stamp_card_code = null;
+          updatePayload.price = effectivePrice;
+          updatePayload.original_price = effectivePrice;
+          updatePayload.payment_status = "pending";
+          if (
+            body.payment_method &&
+            ["efectivo", "transferencia"].includes(String(body.payment_method))
+          ) {
+            updatePayload.payment_method = body.payment_method;
+          } else if (!existing.payment_method) {
+            return validationErrorResponse(
+              "Al quitar el cupón indica método de pago (efectivo o transferencia)",
+            );
+          }
+          updatePayload.payment_validated_at = null;
+          updatePayload.payment_validated_by_user_id = null;
+        }
+      }
+    }
+
+    if (
+      isManualChuyReservation(existing) &&
+      isStampCardGiftReservation({
+        stamp_card_code:
+          (updatePayload.stamp_card_code as string | null | undefined) ??
+          existing.stamp_card_code,
+      }) &&
+      body.price !== undefined
+    ) {
+      const priceNum = Number(body.price);
+      if (Number.isFinite(priceNum) && priceNum !== 0) {
+        return validationErrorResponse(
+          "La sesión regalo con cupón debe tener precio $0",
+        );
+      }
+    }
+
     if (body.session_type !== undefined && body.session_type !== null) {
       if (!isSuperAdmin) {
         return forbiddenResponse(
@@ -409,7 +487,7 @@ export async function PATCH(
     const { data, error } = await (supabase.from("reservations") as any)
       .update(updatePayload)
       .eq("id", reservationId)
-      .select("id, name, email, phone, order_number, municipio, user_id, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, session_type, photographer_studio")
+      .select("id, name, email, phone, order_number, municipio, user_id, import_notes, import_notes_edited_at, import_notes_edited_by_user_id, stamp_card_code, price, payment_status, payment_method, session_type, photographer_studio")
       .single();
 
     if (error) {
