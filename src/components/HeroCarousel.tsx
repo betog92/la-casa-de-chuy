@@ -81,16 +81,16 @@ export default function HeroCarousel({
           className="mb-3 text-4xl font-bold tracking-tight drop-shadow-md sm:text-5xl lg:text-6xl"
           style={{ fontFamily: "var(--font-cormorant), serif" }}
         >
-          Comienza tu experiencia
+          Recuerdos que merecen un gran escenario
         </h1>
         <p className="mb-8 max-w-xl text-lg text-white/95 drop-shadow sm:text-xl lg:text-2xl">
-          Agenda una cita en la Casa de Chuy el Rico
+          Locación fotográfica en Monterrey para tus XV años y boda. Tú vives el momento; nosotros lo volvemos inolvidable.
         </p>
         <Link
           href={reservarHref}
-          className="rounded-lg bg-white px-8 py-4 text-lg font-semibold text-[#103948] shadow-lg transition hover:bg-white hover:shadow-xl"
+          className="rounded-full bg-white px-10 py-4 text-lg font-semibold text-[#103948] shadow-lg transition hover:shadow-xl"
         >
-          Agendar
+          Agendar mi sesión
         </Link>
         </div>
       </div>
