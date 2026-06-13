@@ -69,6 +69,10 @@ export default function HeroCarousel({
                 sizes="100vw"
                 priority={index === 0}
               />
+              <div
+                className="absolute inset-0 bg-black/30"
+                aria-hidden
+              />
             </div>
           </SwiperSlide>
         ))}
