@@ -4,16 +4,17 @@ import {
   parseLocationContent,
 } from "@/lib/site-location";
 import { createPublicReadonlyClient } from "@/lib/supabase/server";
+import { pageMetadata } from "@/lib/site-seo";
 import { isAllowedMapsEmbedUrl } from "@/utils/maps-embed";
 import { UbicacionAddressActions } from "./UbicacionAddressActions";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Ubicación — La Casa de Chuy el Rico",
-  description:
-    "Dirección y mapa de la locación en Monterrey, Nuevo León. Cómo llegar a La Casa de Chuy el Rico.",
-};
+export const metadata: Metadata = pageMetadata(
+  "Ubicaci?n",
+  "Direcci?n y mapa de la locaci?n en Monterrey, Nuevo Le?n. C?mo llegar a La Casa de Chuy el Rico.",
+  { path: "/ubicacion" },
+);
 
 export default async function UbicacionPage() {
   const supabase = createPublicReadonlyClient();
@@ -32,10 +33,10 @@ export default async function UbicacionPage() {
             className="mb-4 text-center text-3xl font-bold text-zinc-900 sm:text-4xl"
             style={{ fontFamily: "var(--font-cormorant), serif" }}
           >
-            Ubicación
+            Ubicaci?n
           </h1>
           <p className="mx-auto max-w-xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-800">
-            No pudimos cargar la información de ubicación. Vuelve a intentar más
+            No pudimos cargar la informaci?n de ubicaci?n. Vuelve a intentar m?s
             tarde.
           </p>
         </div>
@@ -70,17 +71,17 @@ export default async function UbicacionPage() {
           className="mb-4 text-center text-3xl font-bold text-zinc-900 sm:text-4xl"
           style={{ fontFamily: "var(--font-cormorant), serif" }}
         >
-          Ubicación
+          Ubicaci?n
         </h1>
         <p className="mx-auto mb-10 max-w-xl text-center text-zinc-600">
-          Dirección de la locación en Monterrey. Usa el mapa o abre la ruta en tu
+          Direcci?n de la locaci?n en Monterrey. Usa el mapa o abre la ruta en tu
           celular con Google Maps o Waze.
         </p>
 
         {!hasContent ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900">
-            Estamos configurando esta sección. Si necesitas la dirección,
-            escríbenos por redes o al reservar.
+            Estamos configurando esta secci?n. Si necesitas la direcci?n,
+            escr?benos por redes o al reservar.
           </p>
         ) : (
           <div className="space-y-8">
@@ -93,7 +94,7 @@ export default async function UbicacionPage() {
                   id="ubicacion-direccion"
                   className="mb-2 text-lg font-semibold text-zinc-900"
                 >
-                  Dirección
+                  Direcci?n
                 </h2>
                 <address className="not-italic whitespace-pre-line text-zinc-700">
                   {loc.address}
@@ -116,7 +117,7 @@ export default async function UbicacionPage() {
                 {mapsEmbedSafe ? (
                   <div className="aspect-[16/10] min-h-[220px] w-full bg-zinc-100 sm:min-h-0">
                     <iframe
-                      title="Mapa de la locación"
+                      title="Mapa de la locaci?n"
                       src={mapsEmbedSafe}
                       className="h-full min-h-[220px] w-full border-0 sm:min-h-0"
                       loading="lazy"
@@ -126,10 +127,10 @@ export default async function UbicacionPage() {
                   </div>
                 ) : (
                   <p className="px-6 py-4 text-sm text-amber-800">
-                    El mapa no está disponible por un problema de configuración.
+                    El mapa no est? disponible por un problema de configuraci?n.
                     {loc.address.trim()
-                      ? " Usa la dirección y los enlaces a Google Maps o Waze en esta misma página."
-                      : " Busca la ubicación en Google Maps o contáctanos."}
+                      ? " Usa la direcci?n y los enlaces a Google Maps o Waze en esta misma p?gina."
+                      : " Busca la ubicaci?n en Google Maps o cont?ctanos."}
                   </p>
                 )}
               </section>
@@ -138,7 +139,7 @@ export default async function UbicacionPage() {
             {loc.directions.trim() ? (
               <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
                 <h2 className="mb-2 text-lg font-semibold text-zinc-900">
-                  Cómo llegar
+                  C?mo llegar
                 </h2>
                 <p className="whitespace-pre-line text-zinc-700">
                   {loc.directions}

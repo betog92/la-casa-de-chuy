@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import CheckoutTermsHighlights from "@/components/CheckoutTermsHighlights";
 import TermsContent from "@/components/TermsContent";
+import { pageMetadata } from "@/lib/site-seo";
 
-export const metadata: Metadata = {
-  title: "Términos y Condiciones — La Casa de Chuy el Rico",
-  description:
-    "Términos y condiciones del servicio de reservas en La Casa de Chuy el Rico: cancelaciones, reagendamiento, normas de la locación y más.",
-};
+export const metadata: Metadata = pageMetadata(
+  "Términos y Condiciones",
+  "Términos y condiciones del servicio de reservas en La Casa de Chuy el Rico: cancelaciones, reagendamiento, normas de la locación y más.",
+  { path: "/terminos" },
+);
 
 export default function TerminosPage() {
   return (

@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { createPublicReadonlyClient } from "@/lib/supabase/server";
+import { pageMetadata } from "@/lib/site-seo";
 import { GaleriaGrid } from "./GaleriaGrid";
+
+export const metadata: Metadata = pageMetadata(
+  "Galería",
+  "Fotos de la locación fotográfica en Monterrey: interiores con carácter, jardín y espacios para sesiones de XV años y boda.",
+  { path: "/galeria" },
+);
 
 export const dynamic = "force-dynamic";
 

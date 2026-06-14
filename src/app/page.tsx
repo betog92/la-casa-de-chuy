@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import HeroCarousel from "@/components/HeroCarousel";
+import { LocalBusinessJsonLd } from "@/components/LocalBusinessJsonLd";
+import { pageMetadata, SITE_KEYWORDS } from "@/lib/site-seo";
 import { PRICES, formatPricePerHour } from "@/utils/pricing";
 import {
   getPublicBookingsHref,
@@ -10,23 +12,22 @@ import {
 import { createPublicReadonlyClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title:
-    "La Casa de Chuy el Rico | Locación para fotos de XV años y boda en Monterrey",
-  description:
+  ...pageMetadata(
+    "Locación para fotos de XV años y boda en Monterrey",
     "Renta por hora una locación fotográfica en Monterrey con interiores de carácter y jardín, ideal para sesiones de XV años y boda. Reserva en línea en minutos.",
-  keywords: [
-    "locación fotográfica Monterrey",
-    "estudio para fotos XV años Monterrey",
-    "locación para boda Monterrey",
-    "renta de locación para sesiones de fotos",
-    "fotos de quinceañera Monterrey",
-  ],
+    { path: "/", keywords: [...SITE_KEYWORDS] },
+  ),
+  title: {
+    absolute:
+      "La Casa de Chuy el Rico | Locación para fotos de XV años y boda en Monterrey",
+  },
   openGraph: {
     title:
       "La Casa de Chuy el Rico | Locación para XV años y boda en Monterrey",
     description:
       "Interiores con carácter y jardín en Monterrey para tus fotos de XV años y boda. Renta por hora y reserva en línea.",
     type: "website",
+    url: "/",
   },
 };
 
@@ -73,6 +74,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-[#fcfcfc]">
+      <LocalBusinessJsonLd />
       {/* Hero carrusel */}
       <HeroCarousel reservarHref={reservarHref} />
 

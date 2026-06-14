@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Header from "@/components/Header";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { rootMetadata } from "@/lib/site-seo";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,18 +25,7 @@ const cormorant = Cormorant({
   style: ["normal", "italic"],
 });
 
-export const metadata: Metadata = {
-  title: "La Casa de Chuy el Rico - Reservas",
-  description: "Reserva en línea la locación fotográfica de La Casa de Chuy el Rico",
-  icons: {
-    icon: [
-      { url: "/favicon.ico" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-    ],
-    shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
-};
+export const metadata: Metadata = rootMetadata;
 
 export default function RootLayout({
   children,

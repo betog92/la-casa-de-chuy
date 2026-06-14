@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PrivacyContent from "@/components/PrivacyContent";
+import { pageMetadata } from "@/lib/site-seo";
 
-export const metadata: Metadata = {
-  title: "Política de Privacidad — La Casa de Chuy el Rico",
-  description:
-    "Cómo La Casa de Chuy el Rico recopila, usa y protege tus datos personales al reservar en línea: pagos con Conekta, correos transaccionales y tus derechos.",
-};
+export const metadata: Metadata = pageMetadata(
+  "Política de Privacidad",
+  "Cómo La Casa de Chuy el Rico recopila, usa y protege tus datos personales al reservar en línea: pagos con Conekta, correos transaccionales y tus derechos.",
+  { path: "/privacidad" },
+);
 
 export default function PrivacidadPage() {
   return (
