@@ -65,6 +65,20 @@ const isFutureDate = (date: Date): boolean => {
   return checkDate >= today;
 };
 
+function BookingSpinner({ label }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3">
+      <div
+        className="h-10 w-10 animate-spin rounded-full border-2 border-[#103948] border-t-transparent"
+        aria-hidden
+      />
+      {label ? (
+        <p className="text-sm text-zinc-500 sm:text-base">{label}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ReservarPage() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -79,12 +93,13 @@ export default function ReservarPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closedDates, setClosedDates] = useState<Set<string>>(new Set());
+  const [monthLoading, setMonthLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [monthAvailability, setMonthAvailability] = useState<
     Map<string, number>
   >(new Map());
   const [currentMonth, setCurrentMonth] = useState<Date | null>(null);
-  const loadingMonthRef = useRef<Date | null>(null);
+  const monthRequestIdRef = useRef(0);
 
   // Obtener slots disponibles cuando se selecciona una fecha
   useEffect(() => {
@@ -195,44 +210,28 @@ export default function ReservarPage() {
   );
 
   const loadMonthAvailability = useCallback(async (monthDate: Date) => {
-    // Normalizar a inicio de mes para comparación
     const normalizedMonthDate = startOfMonth(monthDate);
+    const requestId = ++monthRequestIdRef.current;
+    setMonthLoading(true);
 
-    // Marcar que estamos cargando este mes específico
-    loadingMonthRef.current = normalizedMonthDate;
     try {
       const supabase = createClient();
       const availability = await getMonthAvailability(
         supabase,
         normalizedMonthDate,
-        endOfMonth(monthDate)
+        endOfMonth(monthDate),
       );
-      // Solo actualizar si todavía estamos cargando el mismo mes (evita race conditions)
-      // Comparar meses normalizados en lugar de referencias de objetos
-      if (
-        loadingMonthRef.current &&
-        isSameMonth(loadingMonthRef.current, normalizedMonthDate)
-      ) {
-        setMonthAvailability(availability);
-        setCurrentMonth(normalizedMonthDate);
-      }
+      if (requestId !== monthRequestIdRef.current) return;
+      setMonthAvailability(availability);
+      setCurrentMonth(normalizedMonthDate);
     } catch (err) {
       console.error("Error loading month availability:", err);
-      // Solo actualizar si todavía estamos cargando el mismo mes
-      if (
-        loadingMonthRef.current &&
-        isSameMonth(loadingMonthRef.current, normalizedMonthDate)
-      ) {
-        setMonthAvailability(new Map());
-        setCurrentMonth(normalizedMonthDate);
-      }
+      if (requestId !== monthRequestIdRef.current) return;
+      setMonthAvailability(new Map());
+      setCurrentMonth(normalizedMonthDate);
     } finally {
-      // Solo limpiar loading si todavía estamos cargando el mismo mes
-      if (
-        loadingMonthRef.current &&
-        isSameMonth(loadingMonthRef.current, normalizedMonthDate)
-      ) {
-        loadingMonthRef.current = null;
+      if (requestId === monthRequestIdRef.current) {
+        setMonthLoading(false);
       }
     }
   }, []);
@@ -561,7 +560,16 @@ export default function ReservarPage() {
                 Selecciona una Fecha
               </h2>
               {mounted ? (
-                <>
+                <div className="relative">
+                  {monthLoading ? (
+                    <div
+                      className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/75"
+                      aria-busy="true"
+                      aria-live="polite"
+                    >
+                      <BookingSpinner label="Cargando calendario..." />
+                    </div>
+                  ) : null}
                   <Calendar
                     onChange={handleDateChange}
                     value={selectedDate}
@@ -629,12 +637,14 @@ export default function ReservarPage() {
                       </div>
                     </div>
                   </div>
-                </>
+                </div>
               ) : (
-                <div className="flex h-[250px] items-center justify-center sm:h-[300px]">
-                  <p className="text-sm text-zinc-500 sm:text-base">
-                    Cargando calendario...
-                  </p>
+                <div
+                  className="flex h-[250px] items-center justify-center sm:h-[300px]"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <BookingSpinner label="Cargando calendario..." />
                 </div>
               )}
             </div>
@@ -648,8 +658,12 @@ export default function ReservarPage() {
                   </p>
                 </div>
               ) : loading ? (
-                <div className="flex h-full items-center justify-center">
-                  <p className="text-zinc-500">Cargando disponibilidad...</p>
+                <div
+                  className="flex h-full min-h-[200px] items-center justify-center"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <BookingSpinner label="Cargando disponibilidad..." />
                 </div>
               ) : error ? (
                 <div className="flex h-full items-center justify-center">
