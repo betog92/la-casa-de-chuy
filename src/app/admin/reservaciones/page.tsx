@@ -34,6 +34,13 @@ import {
   isSourceFilter,
 } from "@/lib/admin/reservation-filters";
 import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
+import { ReservationColorLegend } from "@/components/admin/ReservationColorLegend";
+import { ReservationTypeChip } from "@/components/admin/ReservationTypeChip";
+import {
+  getAdminReservationTotalDisplay,
+  getReservationRowPresentation,
+  type ReservationColorInput,
+} from "@/lib/admin/reservation-calendar-colors";
 
 const PAGE_SIZE = 50;
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -110,6 +117,7 @@ interface Reservation {
   import_type?: string | null;
   order_number?: string | null;
   google_event_id?: string | null;
+  stamp_card_code?: string | null;
 }
 
 interface VestidoSearchHit {
@@ -951,19 +959,26 @@ function AdminReservacionesPageInner() {
           </div>
         ) : (
           <div className="relative">
+            {reservations.length > 0 ? (
+              <div className="border-b border-zinc-100 px-4 py-3 sm:px-5">
+                <ReservationColorLegend
+                  scope={filters.origin === "native" ? "native" : "full"}
+                />
+              </div>
+            ) : null}
             <div
               className={`overflow-x-auto transition-opacity ${tablePageBusy ? "pointer-events-none opacity-50" : ""}`}
               aria-busy={loading}
             >
-            <table className="min-w-full divide-y divide-zinc-200">
+            <table className="w-full min-w-[800px] table-fixed divide-y divide-zinc-200">
               <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Fecha / Hora</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Cliente</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Estado</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Pago</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-zinc-500">Precio</th>
+                  <th className="w-[14%] px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">ID</th>
+                  <th className="w-[16%] px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Fecha / Hora</th>
+                  <th className="w-[24%] px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Cliente</th>
+                  <th className="w-[14%] px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Estado</th>
+                  <th className="w-[14%] px-4 py-3 text-left text-xs font-medium uppercase text-zinc-500">Pago</th>
+                  <th className="w-[12%] px-4 py-3 text-right text-xs font-medium uppercase text-zinc-500">Precio</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -972,31 +987,58 @@ function AdminReservacionesPageInner() {
                     <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">No hay reservaciones con los filtros aplicados</td>
                   </tr>
                 ) : (
-                  reservations.map((r, index) => (
+                  reservations.map((r) => {
+                    const colorInput: ReservationColorInput = {
+                      source: r.source,
+                      import_type: r.import_type,
+                      stamp_card_code: r.stamp_card_code,
+                    };
+                    const row = getReservationRowPresentation(colorInput, {
+                      statusLabel: getReservationStatusLabel(r.status, {
+                        rescheduleCount: r.reschedule_count,
+                        sessionDate: r.date,
+                      }),
+                    });
+                    const total = getAdminReservationTotalDisplay(
+                      colorInput,
+                      r.status,
+                      formatCurrency(r.price),
+                    );
+
+                    return (
                     <tr
                       key={r.id}
                       onClick={() => router.push(`/reservaciones/${r.id}`)}
-                      className={`cursor-pointer transition-colors ${index % 2 === 1 ? "bg-zinc-100" : "bg-white"} hover:bg-zinc-200`}
+                      title={row.rowLabel}
+                      aria-label={`Reserva #${r.id}: ${row.rowLabel}`}
+                      role="link"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/reservaciones/${r.id}`);
+                        }
+                      }}
+                      className={`cursor-pointer ${row.className}`}
+                      style={row.style}
                     >
                       <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900">
                         {r.source === "google_import" && r.order_number?.trim() ? (
-                          <>
+                          <span className="inline-flex flex-wrap items-center gap-x-1">
                             <span>#{r.order_number.trim()}</span>
-                            <span className="ml-1.5 inline-flex rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">Importada</span>
-                          </>
+                            <ReservationTypeChip input={colorInput} />
+                          </span>
                         ) : (
-                          <>
+                          <span className="inline-flex flex-wrap items-center gap-x-1">
                             <span>#{r.id}</span>
+                            <ReservationTypeChip input={colorInput} />
                             {r.order_number?.trim() && r.source !== "google_import" && (
-                              <span className="ml-1 text-zinc-500 font-normal">#{r.order_number.trim()}</span>
+                              <span className="text-zinc-500 font-normal">#{r.order_number.trim()}</span>
                             )}
                             {r.google_event_id && r.source !== "google_import" && (
-                              <span className="ml-1 text-zinc-500 font-normal">{r.google_event_id.startsWith("#") ? r.google_event_id : `#${r.google_event_id}`}</span>
+                              <span className="text-zinc-500 font-normal">{r.google_event_id.startsWith("#") ? r.google_event_id : `#${r.google_event_id}`}</span>
                             )}
-                            {r.source === "google_import" && (
-                              <span className="ml-1.5 inline-flex rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">Importada</span>
-                            )}
-                          </>
+                          </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-900">
@@ -1007,8 +1049,8 @@ function AdminReservacionesPageInner() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="font-medium text-zinc-900">{r.name}</p>
-                        <p className="text-sm text-zinc-500">{r.email}</p>
+                        <p className="truncate font-medium text-zinc-900">{r.name}</p>
+                        <p className="truncate text-sm text-zinc-500">{r.email}</p>
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -1037,9 +1079,12 @@ function AdminReservacionesPageInner() {
                           <span className="text-zinc-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-zinc-900">{formatCurrency(r.price)}</td>
+                      <td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-medium ${total.className}`}>
+                        {total.label}
+                      </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

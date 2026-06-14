@@ -26,6 +26,10 @@ import {
   getDayModalTypeLabel,
   stripLeadingTimeFromTitle,
 } from "@/lib/admin/calendar-day-modal-display";
+import {
+  CALENDAR_COLORS,
+  getEventColor,
+} from "@/lib/admin/reservation-calendar-colors";
 
 const getMonterreyDate = (): Date => {
   const now = new Date();
@@ -35,41 +39,6 @@ const getMonterreyDate = (): Date => {
 
 /** Meses hacia atrás que se puede navegar en el calendario (historial). */
 const CALENDAR_HISTORY_MONTHS_BACK = 24;
-
-/** Colores de eventos del calendario (leyenda y eventPropGetter usan la misma fuente) */
-const CALENDAR_COLORS = {
-  reservation: "#103948",
-  reservationOldWeb: "#0e7490",
-  reservationManual: "#b91c1c",
-  stampCard: "#059669",
-  alveroReservation: "#6d28d9",
-  alveroSpace: "#b45309",
-  vestidos: "#0ea5e9",
-} as const;
-
-function getEventColor(event: {
-  resource?: {
-    isVestidos?: boolean;
-    source?: string;
-    import_type?: string | null;
-    stamp_card_code?: string | null;
-  };
-}): string {
-  if (event.resource?.isVestidos) return CALENDAR_COLORS.vestidos;
-  const source = event.resource?.source;
-  const importType = event.resource?.import_type;
-  if (event.resource?.stamp_card_code?.trim()) return CALENDAR_COLORS.stampCard;
-  if (source === "google_import" || source === "admin") {
-    if (importType === "appointly") return CALENDAR_COLORS.reservationOldWeb;
-    if (importType === "manual_client") return CALENDAR_COLORS.alveroReservation;
-    if (importType === "manual_available") return CALENDAR_COLORS.alveroSpace;
-    if (importType === "manual_other") return CALENDAR_COLORS.reservationManual;
-    // Cita creada en el panel (variante cliente): source admin, sin import_type
-    if (source === "admin" && !importType) return CALENDAR_COLORS.reservationManual;
-    return source === "admin" ? CALENDAR_COLORS.reservation : CALENDAR_COLORS.reservationOldWeb;
-  }
-  return CALENDAR_COLORS.reservation;
-}
 
 const locales = { es };
 const localizer = dateFnsLocalizer({

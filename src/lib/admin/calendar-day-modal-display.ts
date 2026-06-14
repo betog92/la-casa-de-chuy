@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { getReservationTypeLabel } from "@/lib/admin/reservation-calendar-colors";
 
 export type DayModalEventResource = {
   isVestidos?: boolean;
@@ -33,21 +34,15 @@ export function formatDayModalTimeRange(
 }
 
 export function getDayModalTypeLabel(ev: DayModalEventLike): string {
-  if (ev.resource?.isVestidos) return "Renta de vestidos";
-  const importType = ev.resource?.import_type;
-  const source = ev.resource?.source;
-  if (importType === "manual_available") return "Bloqueo de agenda (Alvero)";
-  if (importType === "manual_client") return "Reservación de Alvero";
-  if (importType === "appointly") return "Reservación (página web vieja)";
-  if (importType === "manual_other") return "Reservación manual";
-  if (source === "admin" && !importType) {
-    const code = ev.resource?.stamp_card_code?.trim();
-    if (code) return `Sesión regalo tarjetero (${code})`;
-    return "Reservación manual";
-  }
-  if (source === "google_import") return "Importada";
-  if (source === "admin") return "Reservación";
-  return "Reservación";
+  return getReservationTypeLabel(
+    {
+      isVestidos: ev.resource?.isVestidos,
+      source: ev.resource?.source,
+      import_type: ev.resource?.import_type,
+      stamp_card_code: ev.resource?.stamp_card_code,
+    },
+    { includeStampCode: true },
+  );
 }
 
 export function getDayModalPrimaryLabel(ev: DayModalEventLike): string {

@@ -5,6 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
+import { ReservationColorLegend } from "@/components/admin/ReservationColorLegend";
+import { ReservationTypeChip } from "@/components/admin/ReservationTypeChip";
+import {
+  getAdminReservationTotalDisplay,
+  getReservationRowPresentation,
+  type ReservationColorInput,
+} from "@/lib/admin/reservation-calendar-colors";
+import {
+  getReservationStatusColor,
+  getReservationStatusLabel,
+} from "@/utils/reservation-status-display";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -23,6 +34,10 @@ interface RecentReservation {
   price: number;
   status: string;
   created_at: string | null;
+  reschedule_count?: number;
+  source?: string | null;
+  import_type?: string | null;
+  stamp_card_code?: string | null;
 }
 
 interface RevenueBreakdown {
@@ -282,32 +297,6 @@ function RevenuePanel({
 
 const RECENT_PAGE_SIZE = 25;
 
-function reservationStatusLabel(status: string): string {
-  switch (status) {
-    case "confirmed":
-      return "Confirmada";
-    case "completed":
-      return "Completada";
-    case "cancelled":
-      return "Cancelada";
-    default:
-      return status;
-  }
-}
-
-function reservationStatusPillClass(status: string): string {
-  switch (status) {
-    case "confirmed":
-      return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200";
-    case "completed":
-      return "bg-sky-50 text-sky-800 ring-1 ring-sky-200";
-    case "cancelled":
-      return "bg-red-50 text-red-800 ring-1 ring-red-200";
-    default:
-      return "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200";
-  }
-}
-
 function formatRegisteredAt(iso: string | null): { relative: string; full: string } {
   if (!iso) return { relative: "—", full: "" };
   try {
@@ -488,12 +477,18 @@ export default function AdminDashboardPage() {
             </h2>
           </div>
           <Link
-            href="/admin/reservaciones?origin=native"
+            href="/admin/reservaciones"
             className="shrink-0 text-sm font-medium text-[#103948] hover:underline"
           >
-            Ver nativas
+            Ver todas →
           </Link>
         </div>
+
+        {recentReservations.length > 0 ? (
+          <div className="border-b border-zinc-100 px-4 py-3 sm:px-5">
+            <ReservationColorLegend scope="native" />
+          </div>
+        ) : null}
 
         <div ref={recentTableRef} className="relative scroll-mt-4">
         <div
@@ -513,24 +508,44 @@ export default function AdminDashboardPage() {
               .
             </div>
           ) : (
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[720px] table-fixed text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <th className="px-4 py-3 sm:px-5">Reserva</th>
-                  <th className="px-4 py-3 sm:px-5">Registro</th>
-                  <th className="px-4 py-3 sm:px-5">Cliente</th>
-                  <th className="px-4 py-3 sm:px-5">Cita</th>
-                  <th className="px-4 py-3 text-right sm:px-5">Total</th>
-                  <th className="px-4 py-3 sm:px-5">Estado</th>
+                  <th className="w-[14%] px-4 py-3 sm:px-5">Reserva</th>
+                  <th className="w-[18%] px-4 py-3 sm:px-5">Registro</th>
+                  <th className="w-[26%] px-4 py-3 sm:px-5">Cliente</th>
+                  <th className="w-[24%] px-4 py-3 sm:px-5">Cita</th>
+                  <th className="w-[10%] px-4 py-3 text-right sm:px-5">Total</th>
+                  <th className="w-[14%] px-4 py-3 sm:px-5">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {recentReservations.map((r) => {
                   const reg = formatRegisteredAt(r.created_at);
+                  const colorInput: ReservationColorInput = {
+                    source: r.source,
+                    import_type: r.import_type,
+                    stamp_card_code: r.stamp_card_code,
+                  };
+                  const row = getReservationRowPresentation(colorInput, {
+                    statusLabel: getReservationStatusLabel(r.status, {
+                      rescheduleCount: r.reschedule_count,
+                      sessionDate: r.date,
+                    }),
+                  });
+                  const total = getAdminReservationTotalDisplay(
+                    colorInput,
+                    r.status,
+                    formatCurrency(r.price),
+                  );
+
                   return (
                     <tr
                       key={r.id}
-                      className="cursor-pointer transition-colors hover:bg-zinc-50"
+                      className={`cursor-pointer ${row.className}`}
+                      style={row.style}
+                      title={row.rowLabel}
+                      aria-label={`Reserva #${r.id}: ${row.rowLabel}`}
                       onClick={() => router.push(`/reservaciones/${r.id}`)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -542,7 +557,10 @@ export default function AdminDashboardPage() {
                       tabIndex={0}
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-900 sm:px-5">
-                        #{r.id}
+                        <span className="inline-flex items-center">
+                          #{r.id}
+                          <ReservationTypeChip input={colorInput} />
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-zinc-700 sm:px-5">
                         <span className="block">{reg.relative}</span>
@@ -551,10 +569,10 @@ export default function AdminDashboardPage() {
                         ) : null}
                       </td>
                       <td className="px-4 py-3 sm:px-5">
-                        <span className="font-medium text-zinc-900">
+                        <span className="block truncate font-medium text-zinc-900">
                           {r.name}
                         </span>
-                        <span className="mt-0.5 block text-xs text-zinc-500">
+                        <span className="mt-0.5 block truncate text-xs text-zinc-500">
                           {r.email}
                         </span>
                       </td>
@@ -567,19 +585,24 @@ export default function AdminDashboardPage() {
                         </span>
                       </td>
                       <td
-                        className={`whitespace-nowrap px-4 py-3 text-right font-medium sm:px-5 ${
-                          r.status === "cancelled"
-                            ? "text-zinc-500"
-                            : "text-green-700"
-                        }`}
+                        className={`whitespace-nowrap px-4 py-3 text-right font-medium sm:px-5 ${total.className}`}
                       >
-                        {formatCurrency(r.price)}
+                        {total.label}
                       </td>
                       <td className="px-4 py-3 sm:px-5">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${reservationStatusPillClass(r.status)}`}
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getReservationStatusColor(
+                            r.status,
+                            {
+                              rescheduleCount: r.reschedule_count,
+                              sessionDate: r.date,
+                            },
+                          )}`}
                         >
-                          {reservationStatusLabel(r.status)}
+                          {getReservationStatusLabel(r.status, {
+                            rescheduleCount: r.reschedule_count,
+                            sessionDate: r.date,
+                          })}
                         </span>
                       </td>
                     </tr>
