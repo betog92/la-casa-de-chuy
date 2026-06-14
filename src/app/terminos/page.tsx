@@ -20,8 +20,7 @@ export default function TerminosPage() {
           Términos y Condiciones
         </h1>
         <p className="mx-auto mb-10 max-w-2xl text-center text-zinc-600">
-          Reglas del servicio de reservas. Puedes cancelar o reagendar desde la
-          sección de tu reserva cuando aplique.
+          Reglas del servicio de reservas.
         </p>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
