@@ -73,8 +73,12 @@ export default function RootLayout({
           <Header />
           {children}
         </AuthProvider>
-        <Analytics />
-        <SpeedInsights />
+        {process.env.NODE_ENV === "production" ? (
+          <>
+            <Analytics />
+            <SpeedInsights />
+          </>
+        ) : null}
       </body>
     </html>
   );
