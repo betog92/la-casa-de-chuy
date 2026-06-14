@@ -14,6 +14,11 @@ const HERO_IMAGES = Array.from({ length: 7 }, (_, i) =>
   `/hero/hero-${String(i + 1).padStart(2, "0")}.jpg`
 );
 
+const HERO_EYEBROW = "XV años y boda · Monterrey";
+const HERO_TITLE = "Recuerdos que merecen un gran escenario";
+const HERO_SUBTITLE =
+  "Locación fotográfica en Monterrey para tus XV años y boda. Tú vives el momento; nosotros lo volvemos inolvidable.";
+
 type HeroCarouselProps = {
   reservarHref?: string;
 };
@@ -78,32 +83,57 @@ export default function HeroCarousel({
         ))}
       </Swiper>
 
-      {/* Overlay: en móvil texto arriba y CTA anclado abajo; en desktop todo centrado */}
-      <div className="absolute inset-0 z-10 flex flex-col items-center justify-between gap-0 px-4 pb-8 pt-6 text-center text-white pointer-events-none sm:justify-center sm:gap-8 sm:px-4 sm:py-0">
-        <div className="flex flex-1 flex-col items-center justify-center sm:flex-none">
-          <div className="pointer-events-auto w-full max-w-xl">
-            <h1
-              className="mb-2 text-3xl font-bold leading-tight tracking-tight drop-shadow-md sm:mb-3 sm:text-5xl lg:text-6xl"
-              style={{ fontFamily: "var(--font-cormorant), serif" }}
-            >
-              Recuerdos que merecen un gran escenario
-            </h1>
-            <p className="text-base leading-snug text-white/95 drop-shadow sm:text-xl sm:leading-relaxed lg:text-2xl">
-              Locación fotográfica en Monterrey para tus XV años y boda. Tú vives el momento; nosotros lo volvemos inolvidable.
-            </p>
-          </div>
-        </div>
-        <div className="pointer-events-auto w-full max-w-[17rem] shrink-0 sm:mt-0 sm:w-auto sm:max-w-none">
+      {/* Desktop: bloque centrado, texto alineado a la izquierda (editorial) */}
+      <div className="absolute inset-0 z-10 hidden items-center justify-center px-4 text-white pointer-events-none sm:flex">
+        <div className="pointer-events-auto w-full max-w-xl text-left lg:max-w-2xl">
+          <p className="mb-4 text-xs font-medium uppercase tracking-[0.22em] text-[#E8B89A] drop-shadow-sm md:text-sm">
+            {HERO_EYEBROW}
+          </p>
+          <h1
+            className="mb-4 text-4xl font-bold leading-[1.12] tracking-tight drop-shadow-md md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]"
+            style={{ fontFamily: "var(--font-cormorant), serif" }}
+          >
+            {HERO_TITLE}
+          </h1>
+          <p className="mb-8 max-w-xl text-lg leading-relaxed text-white/90 drop-shadow lg:text-xl">
+            {HERO_SUBTITLE}
+          </p>
           <Link
             href={reservarHref}
-            className="block w-full rounded-full bg-white px-8 py-3.5 text-base font-semibold text-[#103948] shadow-lg transition hover:shadow-xl sm:inline-block sm:px-10 sm:py-4 sm:text-lg"
+            className="inline-block rounded-full bg-white px-10 py-4 text-lg font-semibold text-[#103948] shadow-lg transition hover:shadow-xl"
           >
             Agendar mi sesión
           </Link>
         </div>
       </div>
 
-      {/* Controles del carrusel: solo tablet/desktop; en móvil basta swipe + autoplay */}
+      {/* Móvil: bloque centrado, texto a la izquierda; CTA abajo */}
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-between px-4 pb-8 pt-6 text-white pointer-events-none sm:hidden">
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <div className="pointer-events-auto w-full max-w-xl text-left">
+            <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#E8B89A]">
+              {HERO_EYEBROW}
+            </p>
+            <h1
+              className="mb-2 text-3xl font-bold leading-tight tracking-tight drop-shadow-md"
+              style={{ fontFamily: "var(--font-cormorant), serif" }}
+            >
+              {HERO_TITLE}
+            </h1>
+            <p className="text-base leading-snug text-white/95 drop-shadow">
+              {HERO_SUBTITLE}
+            </p>
+          </div>
+        </div>
+        <Link
+          href={reservarHref}
+          className="pointer-events-auto block w-full max-w-xl shrink-0 rounded-full bg-white px-8 py-3.5 text-center text-base font-semibold text-[#103948] shadow-lg transition hover:shadow-xl"
+        >
+          Agendar mi sesión
+        </Link>
+      </div>
+
+      {/* Controles del carrusel: solo tablet/desktop */}
       <div className="absolute bottom-6 left-0 right-0 z-20 hidden items-center justify-center gap-4 px-6 sm:flex sm:px-8">
         <button
           type="button"
