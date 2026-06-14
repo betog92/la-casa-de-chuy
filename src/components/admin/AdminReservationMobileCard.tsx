@@ -128,6 +128,22 @@ export function ReservationStatusBadge({
   );
 }
 
+function CardFieldLabel({ children }: { children: string }) {
+  return (
+    <span className="text-xs font-medium text-zinc-400">{children}</span>
+  );
+}
+
+function CardSessionLine({ reservation: r }: { reservation: AdminReservationRowData }) {
+  return (
+    <>
+      {formatDisplayDateCompact(r.date)}
+      <span className="text-zinc-400"> · </span>
+      {formatTimeRange(r.start_time, undefined, r.date)}
+    </>
+  );
+}
+
 export function AdminReservationMobileCard({
   reservation: r,
   formattedPrice,
@@ -148,10 +164,10 @@ export function AdminReservationMobileCard({
         onClick={onOpen}
         title={row.rowLabel}
         aria-label={`Reserva #${displayId}: ${row.rowLabel}`}
-        className={`w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors sm:px-5 ${row.className}`}
+        className={`w-full touch-manipulation border-b border-zinc-100 px-4 py-3 text-left transition-colors active:[background-color:var(--reservation-row-hover)] sm:px-5 ${row.className}`}
         style={row.style}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2">
           <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1 text-sm font-semibold text-zinc-900">
             #{displayId}
             <ReservationTypeChip input={colorInput} />
@@ -163,23 +179,32 @@ export function AdminReservationMobileCard({
                 </span>
               )}
           </span>
-          <span className={`shrink-0 text-sm font-semibold ${total.className}`}>
-            {total.label}
+          <span className="flex shrink-0 items-center gap-1">
+            <span className={`text-sm font-semibold ${total.className}`}>
+              {total.label}
+            </span>
+            <span className="text-base leading-none text-zinc-300" aria-hidden>
+              ›
+            </span>
           </span>
         </div>
 
         {isDashboard && registeredAt ? (
-          <p className="mt-1.5 text-sm text-zinc-700">
-            {registeredAt.relative}
+          <div className="mt-1.5">
+            <p className="text-sm text-zinc-700">
+              <CardFieldLabel>Registro</CardFieldLabel>
+              <span className="text-zinc-400"> · </span>
+              {registeredAt.relative}
+            </p>
             {registeredAt.full ? (
-              <span className="text-zinc-400"> · {registeredAt.full}</span>
+              <p className="mt-0.5 text-xs text-zinc-400">{registeredAt.full}</p>
             ) : null}
-          </p>
+          </div>
         ) : (
           <p className="mt-1.5 text-sm text-zinc-700">
-            {formatDisplayDateCompact(r.date)}
+            <CardFieldLabel>Cita</CardFieldLabel>
             <span className="text-zinc-400"> · </span>
-            {formatTimeRange(r.start_time, undefined, r.date)}
+            <CardSessionLine reservation={r} />
           </p>
         )}
 
@@ -187,10 +212,10 @@ export function AdminReservationMobileCard({
         <p className="truncate text-xs text-zinc-500">{r.email}</p>
 
         {isDashboard ? (
-          <p className="mt-1.5 text-sm text-zinc-600">
-            {formatDisplayDateCompact(r.date)}
+          <p className="mt-1.5 text-sm text-zinc-700">
+            <CardFieldLabel>Cita</CardFieldLabel>
             <span className="text-zinc-400"> · </span>
-            {formatTimeRange(r.start_time, undefined, r.date)}
+            <CardSessionLine reservation={r} />
           </p>
         ) : null}
 
