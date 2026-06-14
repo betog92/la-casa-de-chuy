@@ -67,7 +67,10 @@ const isFutureDate = (date: Date): boolean => {
 
 function BookingSpinner({ label }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3">
+    <div
+      role="status"
+      className="flex flex-col items-center justify-center gap-3"
+    >
       <div
         className="h-10 w-10 animate-spin rounded-full border-2 border-[#103948] border-t-transparent"
         aria-hidden
@@ -100,6 +103,7 @@ export default function ReservarPage() {
   >(new Map());
   const [currentMonth, setCurrentMonth] = useState<Date | null>(null);
   const monthRequestIdRef = useRef(0);
+  const monthFetchTargetRef = useRef<Date | null>(null);
 
   // Obtener slots disponibles cuando se selecciona una fecha
   useEffect(() => {
@@ -211,6 +215,15 @@ export default function ReservarPage() {
 
   const loadMonthAvailability = useCallback(async (monthDate: Date) => {
     const normalizedMonthDate = startOfMonth(monthDate);
+
+    if (
+      monthFetchTargetRef.current &&
+      isSameMonth(monthFetchTargetRef.current, normalizedMonthDate)
+    ) {
+      return;
+    }
+
+    monthFetchTargetRef.current = normalizedMonthDate;
     const requestId = ++monthRequestIdRef.current;
     setMonthLoading(true);
 
@@ -231,6 +244,7 @@ export default function ReservarPage() {
       setCurrentMonth(normalizedMonthDate);
     } finally {
       if (requestId === monthRequestIdRef.current) {
+        monthFetchTargetRef.current = null;
         setMonthLoading(false);
       }
     }
@@ -563,13 +577,14 @@ export default function ReservarPage() {
                 <div className="relative">
                   {monthLoading ? (
                     <div
-                      className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/75"
+                      className="pointer-events-auto absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/75"
                       aria-busy="true"
                       aria-live="polite"
                     >
                       <BookingSpinner label="Cargando calendario..." />
                     </div>
                   ) : null}
+                  <div className={monthLoading ? "pointer-events-none" : undefined}>
                   <Calendar
                     onChange={handleDateChange}
                     value={selectedDate}
@@ -636,6 +651,7 @@ export default function ReservarPage() {
                         </span>
                       </div>
                     </div>
+                  </div>
                   </div>
                 </div>
               ) : (
