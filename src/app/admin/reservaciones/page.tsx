@@ -25,22 +25,20 @@ import { getAvailableSlots, getMonthAvailability } from "@/utils/availability";
 import { calculatePriceWithCustom } from "@/utils/pricing";
 import type { TimeSlot } from "@/utils/availability";
 import {
-  getReservationStatusColor,
-  getReservationStatusLabel,
-} from "@/utils/reservation-status-display";
-import {
   isImportTypeFilter,
   isOriginFilter,
   isSourceFilter,
 } from "@/lib/admin/reservation-filters";
 import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
+import {
+  AdminReservationMobileCard,
+  buildReservationRowMeta,
+  getReservationDisplayId,
+  ReservationPaymentBadge,
+  ReservationStatusBadge,
+} from "@/components/admin/AdminReservationMobileCard";
 import { ReservationColorLegend } from "@/components/admin/ReservationColorLegend";
 import { ReservationTypeChip } from "@/components/admin/ReservationTypeChip";
-import {
-  getAdminReservationTotalDisplay,
-  getReservationRowPresentation,
-  type ReservationColorInput,
-} from "@/lib/admin/reservation-calendar-colors";
 
 const PAGE_SIZE = 50;
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -335,6 +333,19 @@ function AdminReservacionesPageInner() {
   }, [total, offset]);
 
   const tablePageBusy = loading && reservations.length > 0;
+
+  const reservationRows = useMemo(
+    () =>
+      reservations.map((r) => {
+        const formattedPrice = formatCurrency(r.price);
+        return {
+          reservation: r,
+          formattedPrice,
+          meta: buildReservationRowMeta(r, formattedPrice),
+        };
+      }),
+    [reservations],
+  );
 
   useEffect(() => {
     if (!showNewModal) {
@@ -967,9 +978,27 @@ function AdminReservacionesPageInner() {
               </div>
             ) : null}
             <div
-              className={`overflow-x-auto transition-opacity ${tablePageBusy ? "pointer-events-none opacity-50" : ""}`}
+              className={`transition-opacity ${tablePageBusy ? "pointer-events-none opacity-50" : ""}`}
               aria-busy={loading}
             >
+            {reservations.length === 0 ? (
+              <div className="px-4 py-12 text-center text-zinc-500">
+                No hay reservaciones con los filtros aplicados
+              </div>
+            ) : (
+              <>
+            <ul className="md:hidden">
+              {reservationRows.map(({ reservation, formattedPrice, meta }) => (
+                <AdminReservationMobileCard
+                  key={reservation.id}
+                  reservation={reservation}
+                  formattedPrice={formattedPrice}
+                  meta={meta}
+                  onOpen={() => router.push(`/reservaciones/${reservation.id}`)}
+                />
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[800px] table-fixed divide-y divide-zinc-200">
               <thead>
                 <tr>
@@ -982,35 +1011,15 @@ function AdminReservacionesPageInner() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {reservations.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">No hay reservaciones con los filtros aplicados</td>
-                  </tr>
-                ) : (
-                  reservations.map((r) => {
-                    const colorInput: ReservationColorInput = {
-                      source: r.source,
-                      import_type: r.import_type,
-                      stamp_card_code: r.stamp_card_code,
-                    };
-                    const row = getReservationRowPresentation(colorInput, {
-                      statusLabel: getReservationStatusLabel(r.status, {
-                        rescheduleCount: r.reschedule_count,
-                        sessionDate: r.date,
-                      }),
-                    });
-                    const total = getAdminReservationTotalDisplay(
-                      colorInput,
-                      r.status,
-                      formatCurrency(r.price),
-                    );
+                {reservationRows.map(({ reservation: r, meta }) => {
+                    const { colorInput, row, total } = meta;
 
                     return (
                     <tr
                       key={r.id}
                       onClick={() => router.push(`/reservaciones/${r.id}`)}
                       title={row.rowLabel}
-                      aria-label={`Reserva #${r.id}: ${row.rowLabel}`}
+                      aria-label={`Reserva #${getReservationDisplayId(r)}: ${row.rowLabel}`}
                       role="link"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -1041,53 +1050,35 @@ function AdminReservacionesPageInner() {
                           </span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-900">
-                        {formatDisplayDateShort(r.date)}
-                        <br />
-                        <span className="text-zinc-500">
+                      <td className="overflow-hidden px-4 py-3 text-sm text-zinc-900">
+                        <span className="block leading-snug">
+                          {formatDisplayDateShort(r.date)}
+                        </span>
+                        <span className="block text-xs text-zinc-500">
                           {formatTimeRange(r.start_time, undefined, r.date)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="overflow-hidden px-4 py-3">
                         <p className="truncate font-medium text-zinc-900">{r.name}</p>
                         <p className="truncate text-sm text-zinc-500">{r.email}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getReservationStatusColor(
-                            r.status,
-                            {
-                              rescheduleCount: r.reschedule_count,
-                              sessionDate: r.date,
-                            },
-                          )}`}
-                        >
-                          {getReservationStatusLabel(r.status, {
-                            rescheduleCount: r.reschedule_count,
-                            sessionDate: r.date,
-                          })}
-                        </span>
+                        <ReservationStatusBadge reservation={r} />
                       </td>
                       <td className="px-4 py-3">
-                        {r.payment_status === "pending" && (
-                          <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">Pago pendiente</span>
-                        )}
-                        {(r.payment_status === "paid" || (r.source === "web" && (r.payment_method === "conekta" || r.payment_id))) && (
-                          <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">Pagado</span>
-                        )}
-                        {!(r.payment_status === "pending" || r.payment_status === "paid" || (r.source === "web" && (r.payment_method === "conekta" || r.payment_id))) && (
-                          <span className="text-zinc-400 text-xs">—</span>
-                        )}
+                        <ReservationPaymentBadge reservation={r} />
                       </td>
                       <td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-medium ${total.className}`}>
                         {total.label}
                       </td>
                     </tr>
                     );
-                  })
-                )}
+                  })}
               </tbody>
             </table>
+            </div>
+              </>
+            )}
             </div>
             {tablePageBusy ? (
               <div

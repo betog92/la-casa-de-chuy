@@ -181,6 +181,22 @@ export function formatDisplayDateShort(dateString: string): string {
 }
 
 /**
+ * Fecha compacta para móvil. @example "2025-12-27" -> "27 dic 2025"
+ */
+export function formatDisplayDateCompact(dateString: string): string {
+  try {
+    const d = startOfCalendarDayMonterrey(dateString);
+    if (!d) return dateString;
+    return formatInTimeZone(d, APP_TIMEZONE, "d MMM yyyy", { locale: es }).replace(
+      /(\d+)\s(\w+)/,
+      (_, day, month) => `${day} ${month.charAt(0).toUpperCase()}${month.slice(1)}`,
+    );
+  } catch {
+    return dateString;
+  }
+}
+
+/**
  * Fecha y hora ISO en **America/Monterrey**, con día de la semana (como `formatDisplayDate`).
  * @example "2026-05-22T18:12:00.000Z" -> "Viernes, 22 de mayo de 2026 a las 12:12 PM"
  */
