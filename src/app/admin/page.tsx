@@ -1,25 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
+import {
+  AdminReservationMobileCard,
+  buildReservationRowMeta,
+  ReservationStatusBadge,
+} from "@/components/admin/AdminReservationMobileCard";
 import { ReservationColorLegend } from "@/components/admin/ReservationColorLegend";
 import { ReservationTypeChip } from "@/components/admin/ReservationTypeChip";
-import {
-  getAdminReservationTotalDisplay,
-  getReservationRowPresentation,
-  type ReservationColorInput,
-} from "@/lib/admin/reservation-calendar-colors";
-import {
-  getReservationStatusColor,
-  getReservationStatusLabel,
-} from "@/utils/reservation-status-display";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  formatDisplayDate,
+  formatDisplayDateShort,
   formatTimeRange,
   formatCurrency,
   formatDisplayDateTimeCompact,
@@ -402,6 +398,20 @@ export default function AdminDashboardPage() {
   const loading = statsLoading;
   const recentTableBusy = recentLoading && recentReservations.length > 0;
 
+  const recentRows = useMemo(
+    () =>
+      recentReservations.map((r) => {
+        const formattedPrice = formatCurrency(r.price);
+        return {
+          reservation: r,
+          formattedPrice,
+          meta: buildReservationRowMeta(r, formattedPrice),
+          registeredAt: formatRegisteredAt(r.created_at),
+        };
+      }),
+    [recentReservations],
+  );
+
   if (loading && !stats) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -492,7 +502,7 @@ export default function AdminDashboardPage() {
 
         <div ref={recentTableRef} className="relative scroll-mt-4">
         <div
-          className={`overflow-x-auto transition-opacity ${recentTableBusy ? "pointer-events-none opacity-50" : ""}`}
+          className={`transition-opacity ${recentTableBusy ? "pointer-events-none opacity-50" : ""}`}
           aria-busy={recentLoading}
         >
           {recentLoading && recentReservations.length === 0 ? (
@@ -508,6 +518,21 @@ export default function AdminDashboardPage() {
               .
             </div>
           ) : (
+            <>
+            <ul className="md:hidden">
+              {recentRows.map(({ reservation, formattedPrice, meta, registeredAt }) => (
+                <AdminReservationMobileCard
+                  key={reservation.id}
+                  reservation={reservation}
+                  formattedPrice={formattedPrice}
+                  meta={meta}
+                  variant="dashboard"
+                  registeredAt={registeredAt}
+                  onOpen={() => router.push(`/reservaciones/${reservation.id}`)}
+                />
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[720px] table-fixed text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -520,24 +545,8 @@ export default function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {recentReservations.map((r) => {
-                  const reg = formatRegisteredAt(r.created_at);
-                  const colorInput: ReservationColorInput = {
-                    source: r.source,
-                    import_type: r.import_type,
-                    stamp_card_code: r.stamp_card_code,
-                  };
-                  const row = getReservationRowPresentation(colorInput, {
-                    statusLabel: getReservationStatusLabel(r.status, {
-                      rescheduleCount: r.reschedule_count,
-                      sessionDate: r.date,
-                    }),
-                  });
-                  const total = getAdminReservationTotalDisplay(
-                    colorInput,
-                    r.status,
-                    formatCurrency(r.price),
-                  );
+                {recentRows.map(({ reservation: r, meta, registeredAt }) => {
+                  const { colorInput, row, total } = meta;
 
                   return (
                     <tr
@@ -562,13 +571,13 @@ export default function AdminDashboardPage() {
                           <ReservationTypeChip input={colorInput} />
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-zinc-700 sm:px-5">
-                        <span className="block">{reg.relative}</span>
-                        {reg.full ? (
-                          <span className="text-xs text-zinc-400">{reg.full}</span>
+                      <td className="overflow-hidden px-4 py-3 text-zinc-700 sm:px-5">
+                        <span className="block">{registeredAt.relative}</span>
+                        {registeredAt.full ? (
+                          <span className="text-xs text-zinc-400">{registeredAt.full}</span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 sm:px-5">
+                      <td className="overflow-hidden px-4 py-3 sm:px-5">
                         <span className="block truncate font-medium text-zinc-900">
                           {r.name}
                         </span>
@@ -576,9 +585,9 @@ export default function AdminDashboardPage() {
                           {r.email}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-zinc-700 sm:px-5">
-                        <span className="block">
-                          {formatDisplayDate(r.date)}
+                      <td className="overflow-hidden px-4 py-3 text-zinc-700 sm:px-5">
+                        <span className="block leading-snug">
+                          {formatDisplayDateShort(r.date)}
                         </span>
                         <span className="text-xs text-zinc-500">
                           {formatTimeRange(r.start_time, undefined, r.date)}
@@ -590,26 +599,15 @@ export default function AdminDashboardPage() {
                         {total.label}
                       </td>
                       <td className="px-4 py-3 sm:px-5">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getReservationStatusColor(
-                            r.status,
-                            {
-                              rescheduleCount: r.reschedule_count,
-                              sessionDate: r.date,
-                            },
-                          )}`}
-                        >
-                          {getReservationStatusLabel(r.status, {
-                            rescheduleCount: r.reschedule_count,
-                            sessionDate: r.date,
-                          })}
-                        </span>
+                        <ReservationStatusBadge reservation={r} />
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            </div>
+            </>
           )}
         </div>
         {recentTableBusy ? (

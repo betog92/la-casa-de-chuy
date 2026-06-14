@@ -32,11 +32,19 @@ export type AdminReservationRowData = {
   google_event_id?: string | null;
 };
 
+export type AdminReservationRegisteredAt = {
+  relative: string;
+  full: string;
+};
+
 type AdminReservationMobileCardProps = {
   reservation: AdminReservationRowData;
   formattedPrice: string;
   onOpen: () => void;
   meta?: ReturnType<typeof buildReservationRowMeta>;
+  /** list = reservaciones (fecha + pago); dashboard = registro + cita */
+  variant?: "list" | "dashboard";
+  registeredAt?: AdminReservationRegisteredAt;
 };
 
 export function buildReservationRowMeta(
@@ -125,10 +133,13 @@ export function AdminReservationMobileCard({
   formattedPrice,
   onOpen,
   meta,
+  variant = "list",
+  registeredAt,
 }: AdminReservationMobileCardProps) {
   const { colorInput, row, total } =
     meta ?? buildReservationRowMeta(r, formattedPrice);
   const displayId = getReservationDisplayId(r);
+  const isDashboard = variant === "dashboard";
 
   return (
     <li>
@@ -137,7 +148,7 @@ export function AdminReservationMobileCard({
         onClick={onOpen}
         title={row.rowLabel}
         aria-label={`Reserva #${displayId}: ${row.rowLabel}`}
-        className={`w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors ${row.className}`}
+        className={`w-full border-b border-zinc-100 px-4 py-3 text-left transition-colors sm:px-5 ${row.className}`}
         style={row.style}
       >
         <div className="flex items-start justify-between gap-3">
@@ -157,18 +168,37 @@ export function AdminReservationMobileCard({
           </span>
         </div>
 
-        <p className="mt-1.5 text-sm text-zinc-700">
-          {formatDisplayDateCompact(r.date)}
-          <span className="text-zinc-400"> · </span>
-          {formatTimeRange(r.start_time, undefined, r.date)}
-        </p>
+        {isDashboard && registeredAt ? (
+          <p className="mt-1.5 text-sm text-zinc-700">
+            {registeredAt.relative}
+            {registeredAt.full ? (
+              <span className="text-zinc-400"> · {registeredAt.full}</span>
+            ) : null}
+          </p>
+        ) : (
+          <p className="mt-1.5 text-sm text-zinc-700">
+            {formatDisplayDateCompact(r.date)}
+            <span className="text-zinc-400"> · </span>
+            {formatTimeRange(r.start_time, undefined, r.date)}
+          </p>
+        )}
 
         <p className="mt-1 font-medium text-zinc-900">{r.name}</p>
         <p className="truncate text-xs text-zinc-500">{r.email}</p>
 
+        {isDashboard ? (
+          <p className="mt-1.5 text-sm text-zinc-600">
+            {formatDisplayDateCompact(r.date)}
+            <span className="text-zinc-400"> · </span>
+            {formatTimeRange(r.start_time, undefined, r.date)}
+          </p>
+        ) : null}
+
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <ReservationStatusBadge reservation={r} />
-          <ReservationPaymentBadge reservation={r} hideWhenEmpty />
+          {!isDashboard ? (
+            <ReservationPaymentBadge reservation={r} hideWhenEmpty />
+          ) : null}
         </div>
       </button>
     </li>
