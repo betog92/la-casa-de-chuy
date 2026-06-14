@@ -8,10 +8,11 @@ import { AdminTablePagination } from "@/components/admin/AdminTablePagination";
 import {
   AdminReservationMobileCard,
   buildReservationRowMeta,
+  getReservationDisplayId,
+  ReservationIdDisplay,
   ReservationStatusBadge,
 } from "@/components/admin/AdminReservationMobileCard";
 import { ReservationColorLegend } from "@/components/admin/ReservationColorLegend";
-import { ReservationTypeChip } from "@/components/admin/ReservationTypeChip";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -554,7 +555,7 @@ export default function AdminDashboardPage() {
                       className={`cursor-pointer ${row.className}`}
                       style={row.style}
                       title={row.rowLabel}
-                      aria-label={`Reserva #${r.id}: ${row.rowLabel}`}
+                      aria-label={`Reserva #${getReservationDisplayId(r)}: ${row.rowLabel}`}
                       onClick={() => router.push(`/reservaciones/${r.id}`)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -566,10 +567,11 @@ export default function AdminDashboardPage() {
                       tabIndex={0}
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-900 sm:px-5">
-                        <span className="inline-flex items-center">
-                          #{r.id}
-                          <ReservationTypeChip input={colorInput} />
-                        </span>
+                        <ReservationIdDisplay
+                          reservation={r}
+                          colorInput={colorInput}
+                          className="inline-flex items-center"
+                        />
                       </td>
                       <td className="overflow-hidden px-4 py-3 text-zinc-700 sm:px-5">
                         <span className="block">{registeredAt.relative}</span>

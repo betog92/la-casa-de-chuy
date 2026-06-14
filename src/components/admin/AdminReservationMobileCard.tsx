@@ -77,6 +77,47 @@ export function getReservationDisplayId(r: AdminReservationRowData): string {
   return String(r.id);
 }
 
+function formatGoogleEventIdDisplay(googleEventId: string): string {
+  const trimmed = googleEventId.trim();
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
+export function ReservationIdDisplay({
+  reservation: r,
+  colorInput,
+  className = "inline-flex flex-wrap items-center gap-x-1",
+  secondaryClassName = "text-xs font-normal text-zinc-500",
+}: {
+  reservation: AdminReservationRowData;
+  colorInput: ReservationColorInput;
+  className?: string;
+  secondaryClassName?: string;
+}) {
+  const displayId = getReservationDisplayId(r);
+  const orderTrim = r.order_number?.trim();
+  const showSecondaryOrder =
+    !!orderTrim &&
+    r.source !== "google_import" &&
+    orderTrim !== String(r.id);
+  const googleId = r.google_event_id?.trim();
+  const showGoogleId = !!googleId && r.source !== "google_import";
+
+  return (
+    <span className={className}>
+      <span>#{displayId}</span>
+      <ReservationTypeChip input={colorInput} />
+      {showSecondaryOrder ? (
+        <span className={secondaryClassName}>#{orderTrim}</span>
+      ) : null}
+      {showGoogleId ? (
+        <span className={secondaryClassName}>
+          {formatGoogleEventIdDisplay(googleId)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function ReservationPaymentBadge({
   reservation: r,
   hideWhenEmpty = false,
@@ -168,17 +209,11 @@ export function AdminReservationMobileCard({
         style={row.style}
       >
         <div className="flex items-start justify-between gap-2">
-          <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1 text-sm font-semibold text-zinc-900">
-            #{displayId}
-            <ReservationTypeChip input={colorInput} />
-            {r.order_number?.trim() &&
-              r.source !== "google_import" &&
-              r.order_number.trim() !== String(r.id) && (
-                <span className="text-xs font-normal text-zinc-500">
-                  #{r.order_number.trim()}
-                </span>
-              )}
-          </span>
+          <ReservationIdDisplay
+            reservation={r}
+            colorInput={colorInput}
+            className="inline-flex min-w-0 flex-wrap items-center gap-x-1 text-sm font-semibold text-zinc-900"
+          />
           <span className="flex shrink-0 items-center gap-1">
             <span className={`text-sm font-semibold ${total.className}`}>
               {total.label}

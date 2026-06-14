@@ -34,11 +34,11 @@ import {
   AdminReservationMobileCard,
   buildReservationRowMeta,
   getReservationDisplayId,
+  ReservationIdDisplay,
   ReservationPaymentBadge,
   ReservationStatusBadge,
 } from "@/components/admin/AdminReservationMobileCard";
 import { ReservationColorLegend } from "@/components/admin/ReservationColorLegend";
-import { ReservationTypeChip } from "@/components/admin/ReservationTypeChip";
 
 const PAGE_SIZE = 50;
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -1032,23 +1032,10 @@ function AdminReservacionesPageInner() {
                       style={row.style}
                     >
                       <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900">
-                        {r.source === "google_import" && r.order_number?.trim() ? (
-                          <span className="inline-flex flex-wrap items-center gap-x-1">
-                            <span>#{r.order_number.trim()}</span>
-                            <ReservationTypeChip input={colorInput} />
-                          </span>
-                        ) : (
-                          <span className="inline-flex flex-wrap items-center gap-x-1">
-                            <span>#{r.id}</span>
-                            <ReservationTypeChip input={colorInput} />
-                            {r.order_number?.trim() && r.source !== "google_import" && (
-                              <span className="text-zinc-500 font-normal">#{r.order_number.trim()}</span>
-                            )}
-                            {r.google_event_id && r.source !== "google_import" && (
-                              <span className="text-zinc-500 font-normal">{r.google_event_id.startsWith("#") ? r.google_event_id : `#${r.google_event_id}`}</span>
-                            )}
-                          </span>
-                        )}
+                        <ReservationIdDisplay
+                          reservation={r}
+                          colorInput={colorInput}
+                        />
                       </td>
                       <td className="overflow-hidden px-4 py-3 text-sm text-zinc-900">
                         <span className="block leading-snug">
