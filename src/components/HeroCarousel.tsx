@@ -78,29 +78,33 @@ export default function HeroCarousel({
         ))}
       </Swiper>
 
-      {/* Overlay centrado: título, subtítulo, CTA (pointer-events-none para no bloquear gestos del Swiper; auto en el contenido para que el CTA sea clickeable) */}
-      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-4 text-center text-white pointer-events-none">
-        <div className="pointer-events-auto">
-        <h1
-          className="mb-3 text-4xl font-bold tracking-tight drop-shadow-md sm:text-5xl lg:text-6xl"
-          style={{ fontFamily: "var(--font-cormorant), serif" }}
-        >
-          Recuerdos que merecen un gran escenario
-        </h1>
-        <p className="mb-8 max-w-xl text-lg text-white/95 drop-shadow sm:text-xl lg:text-2xl">
-          Locación fotográfica en Monterrey para tus XV años y boda. Tú vives el momento; nosotros lo volvemos inolvidable.
-        </p>
-        <Link
-          href={reservarHref}
-          className="rounded-full bg-white px-10 py-4 text-lg font-semibold text-[#103948] shadow-lg transition hover:shadow-xl"
-        >
-          Agendar mi sesión
-        </Link>
+      {/* Overlay: en móvil texto arriba y CTA anclado abajo; en desktop todo centrado */}
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-between gap-0 px-4 pb-8 pt-6 text-center text-white pointer-events-none sm:justify-center sm:gap-8 sm:px-4 sm:py-0">
+        <div className="flex flex-1 flex-col items-center justify-center sm:flex-none">
+          <div className="pointer-events-auto w-full max-w-xl">
+            <h1
+              className="mb-2 text-3xl font-bold leading-tight tracking-tight drop-shadow-md sm:mb-3 sm:text-5xl lg:text-6xl"
+              style={{ fontFamily: "var(--font-cormorant), serif" }}
+            >
+              Recuerdos que merecen un gran escenario
+            </h1>
+            <p className="text-base leading-snug text-white/95 drop-shadow sm:text-xl sm:leading-relaxed lg:text-2xl">
+              Locación fotográfica en Monterrey para tus XV años y boda. Tú vives el momento; nosotros lo volvemos inolvidable.
+            </p>
+          </div>
+        </div>
+        <div className="pointer-events-auto w-full max-w-[17rem] shrink-0 sm:mt-0 sm:w-auto sm:max-w-none">
+          <Link
+            href={reservarHref}
+            className="block w-full rounded-full bg-white px-8 py-3.5 text-base font-semibold text-[#103948] shadow-lg transition hover:shadow-xl sm:inline-block sm:px-10 sm:py-4 sm:text-lg"
+          >
+            Agendar mi sesión
+          </Link>
         </div>
       </div>
 
-      {/* Controles abajo: prev, pagination, next, play/pause (área táctil ≥44px, padding para no pegarlos a los bordes) */}
-      <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-4 px-6 sm:px-8">
+      {/* Controles del carrusel: solo tablet/desktop; en móvil basta swipe + autoplay */}
+      <div className="absolute bottom-6 left-0 right-0 z-20 hidden items-center justify-center gap-4 px-6 sm:flex sm:px-8">
         <button
           type="button"
           className="hero-prev flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white/90 p-2 text-[#103948] transition hover:bg-white"
